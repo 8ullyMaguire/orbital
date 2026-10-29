@@ -90,7 +90,28 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         Err(e) => say(false, "link checker", format!("{e}")),
     }
 
-    // 5. The visitors table is not growing without bound.
+    // 5. The uptime probe is still stamping, and what it stamped was a 200. The probe writes a
+    // file; nothing else here would notice a host that stopped answering.
+    let stamp = std::fs::read_to_string(backup_dir().join("uptime.txt")).unwrap_or_default();
+    match stamp.lines().last() {
+        Some(line) => {
+            let mut parts = line.split_whitespace();
+            let at = parts.next().unwrap_or("");
+            let code = parts.next().unwrap_or("");
+            let parsed = chrono::DateTime::parse_from_rfc3339(at).ok();
+            let fresh = parsed
+                .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_minutes() < 30)
+                .unwrap_or(false);
+            say(
+                fresh && code == "200",
+                "uptime probe",
+                format!("{code} at {at}{}", if fresh { "" } else { " (stale)" }),
+            );
+        }
+        None => say(false, "uptime probe", "no stamp; the timer has never run".into()),
+    }
+
+    // 6. The visitors table is not growing without bound.
     let visitors: (i64,) = sqlx::query_as("SELECT count(*) FROM visitor_profiles")
         .fetch_one(pool)
         .await
