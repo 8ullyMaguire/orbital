@@ -441,7 +441,7 @@ REMOTE
 say "6b/7 estate list, social cards, and the rasteriser they need"
 # The status page lists whatever nginx actually serves, so it cannot drift from the network it
 # describes. The card renderer needs a rasteriser; without one it writes SVG and says so.
-ssh "$HOST" 'cd /personal/documents/code/rust/orbital && mkdir -p static/og &&   { grep -rhoE "server_name[[:space:]]+[^;]+" /etc/nginx/sites-available /etc/nginx/sites-enabled 2>/dev/null     | sed -E "s/server_name[[:space:]]+//" | tr " " "\n" | grep -E "^[a-z0-9.-]+\.[a-z]{2,}$" | sort -u     | sed -E "s/^([a-z0-9-]+)\..*/\1 | \1/" ; } > static/estate.txt && wc -l < static/estate.txt'
+ssh "$HOST" 'cd /personal/documents/code/rust/orbital && mkdir -p static/og &&   { grep -rhoE "server_name[[:space:]]+[^;]+" /etc/nginx/sites-available /etc/nginx/sites-enabled 2>/dev/null     | sed -E "s/server_name[[:space:]]+//" | tr " " "\n" | grep -E "^[a-z0-9.-]+\.[a-z]{2,}$" | grep -vE "^(example|localhost|www)\." | sort -u     | sed -E "s/^([a-z0-9-]+)\..*/\1 | \1/" ; } > static/estate.txt && wc -l < static/estate.txt'
 ssh "$HOST" 'command -v rsvg-convert >/dev/null || sudo apt-get install -y -qq librsvg2-bin' || true
 ssh "$HOST" 'cd /personal/documents/code/rust/orbital && set -a && . ~/.config/systemd/user/orbital-db.env && . ~/.config/systemd/user/orbital-app.env && set +a && ~/.cargo-target/orbital/release/orbital og --out /personal/documents/code/rust/orbital/static/og 2>&1 | tail -1'
 ssh "$HOST" 'cd /personal/documents/code/rust/orbital && set -a && . ~/.config/systemd/user/orbital-db.env && . ~/.config/systemd/user/orbital-app.env && set +a && ~/.cargo-target/orbital/release/orbital doctor 2>&1 | tail -3'

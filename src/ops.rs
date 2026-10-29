@@ -66,7 +66,7 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
 
     // 3. A backup exists and is recent. A backup nobody checked is a hope.
     let dir = backup_dir();
-    let newest_dump = newest_file(&dir, "sql");
+    let newest_dump = newest_file(&dir, "dump");
     match newest_dump {
         Some((path, age_hours)) => say(
             age_hours < 24.0 * 2.0,
