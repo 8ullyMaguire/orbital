@@ -95,3 +95,11 @@ the footer links and from the profile link being shared. Watch
 `/app/` → Overview → "Where they came from": `embed` and `vertical` entries mean
 the discovery loop is working, `direct` means traffic is arriving from somewhere
 that was not tagged.
+
+
+## Personalisation
+
+The tuner is live on `/` and every vertical page: a visitor drags tags and the lists reorder for
+them, with no account. Weights live in `preference_weights` (SPEC-V3), explicit ones never decay, and
+passive ones from browsing halve every 30 days. Members can see, in their dashboard, what their
+visitors care about.

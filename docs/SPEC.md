@@ -1,5 +1,8 @@
 # Orbital — SPEC
 
+> **Ranking and discovery are superseded by [`SPEC-V3.md`](SPEC-V3.md)** — preference profiles,
+> tag-weighted ordering and the personalised ring. Everything else here still applies.
+
 A themed directory of people and their links. Each member gets one profile page
 (links, bio, taste tags), one **primary vertical** and up to two **secondaries**,
 and appears on that vertical's ranked list. Verticals are micro-communities with
