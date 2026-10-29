@@ -5,7 +5,10 @@ pub mod db;
 pub mod error;
 pub mod health;
 pub mod html;
+pub mod meta;
 pub mod models;
+pub mod og;
+pub mod ops;
 pub mod prefs;
 pub mod ranking;
 pub mod render;
@@ -52,6 +55,7 @@ pub async fn build_state(cfg: Config) -> anyhow::Result<AppState> {
 pub async fn build_router(state: AppState) -> Router {
     Router::new()
         .merge(routes::public::router())
+        .merge(routes::estate::router())
         .merge(routes::api::router())
         .merge(routes::apiv1::router())
         .merge(routes::track::router())

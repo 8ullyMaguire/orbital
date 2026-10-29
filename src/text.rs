@@ -74,6 +74,29 @@ pub fn canonical_tag(tag: &str) -> String {
         .unwrap_or_else(|| trimmed.to_string())
 }
 
+/// A human label for a URL: its host, minus `www.`, with the path as a hint when there is one.
+///
+/// Better than the raw URL on a card, and always available - fetching the real title is a nicety
+/// that can fail.
+pub fn label_from_url(url: &str) -> String {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return url.to_string();
+    };
+    let host = parsed
+        .host_str()
+        .unwrap_or("")
+        .trim_start_matches("www.")
+        .to_string();
+    let path = parsed.path().trim_matches('/');
+    if path.is_empty() {
+        host
+    } else {
+        let tail = path.rsplit('/').next().unwrap_or(path);
+        let tail = tail.split(['.', '?', '#']).next().unwrap_or(tail);
+        format!("{host} / {}", tail.replace(['-', '_'], " "))
+    }
+}
+
 pub fn normalise_tag(raw: &str) -> Result<String, AppError> {
     let t = raw
         .trim()

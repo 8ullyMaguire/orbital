@@ -35,6 +35,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/members/{handle}/links", get(member_links))
         .route("/api/v1/links/health", get(link_health))
         .route("/api/v1/ring/{slug}", get(ring))
+        .merge(super::tokens::v1_router())
 }
 
 /// Serialise once, then answer with a validator the client can use.

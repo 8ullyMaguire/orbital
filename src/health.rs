@@ -68,7 +68,7 @@ fn is_private(ip: IpAddr) -> bool {
 
 /// Resolve and refuse anything that points at the host or its neighbours. Resolution failure is
 /// *not* proof of danger, but it is proof the link is broken, so it is reported separately.
-async fn host_is_public(host: &str) -> Result<bool, String> {
+pub async fn host_is_public(host: &str) -> Result<bool, String> {
     // A literal IP needs no resolver.
     if let Ok(ip) = host.parse::<IpAddr>() {
         return Ok(!is_private(ip));

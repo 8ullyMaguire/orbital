@@ -179,6 +179,25 @@ pub struct VerticalCard {
     pub top: Vec<MemberCard>,
 }
 
+#[derive(Debug, Clone)]
+pub struct HostStatusRow {
+    pub host: String,
+    pub label: String,
+    pub up: bool,
+    pub status: String,
+    pub millis: u128,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "status.html")]
+pub struct StatusTemplate {
+    pub layout: Layout,
+    pub hosts: Vec<HostStatusRow>,
+    pub up: usize,
+    pub total: usize,
+    pub generated: String,
+}
+
 pub struct SmallVertical {
     pub slug: String,
     pub label: String,
@@ -280,6 +299,10 @@ pub struct LinkCard {
     pub dead: bool,
     /// A short line under the card when the link is unreachable, e.g. "no answer (3 checks)".
     pub dead_hint: String,
+    /// The page's own title, when we fetched one: a link list reads better as names than as URLs.
+    pub title: String,
+    /// The page's icon, when we fetched one. Empty means "no icon", never "broken image".
+    pub favicon: String,
 }
 
 pub struct Ring {
@@ -402,6 +425,8 @@ pub fn link_card(base: &str, link: &LinkRow, surface: &str, ctx: Option<&str>, p
         clicks: link.click_count,
         clicks_label: fmt_count(link.click_count),
         dead: link.fail_count >= crate::health::FAIL_THRESHOLD,
+        title: link.title.clone().unwrap_or_default(),
+        favicon: link.favicon.clone().unwrap_or_default(),
         dead_hint: match link.last_status {
             Some(code) if code > 0 => format!("HTTP {code} on the last {} checks", link.fail_count),
             _ if link.fail_count > 0 => "no answer on the last checks".to_string(),

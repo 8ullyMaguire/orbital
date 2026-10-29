@@ -16,6 +16,11 @@ use sqlx::PgPool;
 
 /// Pages a visitor must have seen before passive preferences are allowed to reorder anything.
 pub const WARMUP_PAGES: i64 = 5;
+/// How many weights one owner may hold. The rate limit bounds requests, not size: without a cap a
+/// single loop fills the table with tags, and a lens of two hundred tags is not a lens.
+pub const MAX_WEIGHTS: usize = 24;
+/// Cookie that disables personalisation for this browser. Set and cleared from /prefs.
+pub const OFF_COOKIE: &str = "orbital_off";
 /// Half-life of a passive weight, in days.
 pub const DECAY_HALF_LIFE_DAYS: f64 = 30.0;
 
@@ -46,6 +51,8 @@ pub struct TunerView {
     /// weight from one page view is a note to self, not a lens — claiming "ranked with your lens"
     /// after a single visit would be a lie the page tells on the site's behalf.
     pub personalized: bool,
+    /// True when this browser asked not to be personalised at all.
+    pub off: bool,
 }
 
 impl TunerView {
@@ -71,6 +78,7 @@ impl TunerView {
         Self {
             active: !rows.is_empty(),
             personalized: viewer.applied,
+            off: false,
             rows,
             suggestions,
         }
@@ -125,6 +133,11 @@ pub async fn load(pool: &PgPool, raw_visitor: &str) -> Result<ViewerPrefs, AppEr
     })
 }
 
+/// The profile a request gets when the browser has asked not to be personalised.
+pub fn off() -> ViewerPrefs {
+    ViewerPrefs::default()
+}
+
 /// Same, for a signed-in member: their weights are explicit-only (they tuned, or they did not).
 pub async fn load_member(pool: &PgPool, user_id: uuid::Uuid) -> Result<ViewerPrefs, AppError> {
     let id = user_id.to_string();
@@ -161,19 +174,33 @@ pub async fn set_explicit(
     owner_kind: &str,
     owner_id: &str,
     raw: &[(String, f64)],
-) -> Result<(), AppError> {
-    let entries: Vec<(String, f64)> = raw
-        .iter()
-        .filter_map(|(t, w)| {
-            let t = crate::text::normalise_tag(t).unwrap_or_default();
-            if t.is_empty() {
-                None
-            } else {
-                Some((t, (*w / 10.0).clamp(0.0, 1.0)))
+) -> Result<usize, AppError> {
+    // A `v:` key is a category, not a tag: `normalise_tag` refuses the colon (rightly), so the
+    // category row on /lens was silently storing nothing. Vertical keys are validated against the
+    // real taxonomy instead, which is the check that was wanted all along.
+    let mut kept: Vec<(String, f64)> = Vec::new();
+    for (t, w) in raw {
+        let key = if let Some(slug) = t.trim().strip_prefix("v:") {
+            match crate::text::normalise_slug(slug) {
+                Ok(slug) if store::vertical_by_slug(pool, &slug).await?.is_some() => {
+                    format!("v:{slug}")
+                }
+                _ => continue,
             }
-        })
-        .collect();
-    store::set_explicit_prefs(pool, owner_kind, owner_id, &entries).await
+        } else {
+            match crate::text::normalise_tag(t) {
+                Ok(tag) => tag,
+                Err(_) => continue,
+            }
+        };
+        kept.push((key, (*w / 10.0).clamp(0.0, 1.0)));
+    }
+
+    // Strongest first, then cap: the cap should drop the weakest wishes, not the last typed ones.
+    kept.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    kept.truncate(MAX_WEIGHTS);
+    store::set_explicit_prefs(pool, owner_kind, owner_id, &kept).await?;
+    Ok(kept.len())
 }
 
 /// Effective weight of a passive entry `age_days` after it was last reinforced.

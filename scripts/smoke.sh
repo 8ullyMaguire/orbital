@@ -91,6 +91,10 @@ else
     && pass "login (account already existed)" || fail "register" "${reg:0:160}"
 fi
 
+# The fixture is a real member in a real directory. It un-hides itself to be tested and hides
+# itself again at the end, so the product is not seeded with a test pilot between deploys.
+curl -s -o /dev/null -b "$JAR" -X PATCH "$BASE/api/me" -H 'content-type: application/json' -d '{"hidden":false}'
+
 c=$(code -b "$JAR" "$BASE/api/me")
 [ "$c" = 200 ] && pass "session cookie works" || fail "session" "status $c"
 
@@ -151,6 +155,21 @@ c=$(code "$BASE/app/")
 [ "$c" = 200 ] && pass "dashboard shell" || fail "dashboard" "status $c"
 c=$(code -X POST "$BASE/report" -d "handle=$H&reason=other&detail=smoke")
 [ "$c" = 200 ] && pass "report form" || fail "report" "status $c"
+
+# ---- platform surfaces (2026-10-29)
+c=$(code "$BASE/status")
+[ "$c" = 200 ] && pass "estate status page" || fail "status page" "status $c"
+curl -s "$BASE/status" | grep -q "hosts answering" \
+  && pass "status page counts the estate" || fail "status page" "no summary line"
+curl -s "$BASE/og/$H.svg" | grep -q "<svg" \
+  && pass "a social card is rendered" || fail "og" "no svg for $H"
+curl -s -H "Authorization: Bearer orb_nope" "$BASE/api/v1/me/links" -o /dev/null -w '%{http_code}' \
+  | grep -q '^401$' && pass "a bad token is refused" || fail "token auth" "not 401"
+
+# Leave the directory as we found it: hidden, not deleted.
+curl -s -o /dev/null -b "$JAR" -X PATCH "$BASE/api/me" -H 'content-type: application/json' -d '{"hidden":true}'
+c=$(code "$BASE/@$H")
+[ "$c" = 404 ] && pass "the fixture hides itself again" || fail "fixture" "profile still $c after hiding"
 
 printf '\n%d failure(s)\n' "$FAILS"
 exit "$FAILS"

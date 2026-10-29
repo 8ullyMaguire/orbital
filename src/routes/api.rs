@@ -44,6 +44,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/users", get(admin_users))
         .route("/api/admin/users/{id}", post(admin_patch_user))
         .route("/api/admin/verticals", post(admin_create_vertical))
+        .route("/api/admin/tag-alias", post(admin_tag_alias))
+        .route("/api/me/rank-delta", get(my_rank_delta))
+        .route("/api/admin/farms", get(admin_farms))
+        .merge(super::tokens::router())
         .route("/api/admin/curation/{slug}", post(admin_curation))
 }
 
@@ -284,7 +288,15 @@ pub async fn update_me(
         }
     }
 
-    let user = store::update_profile(&st.pool, user.id, &clean).await?;
+    let mut user = store::update_profile(&st.pool, user.id, &clean).await?;
+    if let Some(hidden) = clean.hidden {
+        // Hiding is not deleting: the account, its links and its history stay, the directory
+        // forgets it. Same path the admin patch uses, so there is one definition of hidden.
+        store::set_trust(&st.pool, user.id, user.trust_level, Some(hidden)).await?;
+        if let Some(fresh) = store::user_by_id(&st.pool, user.id).await? {
+            user = fresh;
+        }
+    }
     if let Some(tags) = &patch_tags {
         let tags: Vec<String> = tags
             .iter()
@@ -773,4 +785,107 @@ pub async fn not_found() -> ApiError {
 #[allow(dead_code)]
 pub(crate) fn now() -> chrono::DateTime<chrono::Utc> {
     Utc::now()
+}
+
+/// `POST /api/admin/tag-alias` — record that two spellings are one tag.
+///
+/// The static alias table in `text.rs` covers spellings; this covers meaning, which is a decision
+/// someone has to make. `orbital retag` applies it to rows that already exist.
+pub async fn admin_tag_alias(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    guard(&user)?;
+    let from = body
+        .get("from")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ApiError(AppError::Validation("from is required".into())))?;
+    let to = body
+        .get("to")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ApiError(AppError::Validation("to is required".into())))?;
+    let from = crate::text::normalise_tag(from)?;
+    let to = crate::text::normalise_tag(to)?;
+    if from == to {
+        return Err(ApiError(AppError::Validation("a tag cannot alias itself".into())));
+    }
+    sqlx::query(
+        "INSERT INTO tag_aliases (from_tag, to_tag) VALUES ($1, $2)
+         ON CONFLICT (from_tag) DO UPDATE SET to_tag = EXCLUDED.to_tag",
+    )
+    .bind(&from)
+    .bind(&to)
+    .execute(&st.pool)
+    .await?;
+    Ok(Json(json!({"from": from, "to": to, "note": "run `orbital retag` to apply"})))
+}
+
+/// `GET /api/me/rank-delta` — where you stand now, and where you stood a week ago.
+///
+/// Snapshots are taken weekly, so "you moved 12 → 9" is the difference between the newest snapshot
+/// and the one closest to seven days before it.
+pub async fn my_rank_delta(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> ApiResult<Json<Value>> {
+    let rows: Vec<(String, i32, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT vertical_slug, rank, taken_at FROM rank_snapshots
+          WHERE user_id = $1 AND taken_at > now() - interval '30 days'
+          ORDER BY taken_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&st.pool)
+    .await?;
+
+    let mut out: Vec<Value> = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for (slug, rank, at) in &rows {
+        if seen.contains(&slug.as_str()) {
+            continue;
+        }
+        seen.push(slug);
+        let previous: Option<(i32,)> = sqlx::query_as(
+            "SELECT rank FROM rank_snapshots
+              WHERE user_id = $1 AND vertical_slug = $2 AND taken_at < $3 - interval '5 days'
+              ORDER BY taken_at DESC LIMIT 1",
+        )
+        .bind(user.id)
+        .bind(slug)
+        .bind(at)
+        .fetch_optional(&st.pool)
+        .await?;
+        out.push(json!({
+            "vertical": slug,
+            "rank": rank,
+            "previous": previous.map(|(r,)| r),
+            "delta": previous.map(|(r,)| r - rank),
+            "as_of": at,
+        }));
+    }
+    Ok(Json(json!({"ranks": out})))
+}
+
+/// `GET /api/admin/farms` — clients that look like one script rotating cookies.
+///
+/// It lists, it does not accuse: a shared office and a phone carrier NAT look like this too, which
+/// is why the voiding path stays a human decision.
+pub async fn admin_farms(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> ApiResult<Json<Value>> {
+    guard(&user)?;
+    let rows = store::fingerprint_spread(&st.pool, 7).await?;
+    let out: Vec<Value> = rows
+        .into_iter()
+        .map(|(fp, sessions, hits)| {
+            json!({
+                "fingerprint": fp,
+                "sessions": sessions,
+                "hits": hits,
+                "sessions_per_hit": if hits > 0 { sessions as f64 / hits as f64 } else { 0.0 }
+            })
+        })
+        .collect();
+    Ok(Json(json!({"since_days": 7, "threshold": 20, "clients": out})))
 }

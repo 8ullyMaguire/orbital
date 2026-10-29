@@ -23,12 +23,13 @@ const USER_COLS_U: &str = "u.id, u.handle, u.display_name, u.bio, u.accent, u.av
      u.is_owner, u.hidden, u.created_at, u.last_active_at";
 
 const LINK_COLS: &str = "id, user_id, vertical_slug, url, label, icon, position, click_count, \
-     hidden, created_at, last_status, last_checked, fail_count";
+     hidden, created_at, last_status, last_checked, fail_count, title, favicon";
 
 /// Same list, qualified: `links_for` joins `verticals`, which also has `label`
 /// and `icon` columns, so an unqualified list is an ambiguous-reference error.
 const LINK_COLS_L: &str = "l.id, l.user_id, l.vertical_slug, l.url, l.label, l.icon, \
-     l.position, l.click_count, l.hidden, l.created_at, l.last_status, l.last_checked, l.fail_count";
+     l.position, l.click_count, l.hidden, l.created_at, l.last_status, l.last_checked, l.fail_count, \
+     l.title, l.favicon";
 
 const VERTICAL_COLS: &str = "slug, label, description, icon, nsfw, sort, min_members";
 
@@ -582,11 +583,12 @@ pub async fn record_click(
     session_hash: &str,
     referrer_host: Option<&str>,
     viewer_hash: Option<&str>,
+    fingerprint: Option<&str>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     sqlx::query(
-        "INSERT INTO source_hits (user_id, link_id, surface, vertical_context, position, session_hash, referrer_host, viewer_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "INSERT INTO source_hits (user_id, link_id, surface, vertical_context, position, session_hash, referrer_host, viewer_hash, fingerprint)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(user_id)
     .bind(link_id)
@@ -596,6 +598,7 @@ pub async fn record_click(
     .bind(session_hash)
     .bind(referrer_host)
     .bind(viewer_hash)
+    .bind(fingerprint)
     .execute(&mut *tx)
     .await?;
     if let Some(link_id) = link_id {
@@ -627,6 +630,22 @@ pub async fn record_view(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Sessions per client fingerprint, newest week. One person has a handful; a farm has hundreds,
+/// because rotating a cookie is free and changing a user agent is not.
+pub async fn fingerprint_spread(pool: &PgPool, days: i32) -> Result<Vec<(String, i64, i64)>, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT fingerprint, count(DISTINCT session_hash)::bigint, count(*)::bigint
+           FROM source_hits
+          WHERE fingerprint IS NOT NULL AND created_at > now() - ($1::int * interval '1 day')
+          GROUP BY fingerprint
+         HAVING count(DISTINCT session_hash) > 20
+          ORDER BY 2 DESC LIMIT 20",
+    )
+    .bind(days)
+    .fetch_all(pool)
+    .await?)
 }
 
 pub async fn analytics(

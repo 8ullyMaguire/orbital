@@ -12,7 +12,7 @@
   <meta property="og:title" content="{% block ogtitle %}{{ layout.site_name }}{% endblock %}">
   <meta property="og:description" content="{% block ogdesc %}{{ layout.tagline }}{% endblock %}">
   <meta property="og:url" content="{% block ogurl %}{{ layout.base }}/{% endblock %}">
-  <meta property="og:image" content="{{ layout.base }}/assets/og.png">
+  <meta property="og:image" content="{% block og_image %}{{ layout.base }}/assets/og.png{% endblock %}">
   <meta name="twitter:card" content="summary_large_image">
   {% block head %}{% endblock %}
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">

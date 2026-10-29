@@ -207,9 +207,98 @@ RandomizedDelaySec=900
 WantedBy=timers.target
 UNIT
 
+# ------------------------------------------------------------------ snapshots
+# "You moved 12 → 9" needs yesterday, and yesterday cannot be reconstructed later. Weekly is the
+# cadence the dashboard sentence implies; running it more often only costs rows.
+cat > "$HOME/.config/systemd/user/orbital-snapshot.service" <<'UNIT'
+[Unit]
+Description=Orbital — record today's rank for every member in every vertical
+
+[Service]
+Type=oneshot
+WorkingDirectory=/personal/documents/code/rust/orbital
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+EnvironmentFile=%h/.config/systemd/user/orbital-app.env
+ExecStart=%h/.cargo-target/orbital/release/orbital snapshot
+Nice=15
+NoNewPrivileges=true
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-snapshot.timer" <<'UNIT'
+[Unit]
+Description=Weekly Orbital rank snapshot
+
+[Timer]
+OnCalendar=Sun 03:50:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+# ------------------------------------------------------------------ titles and cards
+# Both are cosmetic and both are expensive per item, so they get one daily pass instead of running
+# inside a request: fetch the missing page titles, then re-render the cards that mention them.
+cat > "$HOME/.config/systemd/user/orbital-metadata.service" <<'UNIT'
+[Unit]
+Description=Orbital — fetch page titles and favicons, then refresh the social cards
+
+[Service]
+Type=oneshot
+WorkingDirectory=/personal/documents/code/rust/orbital
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+EnvironmentFile=%h/.config/systemd/user/orbital-app.env
+ExecStart=%h/.cargo-target/orbital/release/orbital fetch-titles --limit 200
+ExecStartPost=%h/.cargo-target/orbital/release/orbital og --out /personal/documents/code/rust/orbital/static/og
+Nice=15
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-metadata.timer" <<'UNIT'
+[Unit]
+Description=Daily Orbital metadata pass
+
+[Timer]
+OnCalendar=*-*-* 05:10:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+# ------------------------------------------------------------------ uptime probe
+# The probe writes a timestamp, and `orbital doctor` reads it. That is the whole alerting path: a
+# bot that messages you is a liability to maintain; a file that goes stale is not.
+cat > "$HOME/.config/systemd/user/orbital-uptime.service" <<'UNIT'
+[Unit]
+Description=Orbital — probe our own health endpoint and stamp the result
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/systemd/user/orbital-app.env
+ExecStart=/bin/bash -c 'code=$(curl -s -o /dev/null -w "%%{http_code}" --max-time 10 "http://127.0.0.1:8041/healthz"); printf "%%s %%s\n" "$(date -Is)" "$code" > %h/backups/orbital/uptime.txt'
+Nice=15
+NoNewPrivileges=true
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-uptime.timer" <<'UNIT'
+[Unit]
+Description=Orbital uptime probe every ten minutes
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=false
+
+[Install]
+WantedBy=timers.target
+UNIT
+
 systemctl --user daemon-reload
-systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer
-echo "units written; checklinks, backup and restore-test timers enabled"
+systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer orbital-snapshot.timer orbital-metadata.timer orbital-uptime.timer
+echo "units written; checklinks, backup, restore-test, prune, snapshot, metadata and uptime timers enabled"
 REMOTE
 
 say "5/7 nginx site"
@@ -348,6 +437,14 @@ set -a; . \$HOME/.config/systemd/user/orbital-db.env; set +a
 $BIN migrate
 $BIN seed
 REMOTE
+
+say "6b/7 estate list, social cards, and the rasteriser they need"
+# The status page lists whatever nginx actually serves, so it cannot drift from the network it
+# describes. The card renderer needs a rasteriser; without one it writes SVG and says so.
+ssh "$HOST" 'cd /personal/documents/code/rust/orbital && mkdir -p static/og &&   { grep -rhoE "server_name[[:space:]]+[^;]+" /etc/nginx/sites-available /etc/nginx/sites-enabled 2>/dev/null     | sed -E "s/server_name[[:space:]]+//" | tr " " "\n" | grep -E "^[a-z0-9.-]+\.[a-z]{2,}$" | sort -u     | sed -E "s/^([a-z0-9-]+)\..*/\1 | \1/" ; } > static/estate.txt && wc -l < static/estate.txt'
+ssh "$HOST" 'command -v rsvg-convert >/dev/null || sudo apt-get install -y -qq librsvg2-bin' || true
+ssh "$HOST" 'cd /personal/documents/code/rust/orbital && set -a && . ~/.config/systemd/user/orbital-db.env && . ~/.config/systemd/user/orbital-app.env && set +a && ~/.cargo-target/orbital/release/orbital og --out /personal/documents/code/rust/orbital/static/og 2>&1 | tail -1'
+ssh "$HOST" 'cd /personal/documents/code/rust/orbital && set -a && . ~/.config/systemd/user/orbital-db.env && . ~/.config/systemd/user/orbital-app.env && set +a && ~/.cargo-target/orbital/release/orbital doctor 2>&1 | tail -3'
 
 say "7/7 verify through nginx and the public hostname"
 ssh "$HOST" bash -s <<REMOTE

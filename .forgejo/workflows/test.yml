@@ -1,0 +1,24 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: docker
+    container:
+      image: rust:1-slim-bookworm
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+    env:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y --no-install-recommends postgresql-client libssl-dev pkg-config
+      - run: cargo test --all-targets

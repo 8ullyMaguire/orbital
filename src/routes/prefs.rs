@@ -71,15 +71,14 @@ pub async fn apply(
         .map(|(t, w)| (t.clone(), *w))
         .collect();
 
-    match &user {
-        Some(u) => {
-            prefs::set_explicit(&st.pool, "user", &u.id.to_string(), &entries).await?;
-        }
+    let kept = match &user {
+        Some(u) => prefs::set_explicit(&st.pool, "user", &u.id.to_string(), &entries).await?,
         None => {
             let hash = prefs::visitor_hash(&vid);
-            prefs::set_explicit(&st.pool, "visitor", &hash, &entries).await?;
+            prefs::set_explicit(&st.pool, "visitor", &hash, &entries).await?
         }
-    }
+    };
+    tracing::debug!(kept, "preferences applied");
     Ok(Redirect::to(&back_to(&headers, "/")).into_response())
 }
 
@@ -96,7 +95,7 @@ pub async fn reset(
             let hash = prefs::visitor_hash(&vid);
             prefs::set_explicit(&st.pool, "visitor", &hash, &[]).await?
         }
-    }
+    };
     Ok(Redirect::to(&back_to(&headers, "/")).into_response())
 }
 
@@ -109,13 +108,45 @@ pub async fn view(st: &AppState, vid: &str, user: Option<&crate::models::User>) 
         None => prefs::load(&st.pool, vid).await,
     }
     .unwrap_or_default();
-    let suggestions = crate::store::popular_tags(&st.pool, 24).await.unwrap_or_default();
+    let suggestions = crate::store::popular_tags(&st.pool, prefs::MAX_WEIGHTS as i64)
+        .await
+        .unwrap_or_default();
     prefs::TunerView::new(&loaded, suggestions)
+}
+
+/// Turn personalisation off for this browser. A reordered list is unsettling to some people, and
+/// the alternative to a switch is that they clear their cookies and assume the site is broken.
+pub async fn off(headers: HeaderMap) -> Result<Response, PageError> {
+    let mut res = Redirect::to(&back_to(&headers, "/")).into_response();
+    res.headers_mut().append(
+        header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&format!(
+            "{}=1; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax",
+            prefs::OFF_COOKIE
+        ))
+        .unwrap(),
+    );
+    Ok(res)
+}
+
+pub async fn on(headers: HeaderMap) -> Result<Response, PageError> {
+    let mut res = Redirect::to(&back_to(&headers, "/")).into_response();
+    res.headers_mut().append(
+        header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&format!(
+            "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+            prefs::OFF_COOKIE
+        ))
+        .unwrap(),
+    );
+    Ok(res)
 }
 
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/lens", get(lens))
+        .route("/prefs/off", get(off))
+        .route("/prefs/on", get(on))
         .route("/prefs", post(apply))
         .route("/prefs/reset", post(reset))
 }
@@ -146,7 +177,9 @@ pub async fn lens(
             (tag.clone(), label, (w * 10.0).round().clamp(0.0, 10.0) as i64)
         })
         .collect();
-    let suggestions = crate::store::popular_tags(&st.pool, 24).await.unwrap_or_default();
+    let suggestions = crate::store::popular_tags(&st.pool, prefs::MAX_WEIGHTS as i64)
+        .await
+        .unwrap_or_default();
     let verticals = crate::store::verticals(&st.pool, true).await?;
     Ok(crate::render::LensTemplate {
         layout: crate::render::Layout::new(&ctx.base, false, &verticals, user.as_ref()),

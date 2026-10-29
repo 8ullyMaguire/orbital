@@ -22,4 +22,11 @@
       {% if tuner.active %}<button class="btn btn-sm btn-ghost" type="submit" formaction="/prefs/reset">Reset</button>{% endif %}
     </div>
   </form>
+  <p class="xs muted" style="margin:8px 0 0">
+    {% if tuner.off %}
+      Personalisation is off for this browser. <a href="/prefs/on">Turn it back on</a>.
+    {% else %}
+      <a href="/prefs/off">Turn personalisation off</a> — the order goes back to clicks and visitors.
+    {% endif %}
+  </p>
 </details>

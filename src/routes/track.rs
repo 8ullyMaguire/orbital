@@ -42,6 +42,28 @@ fn clean_surface(s: Option<String>) -> String {
 /// Only the host of the referrer is kept. A full Referer URL is a person's browsing history
 /// attached to a click; the host is the part that answers "which network sent this", and it is
 /// still a coarse fact. Ourselves are dropped: an internal navigation is not an attribution.
+/// What a script cannot cheaply vary per request: its user agent and language header. Not an
+/// identity and never shown as one - it groups sessions that look like one client, which is the
+/// shape of a click farm rather than of a person.
+fn fingerprint(salt: &str, headers: &HeaderMap) -> String {
+    use sha2::{Digest, Sha256};
+    let ua = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let lang = headers
+        .get(axum::http::header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let mut h = Sha256::new();
+    h.update(salt.as_bytes());
+    h.update(b"|fp|");
+    h.update(ua.as_bytes());
+    h.update(b"|");
+    h.update(lang.as_bytes());
+    format!("{:x}", h.finalize())[..32].to_string()
+}
+
 fn referrer_host(headers: &HeaderMap) -> Option<String> {
     let raw = headers.get(axum::http::header::REFERER)?.to_str().ok()?;
     let after_scheme = raw.split_once("://").map(|(_, rest)| rest).unwrap_or(raw);
@@ -101,6 +123,7 @@ pub async fn click(
         // The hashed visitor id: this is what lets a member be told what their audience cares
         // about without any visitor id being stored in the clear.
         Some(&crate::prefs::visitor_hash(&vid)),
+        Some(&fingerprint(&st.cfg.salt, &headers)),
     )
     .await
     {

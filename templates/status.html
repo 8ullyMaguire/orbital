@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Estate status — {{ layout.site_name }}{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>Estate status</h1>
+  <p class="muted sm">{{ up }} of {{ total }} hosts answering. Checked {{ generated }}, refreshed at most once a minute.</p>
+  {% if total == 0 %}
+    <p class="muted">No hosts are configured yet: the deploy writes <code>static/estate.txt</code> from nginx.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Host</th><th>State</th><th class="num">HTTP</th><th class="num">ms</th></tr></thead>
+    <tbody>
+      {% for h in hosts %}
+      <tr>
+        <td><a href="https://{{ h.host }}/">{{ h.label }}</a></td>
+        <td>{% if h.up %}<span class="chip chip-on">up</span>{% else %}<span class="chip">down</span>{% endif %}</td>
+        <td class="num dim">{{ h.status }}</td>
+        <td class="num dim">{{ h.millis }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

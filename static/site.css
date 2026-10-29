@@ -583,3 +583,7 @@ p { margin: 0 0 1em; }
   border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px;
 }
 .tuner-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* A fetched favicon: the only image a link card needs, and it is optional. */
+.lb-ico{width:16px;height:16px;border-radius:3px;margin-right:8px;flex:0 0 auto;object-fit:cover}
+.lb-t small{display:block;max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

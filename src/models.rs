@@ -41,6 +41,10 @@ pub struct LinkRow {
     /// Consecutive failures. The profile shows a badge at 3, and a success clears it, so no
     /// moderator has to undo a transient outage.
     pub fail_count: i32,
+    /// What the page calls itself, fetched once. A list of names reads better than a list of URLs.
+    pub title: Option<String>,
+    /// The page's icon, fetched with the title.
+    pub favicon: Option<String>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -152,6 +156,8 @@ pub struct ProfilePatch {
     pub secondary_verticals: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     pub nsfw_enabled: Option<bool>,
+    /// Hide the profile from the directory and its pages without deleting the account.
+    pub hidden: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

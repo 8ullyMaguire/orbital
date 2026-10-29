@@ -81,15 +81,26 @@ async fn viewer_weights(st: &AppState, vid: &str, user: Option<&User>) -> Vec<(S
     loaded.map(|v| v.ranking().to_vec()).unwrap_or_default()
 }
 
+/// True when this browser asked not to be personalised.
+fn personalisation_off(headers: &HeaderMap) -> bool {
+    crate::auth::cookie_value(headers, crate::prefs::OFF_COOKIE).as_deref() == Some("1")
+}
+
 pub async fn home(
     State(st): State<AppState>,
     ctx: Ctx,
     PageUser(user): PageUser,
     VisitorId(vid): VisitorId,
+    headers: HeaderMap,
     Query(q): Query<HomeQuery>,
 ) -> PageResult<HomeTemplate> {
     let now = Utc::now();
-    let weights = viewer_weights(&st, &vid, user.as_ref()).await;
+    let off = personalisation_off(&headers);
+    let weights = if off {
+        Vec::new()
+    } else {
+        viewer_weights(&st, &vid, user.as_ref()).await
+    };
     let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
     let mut other: Vec<SmallVertical> = Vec::new();
@@ -160,7 +171,12 @@ pub async fn home(
     if let Err(e) = crate::prefs::visit(&st.pool, &vid, &[]).await {
         tracing::warn!(error = %e, "page view not recorded");
     }
-    let tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
+    let mut tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
+    if off {
+        tuner.personalized = false;
+        tuner.active = false;
+    }
+    tuner.off = off;
 
     Ok(HomeTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
@@ -194,9 +210,15 @@ pub async fn vertical(
     Path(slug): Path<String>,
     Query(q): Query<VerticalQuery>,
     VisitorId(vid): VisitorId,
+    headers: HeaderMap,
 ) -> PageResult<VerticalTemplate> {
     let now = Utc::now();
-    let weights = viewer_weights(&st, &vid, user.as_ref()).await;
+    let off = personalisation_off(&headers);
+    let weights = if off {
+        Vec::new()
+    } else {
+        viewer_weights(&st, &vid, user.as_ref()).await
+    };
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
@@ -264,7 +286,12 @@ pub async fn vertical(
     if let Err(e) = crate::prefs::visit(&st.pool, &vid, &[(format!("v:{}", v.slug), 0.05)]).await {
         tracing::warn!(error = %e, "vertical view not recorded");
     }
-    let tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
+    let mut tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
+    if off {
+        tuner.personalized = false;
+        tuner.active = false;
+    }
+    tuner.off = off;
 
     let visitors_total: i64 = members.iter().map(|m| m.visitors).sum();
     let mut tag_counts: std::collections::BTreeMap<String, i64> = Default::default();

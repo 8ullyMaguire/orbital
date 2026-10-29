@@ -29,6 +29,39 @@ enum Cmd {
         #[arg(long, default_value_t = 180)]
         days: i64,
     },
+    /// Check the things that break quietly: database, migrations, health, backup, link checker.
+    Doctor,
+    /// Add links to an existing member from a file: one URL per line, optional `| label`.
+    Import {
+        /// The member's handle, without the @.
+        #[arg(long)]
+        handle: String,
+        /// The file to read.
+        #[arg(long)]
+        file: std::path::PathBuf,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Record today's rank for every member in every vertical.
+    Snapshot,
+    /// Apply reviewed tag aliases to existing rows.
+    Retag {
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Fetch the page title and favicon for links that have none yet.
+    FetchTitles {
+        #[arg(long, default_value_t = 200)]
+        limit: i64,
+    },
+    /// Render social cards into a directory (SVG always, PNG when rsvg-convert is installed).
+    Og {
+        #[arg(long, default_value = "static/og")]
+        out: std::path::PathBuf,
+        /// Only this handle.
+        #[arg(long)]
+        handle: Option<String>,
+    },
     /// Bluesky bot and housekeeping.
     Bot {
         #[command(subcommand)]
@@ -113,6 +146,39 @@ async fn main() -> anyhow::Result<()> {
                 }
                 BotCmd::Maintain => bot::maintenance(&state.pool).await?,
             }
+        }
+        Cmd::Doctor => {
+            let pool = db::connect(&cfg).await?;
+            let failed = orbital::ops::doctor(&pool, &cfg).await?;
+            std::process::exit(failed.min(125) as i32);
+        }
+        Cmd::Import {
+            handle,
+            file,
+            dry_run,
+        } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::import_links(&pool, &handle, &file, dry_run).await?;
+        }
+        Cmd::Snapshot => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::snapshot(&pool).await?;
+        }
+        Cmd::Retag { dry_run } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::retag(&pool, dry_run).await?;
+        }
+        Cmd::FetchTitles { limit } => {
+            let pool = db::connect(&cfg).await?;
+            let http = reqwest::Client::builder()
+                .user_agent(concat!("orbital/", env!("CARGO_PKG_VERSION")))
+                .timeout(std::time::Duration::from_secs(10))
+                .build()?;
+            orbital::ops::fetch_titles(&pool, &http, limit).await?;
+        }
+        Cmd::Og { out, handle } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::og(&pool, &out, handle.as_deref()).await?;
         }
         Cmd::Serve => serve(cfg).await?,
     }

@@ -11,8 +11,10 @@ use http_body_util::BodyExt;
 use orbital::config::Config;
 use orbital::routes;
 use orbital::AppState;
+use serde_json::json;
 use sqlx::PgPool;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn test_config() -> Config {
     Config::for_test("http://orbital.test")
@@ -41,6 +43,8 @@ struct Res {
     cors: Option<String>,
     /// The anonymous visitor id: the thing a preference profile is keyed to.
     vcookie: Option<String>,
+    /// The `orbital_off` flag, when the response sets one. Browsers keep this; a test must too.
+    offcookie: Option<String>,
 }
 
 impl Res {
@@ -86,6 +90,13 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         .filter_map(|v| v.to_str().ok())
         .find(|c| c.starts_with("orbital_v="))
         .map(|c| c.split(';').next().unwrap_or("").to_string());
+    let offcookie = res
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find(|c| c.starts_with("orbital_off"))
+        .map(|c| c.split(';').next().unwrap_or("").to_string());
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     Res {
         status,
@@ -96,6 +107,7 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         etag,
         cors,
         vcookie,
+        offcookie,
     }
 }
 
@@ -1085,4 +1097,211 @@ async fn passive_weights_wait_for_the_warm_up(pool: PgPool) {
         fifth.body.contains("Ranked with your lens"),
         "after five pages personalisation is allowed to apply"
     );
+}
+
+#[sqlx::test]
+async fn a_category_is_a_weight_too(pool: PgPool) {
+    // /lens offers "add a category (v:music)"; normalise_tag refuses the colon, so this row used to
+    // store nothing at all. A category is validated against the real taxonomy instead.
+    let app = app(pool.clone()).await;
+    let first = call(&app, get("/lens")).await;
+    let viewer = first.vcookie.expect("visitor");
+
+    // Apply replaces the whole lens, so both entries go in one post.
+    call(&app, post_form("/prefs", "tag=v:music&w=7&tag=v:nonsense&w=7", &viewer)).await;
+    let lens = call(&app, cookie(get("/lens"), &viewer)).await;
+    assert!(lens.body.contains("name=\"tag\" value=\"v:music\""), "a real category sticks");
+    assert!(
+        !lens.body.contains("v:nonsense"),
+        "an invented one is refused, not stored"
+    );
+}
+
+#[sqlx::test]
+async fn a_lens_has_a_ceiling(pool: PgPool) {
+    // The rate limit bounds requests, not size: one loop could post two hundred tags.
+    let app = app(pool.clone()).await;
+    let first = call(&app, get("/lens")).await;
+    let viewer = first.vcookie.expect("visitor");
+
+    // One form post carries the whole lens: posting one tag per request would replace the set each
+    // time (that is what Apply means), and the cap would never be exercised.
+    let body: Vec<String> = (0..40)
+        .map(|i| format!("tag=tag{i}&w={}", i % 10 + 1))
+        .collect();
+    let body = body.join("&");
+    call(&app, post_form("/prefs", &body, &viewer)).await;
+    let (n,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM preference_weights WHERE source = 'explicit'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 24, "the cap keeps the strongest 24");
+}
+
+#[sqlx::test]
+async fn personalisation_can_be_turned_off(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "muso", "music").await;
+
+    let first = call(&app, get("/v/music")).await;
+    let viewer = first.vcookie.expect("visitor");
+    call(&app, post_form("/prefs", "tag=chiptune&w=9", &viewer)).await;
+    let on = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert!(on.body.contains("Ranked with your lens"));
+
+    let off = call(&app, cookie(get("/prefs/off"), &viewer)).await;
+    assert_eq!(off.status, 303);
+    let flag = off.offcookie.expect("the off flag is set as a cookie");
+    assert!(flag.contains("=1"), "got {flag}");
+    let back = call(&app, cookie(get("/v/music"), &format!("{viewer}; {flag}"))).await;
+    assert!(!back.body.contains("Ranked with your lens"), "off means off");
+    assert!(back.body.contains("Personalisation is off"), "and it says so");
+
+    let on = call(&app, cookie(get("/prefs/on"), &format!("{viewer}; {flag}"))).await;
+    let cleared = on.offcookie.expect("clearing sets an empty value");
+    assert!(cleared.ends_with("orbital_off="), "got {cleared}");
+    let again = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert!(again.body.contains("Ranked with your lens"), "and on means on");
+}
+
+// ---------------------------------------------------------------- platform (2026-10-29)
+
+#[sqlx::test]
+async fn a_token_can_add_a_link_without_a_browser(pool: PgPool) {
+    // The whole point: a script, or the MCP server, can write without a session cookie.
+    let app = app(pool.clone()).await;
+    let reg = register(&app, "writer", "dev").await;
+    let sess = reg.cookie.expect("session");
+
+    let created = call(
+        &app,
+        json_req("POST", "/api/me/tokens", json!({"label": "cli"}), Some(&sess)),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::OK, "{}", created.body);
+    let token = created.json()["token"].as_str().expect("token").to_string();
+    assert!(token.starts_with("orb_"));
+
+    // Not in the listing: the plaintext exists only in that one response.
+    let listing = call(&app, cookie(get("/api/me/tokens"), &sess)).await;
+    assert!(!listing.body.contains(&token), "the token must not be listed back");
+
+    let added = call(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/me/links")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(
+                json!({"url": "https://example.com/writing", "label": "Writing"}).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::CREATED, "{}", added.body);
+
+    let mine = call(
+        &app,
+        Request::builder()
+            .uri("/api/v1/me/links")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(mine.status, StatusCode::OK);
+    assert!(mine.body.contains("example.com/writing"));
+
+    // And a token that is not one is refused rather than treated as anonymous.
+    let bad = call(
+        &app,
+        Request::builder()
+            .uri("/api/v1/me/links")
+            .header("authorization", "Bearer orb_deadbeef")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(bad.status, StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test]
+async fn the_status_page_lists_the_estate_and_says_when_it_does_not_know(pool: PgPool) {
+    // No estate file in the test tree: the page must say so, not pretend the network is empty.
+    let app = app(pool).await;
+    let res = call(&app, get("/status")).await;
+    assert_eq!(res.status, StatusCode::OK);
+    assert!(
+        res.body.contains("No hosts are configured yet"),
+        "an honest empty state"
+    );
+}
+
+#[sqlx::test]
+async fn a_card_is_rendered_even_before_the_file_exists(pool: PgPool) {
+    let app = app(pool).await;
+    register(&app, "carder", "dev").await;
+    let res = call(&app, get("/og/carder.png")).await;
+    assert_eq!(res.status, StatusCode::OK);
+    assert!(res.body.contains("<svg"), "the fallback is a generated card");
+    assert!(res.body.contains("@carder"));
+
+    let missing = call(&app, get("/og/nobody.png")).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn an_alias_merges_two_tags_on_the_next_retag(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let reg = register(&app, "boss", "dev").await;
+    let sess = reg.cookie.expect("session");
+    sqlx::query("UPDATE users SET is_owner = true, trust_level = 3 WHERE handle = 'boss'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let res = call(
+        &app,
+        json_req(
+            "POST",
+            "/api/admin/tag-alias",
+            json!({"from": "Rust Lang", "to": "rust"}),
+            Some(&sess),
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let (from, to): (String, String) =
+        sqlx::query_as("SELECT from_tag, to_tag FROM tag_aliases")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    // Both sides are normalised on the way in, and the pair must still be two different tags.
+    assert_eq!(from, "rust-lang");
+    assert_eq!(to, "rust");
+}
+
+#[sqlx::test]
+async fn rank_delta_reports_where_you_were(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let reg = register(&app, "ranker", "dev").await;
+    let sess = reg.cookie.expect("session");
+    let (id,): (Uuid,) = sqlx::query_as("SELECT id FROM users WHERE handle = 'ranker'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // Last week ninth, today third: +6.
+    sqlx::query("INSERT INTO rank_snapshots (user_id, vertical_slug, rank, taken_at) VALUES ($1, 'dev', 9, now() - interval '7 days')")
+        .bind(id).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO rank_snapshots (user_id, vertical_slug, rank, taken_at) VALUES ($1, 'dev', 3, now())")
+        .bind(id).execute(&pool).await.unwrap();
+
+    let res = call(&app, cookie(get("/api/me/rank-delta"), &sess)).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let body = res.json();
+    let first = &body["ranks"][0];
+    assert_eq!(first["rank"], 3);
+    assert_eq!(first["previous"], 9);
+    assert_eq!(first["delta"], 6);
 }
