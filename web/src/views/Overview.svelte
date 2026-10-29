@@ -115,8 +115,8 @@
 <div class="grid2" style="margin-top:14px">
   <div class="card">
     <div class="card-h"><h2>Which network sent them</h2></div>
-    {/* The surface says which of your pages earned the click; this says whether the Bluesky
-        announcement or the Mastodon one actually brought anybody. Host only - no paths. */}
+    <!-- The surface says which of your pages earned the click; this says whether the Bluesky
+         announcement or the Mastodon one actually brought anybody. Host only - no paths. -->
     <Bars buckets={data?.by_referrer ?? []} empty="No referrer recorded yet. Social apps often strip it." />
   </div>
 </div>
