@@ -1289,3 +1289,68 @@ pub async fn popular_tags(pool: &PgPool, limit: i64) -> Result<Vec<String>, AppE
     .await?;
     Ok(rows.into_iter().map(|r| r.0).collect())
 }
+
+/// Move an anonymous visitor's weights onto a new account, then drop the anonymous rows.
+///
+/// Called at registration: whatever the person told the tuner before signing up is what they meant
+/// with an account, and a lens that evaporates on signup teaches them not to tune anything.
+pub async fn adopt_visitor_prefs(
+    pool: &PgPool,
+    visitor_hash: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "INSERT INTO preference_weights AS pw (owner_kind, owner_id, tag_slug, weight, source, updated_at)
+         SELECT 'user', $1, tag_slug, weight, source, updated_at
+           FROM preference_weights
+          WHERE owner_kind = 'visitor' AND owner_id = $2
+         ON CONFLICT (owner_kind, owner_id, tag_slug)
+         DO UPDATE SET weight = EXCLUDED.weight, source = EXCLUDED.source, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(user_id.to_string())
+    .bind(visitor_hash)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("DELETE FROM preference_weights WHERE owner_kind = 'visitor' AND owner_id = $1")
+        .bind(visitor_hash)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Forget visitors nobody has heard from in `days`, and the passive weights that only they could
+/// explain. Returns (visitors, weights) deleted.
+///
+/// Explicit weights are deleted with them: they belong to a hash, and a hash whose visitor is gone
+/// is not a person we can keep personalising for. It is also the closest thing to a deletion
+/// request this design can honour without collecting identities.
+pub async fn prune_visitors(pool: &PgPool, days: i64) -> Result<(u64, u64), AppError> {
+    let mut tx = pool.begin().await?;
+    let stale: Vec<(String,)> = sqlx::query_as(
+        "SELECT visitor_hash FROM visitor_profiles
+          WHERE last_seen_at < now() - ($1::bigint * interval '1 day')",
+    )
+    .bind(days)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let mut weights = 0u64;
+    for (hash,) in &stale {
+        let r = sqlx::query(
+            "DELETE FROM preference_weights WHERE owner_kind = 'visitor' AND owner_id = $1",
+        )
+        .bind(hash)
+        .execute(&mut *tx)
+        .await?;
+        weights += r.rows_affected();
+    }
+    let visitors = sqlx::query("DELETE FROM visitor_profiles WHERE last_seen_at < now() - ($1::bigint * interval '1 day')")
+        .bind(days)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+    tx.commit().await?;
+    Ok((visitors, weights))
+}

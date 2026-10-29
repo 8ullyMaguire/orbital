@@ -1,11 +1,11 @@
 <details class="tuner"{% if tuner.active %} open{% endif %}>
   <summary><span>What do you want to discover?</span><span class="tuner-hint">{% if tuner.active %}tuned{% else %}optional{% endif %}</span></summary>
   <form method="post" action="/prefs" class="tuner-form">
-    <p class="sm muted">Drag a tag up to see more of it. This changes the order of these lists for you — not for anyone else.</p>
+    <p class="sm muted">Drag a tag up to see more of it. This changes the order of these lists for you — not for anyone else{% if tuner.active %}. <a href="/lens">What you have said so far</a>{% endif %}.</p>
     {% for r in tuner.rows %}
     <label class="tuner-row">
-      <span class="tuner-tag">#{{ r.tag }}</span>
-      <input type="range" min="0" max="10" step="1" value="{{ r.weight }}" name="w" aria-label="{{ r.tag }} weight">
+      <span class="tuner-tag">{{ r.label }}</span>
+      <input type="range" min="0" max="10" step="1" value="{{ r.weight }}" name="w" aria-label="{{ r.label }} weight">
       <input type="hidden" name="tag" value="{{ r.tag }}">
       <output>{{ r.weight }}</output>
     </label>

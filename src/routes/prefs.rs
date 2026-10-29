@@ -8,6 +8,7 @@
 //! header is an open redirect waiting to be found.
 
 use axum::extract::State;
+use axum::routing::get;
 use axum::routing::post;
 use axum::http::header;
 use axum::http::HeaderMap;
@@ -114,6 +115,46 @@ pub async fn view(st: &AppState, vid: &str, user: Option<&crate::models::User>) 
 
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
+        .route("/lens", get(lens))
         .route("/prefs", post(apply))
         .route("/prefs/reset", post(reset))
+}
+
+/// `/lens` — the same weights the tuner sliders show, as a readable list you can edit or clear.
+///
+/// The widget is the entry point; this is the page you land on when you want to know what you
+/// actually told the site. A slider panel is good at expressing "more of this" and bad at
+/// answering "what did I say?".
+pub async fn lens(
+    State(st): State<AppState>,
+    ctx: Ctx,
+    PageUser(user): PageUser,
+    VisitorId(vid): VisitorId,
+) -> Result<crate::render::LensTemplate, PageError> {
+    let (loaded, scope) = match &user {
+        Some(u) => (prefs::load_member(&st.pool, u.id).await?, "your account"),
+        None => (prefs::load(&st.pool, &vid).await?, "this browser"),
+    };
+    let rows: Vec<(String, String, i64)> = loaded
+        .weights
+        .iter()
+        .map(|(tag, w)| {
+            let label = match tag.strip_prefix("v:") {
+                Some(slug) => format!("in {slug}"),
+                None => format!("#{tag}"),
+            };
+            (tag.clone(), label, (w * 10.0).round().clamp(0.0, 10.0) as i64)
+        })
+        .collect();
+    let suggestions = crate::store::popular_tags(&st.pool, 24).await.unwrap_or_default();
+    let verticals = crate::store::verticals(&st.pool, true).await?;
+    Ok(crate::render::LensTemplate {
+        layout: crate::render::Layout::new(&ctx.base, false, &verticals, user.as_ref()),
+        verticals,
+        rows,
+        suggestions,
+        scope: scope.to_string(),
+        pages_seen: loaded.pages_seen,
+        warmup: prefs::WARMUP_PAGES,
+    })
 }

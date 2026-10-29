@@ -439,10 +439,8 @@ pub async fn profile(
         .await?
         .ok_or(PageError(AppError::NotFound))?;
 
-    // An adult vertical badge never renders on the SFW host.
     let badges: Vec<Badge> = pairs
         .iter()
-        .filter(|_| true)
         .map(|(slug, role)| Badge {
             slug: slug.clone(),
             label: pretty_vertical(slug),
@@ -886,9 +884,6 @@ pub(crate) async fn vertical_feed(
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
-    if false { // one surface: every vertical renders on it
-        return Err(PageError(AppError::NotFound));
-    }
     let members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
         .await?
         .into_iter()
@@ -1004,14 +999,10 @@ pub(crate) async fn sitemap(State(st): State<AppState>, _ctx: Ctx) -> PageResult
 }
 
 pub(crate) async fn robots(ctx: Ctx) -> Response {
-    let body = if false {
-        "User-agent: *\nDisallow: /\n".to_string()
-    } else {
-        format!(
-            "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /l/\nDisallow: /api/\n\nSitemap: {}/sitemap.xml\n",
-            ctx.base
-        )
-    };
+    let body = format!(
+        "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /lens\nDisallow: /prefs\nDisallow: /l/\nDisallow: /api/\n\nSitemap: {}/sitemap.xml\n",
+        ctx.base
+    );
     (
         [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         body,

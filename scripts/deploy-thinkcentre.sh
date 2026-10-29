@@ -182,8 +182,33 @@ Persistent=true
 WantedBy=timers.target
 UNIT
 
+cat > "$HOME/.config/systemd/user/orbital-prune.service" <<'UNIT'
+[Unit]
+Description=Orbital — forget anonymous visitors who stopped coming
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+ExecStart=%h/.cargo-target/orbital/release/orbital prune --days 180
+Nice=15
+NoNewPrivileges=true
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-prune.timer" <<'UNIT'
+[Unit]
+Description=Weekly Orbital prune
+
+[Timer]
+OnCalendar=Sun 03:20:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target
+UNIT
+
 systemctl --user daemon-reload
-systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer
+systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer
 echo "units written; checklinks, backup and restore-test timers enabled"
 REMOTE
 
@@ -205,6 +230,8 @@ map \$http_cf_connecting_ip \$orbital_client {
     default \$http_cf_connecting_ip;
 }
 limit_req_zone  \$orbital_client zone=orbital_api:10m rate=60r/m;
+# The tuner is unauthenticated and every apply writes rows: it needs a harder limit than the API.
+limit_req_zone  \$orbital_client zone=orbital_write:10m rate=20r/m;
 limit_conn_zone \$orbital_client zone=orbital_api_conn:10m;
 
 server {
@@ -246,6 +273,23 @@ server {
         include /etc/nginx/snippets/estate-security-headers.conf;
         # 429 without a Retry-After is a client that cannot back off politely.
         add_header Retry-After 2 always;
+    }
+
+    # POST /prefs and /prefs/reset: a form a person submits a few times, and an endpoint a script
+    # can fill a table with. 20 a minute with a burst of 6 is generous for the former.
+    location ^~ /prefs {
+        limit_req zone=orbital_write burst=6 nodelay;
+        limit_req_status 429;
+
+        proxy_pass http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+
+        include /etc/nginx/snippets/estate-security-headers.conf;
+        add_header Retry-After 3 always;
     }
 
     location / {

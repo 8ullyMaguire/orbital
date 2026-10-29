@@ -65,6 +65,33 @@ pub fn tag_relevance(tags: &[String], weights: &[(String, f64)]) -> f64 {
     (hit / total).clamp(0.0, 1.0)
 }
 
+/// The same weighted share, but a member's verticals count too.
+///
+/// A passive signal from browsing a category is stored as `v:<slug>`, and a member's tags never
+/// contain that string — so matching only against tags made every vertical visit influence nothing.
+/// A weight on `v:music` now means "show me people in music", which is what the visitor meant.
+pub fn relevance(m: &MemberStat, weights: &[(String, f64)]) -> f64 {
+    let total: f64 = weights.iter().map(|(_, w)| w.max(0.0)).sum();
+    if total <= 0.0 {
+        return 0.0;
+    }
+    let hit: f64 = weights
+        .iter()
+        .filter(|(k, w)| {
+            if *w <= 0.0 {
+                return false;
+            }
+            if let Some(slug) = k.strip_prefix("v:") {
+                m.verticals.iter().any(|v| v == slug)
+            } else {
+                m.tags.iter().any(|t| t == k)
+            }
+        })
+        .map(|(_, w)| *w)
+        .sum();
+    (hit / total).clamp(0.0, 1.0)
+}
+
 pub fn recency(last_active: DateTime<Utc>, now: DateTime<Utc>) -> f64 {
     let days = (now - last_active).num_seconds().max(0) as f64 / 86_400.0;
     0.5f64.powf(days / 30.0)
@@ -112,7 +139,7 @@ pub fn similarity(
     let relevance = if viewer_weights.is_empty() {
         cosine(&candidate.tags, viewer_tags)
     } else {
-        tag_relevance(&candidate.tags, viewer_weights)
+        relevance(candidate, viewer_weights)
     };
     0.40 * relevance
         + 0.25 * cosine(&candidate.tags, owner_tags)
@@ -142,7 +169,7 @@ pub fn rank_top(members: Vec<MemberStat>, weights: &[(String, f64)]) -> Vec<Memb
         .into_iter()
         .map(|m| {
             let clicks = m.clicks as f64 / max_clicks;
-            let rel = tag_relevance(&m.tags, weights);
+            let rel = relevance(&m, weights);
             (0.6 * clicks + 0.4 * rel, m)
         })
         .collect();
@@ -177,7 +204,7 @@ pub fn rank_trending(
                     0.0
                 };
                 let boost = 0.1 * (1.0 + 0.15 / ((age_days(m.created_at, now) + 2.0).log2()));
-                0.3 * tag_relevance(&m.tags, weights) + velocity + boost + 0.1 * trust_mult(m.trust_level)
+                0.3 * relevance(&m, weights) + velocity + boost + 0.1 * trust_mult(m.trust_level)
             };
             (s, m)
         })
@@ -202,7 +229,7 @@ pub fn rank_new(
         .into_iter()
         .map(|m| {
             let rec = 0.5f64.powf(age_days(m.created_at, now) / 14.0);
-            (0.7 * rec + 0.3 * tag_relevance(&m.tags, weights), m)
+            (0.7 * rec + 0.3 * relevance(&m, weights), m)
         })
         .collect();
     scored.sort_by(|a, b| {
@@ -265,7 +292,7 @@ pub fn ring_next<'a>(
         .filter(|m| m.id != current)
         .map(|m| {
             let novelty = if visited.contains(&m.id) { 0.0 } else { 1.0 };
-            let score = 0.6 * tag_relevance(&m.tags, weights)
+            let score = 0.6 * relevance(m, weights)
                 + 0.3 * cosine(&m.tags, &anchor.tags)
                 + 0.1 * novelty;
             (score, m)
@@ -412,7 +439,8 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 1, 31, 0, 0, 0).unwrap();
         let thirty = now - Duration::days(30);
         assert!((recency(thirty, now) - 0.5).abs() < 1e-6);
-    
+    }
+
     #[test]
     fn relevance_is_a_weighted_share_and_zero_without_weights() {
         let tags = vec!["chiptune".to_string(), "godot".to_string()];
@@ -434,26 +462,37 @@ mod tests {
 
     #[test]
     fn the_tuner_lifts_a_matching_member_above_a_busier_one() {
-        let mut a = member("quiet-chiptune", 1, 40, 2, &["chiptune"]);
-        a.clicks = 1;
-        let mut b = member("busy-podcast", 1, 40, 2, &["podcast"]);
+        // Clicks are 60% of the score, so the lens wins only where the attention gap is close —
+        // which is the honest claim. A member with a tenth of the clicks is still tenth.
+        let mut a = member("matching", 1, 40, 2, &["chiptune"]);
+        a.clicks = 70;
+        let mut b = member("busier", 1, 40, 2, &["podcast"]);
         b.clicks = 100;
         let weights = vec![("chiptune".to_string(), 1.0)];
 
         let plain = rank_top(vec![a.clone(), b.clone()], &[]);
-        assert_eq!(plain[0].handle, "busy-podcast", "clicks decide without a lens");
+        assert_eq!(plain[0].handle, "busier", "clicks decide without a lens");
 
-        let tuned = rank_top(vec![a, b], &weights);
-        assert_eq!(tuned[0].handle, "quiet-chiptune", "the lens decides with one");
+        let tuned = rank_top(vec![a.clone(), b.clone()], &weights);
+        assert_eq!(tuned[0].handle, "matching", "a full weight on a held tag flips a narrow lead");
+
+        // ...and it cannot flip a wide one.
+        let mut far = member("quiet", 1, 40, 2, &["chiptune"]);
+        far.clicks = 1;
+        let mut loud = member("loud", 1, 40, 2, &["podcast"]);
+        loud.clicks = 100;
+        let tuned = rank_top(vec![far, loud], &weights);
+        assert_eq!(tuned[0].handle, "loud", "relevance is 40%, not a veto");
     }
 
     #[test]
     fn no_weights_reproduces_the_old_ordering_exactly() {
-        let mut a = member("a", 10, 5, 2, &["x"]);
+        // visitors, then clicks, then the older account: `c` is older than `a`, both have 5 clicks.
+        let mut a = member("a", 10, 1, 2, &["x"]);
         a.clicks = 5;
         let mut b = member("b", 10, 5, 2, &["x"]);
         b.clicks = 90;
-        let mut c = member("c", 10, 5, 2, &["x"]);
+        let mut c = member("c", 10, 9, 2, &["x"]);
         c.clicks = 5;
         let order = rank_top(vec![a, b, c], &[]);
         assert_eq!(
@@ -461,6 +500,22 @@ mod tests {
             vec!["b", "c", "a"],
             "clicks first, then the older account, as before"
         );
+    }
+
+    #[test]
+    fn a_vertical_weight_matches_members_of_that_vertical() {
+        // A passive signal from browsing /v/music is stored as `v:music`, and a member's tags never
+        // contain that string - so matching only tags made every vertical visit influence nothing.
+        let mut dev = member("dever", 0, 5, 2, &["rust"]);
+        dev.verticals = vec!["dev".into()];
+        let mut muso = member("muso", 0, 5, 2, &["chiptune"]);
+        muso.verticals = vec!["music".into()];
+        let weights = vec![("v:music".to_string(), 1.0)];
+
+        assert_eq!(relevance(&dev, &weights), 0.0);
+        assert_eq!(relevance(&muso, &weights), 1.0);
+        let order = rank_top(vec![dev, muso], &weights);
+        assert_eq!(order[0].handle, "muso");
     }
 
     #[test]
@@ -482,5 +537,4 @@ mod tests {
         .expect("a personalised step");
         assert_eq!(next.handle, "chiptune-person");
     }
-}
 }

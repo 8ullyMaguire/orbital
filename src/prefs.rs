@@ -27,7 +27,11 @@ pub fn visitor_hash(raw: &str) -> String {
 
 /// One slider row in the tuner.
 pub struct TunerRow {
+    /// The key that is stored (`chiptune`, or `v:music` for a whole vertical).
     pub tag: String,
+    /// What the visitor reads. A passive vertical weight is "in music", not "#v:music" — the
+    /// stored key is an implementation detail and looking at it is how this shipped as a bug.
+    pub label: String,
     /// 0..10, what the slider shows; the stored weight is this divided by ten.
     pub weight: i64,
 }
@@ -47,6 +51,10 @@ impl TunerView {
             .iter()
             .take(8)
             .map(|(tag, w)| TunerRow {
+                label: match tag.strip_prefix("v:") {
+                    Some(slug) => format!("in {slug}"),
+                    None => format!("#{tag}"),
+                },
                 tag: tag.clone(),
                 weight: (w * 10.0).round().clamp(0.0, 10.0) as i64,
             })

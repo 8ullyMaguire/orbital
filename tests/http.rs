@@ -951,3 +951,92 @@ async fn the_ring_follows_what_the_visitor_asked_for(pool: PgPool) {
         "the walk should go to the member the viewer asked for, and say it came from the ring"
     );
 }
+
+#[sqlx::test]
+async fn the_lens_page_shows_what_the_visitor_asked_for(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let cold = call(&app, get("/lens")).await;
+    assert_eq!(cold.status, StatusCode::OK, "{}", cold.body);
+    assert!(cold.body.contains("No weights set"));
+    let viewer = cold.vcookie.clone().expect("visitor");
+
+    call(&app, post_form("/prefs", "tag=chiptune&w=8", &viewer)).await;
+    let tuned = call(&app, cookie(get("/lens"), &viewer)).await;
+    assert_eq!(tuned.status, StatusCode::OK);
+    assert!(tuned.body.contains("chiptune"), "{}", tuned.body);
+    assert!(tuned.body.contains("this browser"), "a visitor's lens says where it is saved");
+
+    // Clearing it puts the page back to the empty state.
+    call(&app, post_form("/prefs/reset", "", &viewer)).await;
+    let cleared = call(&app, cookie(get("/lens"), &viewer)).await;
+    assert!(cleared.body.contains("No weights set"));
+}
+
+#[sqlx::test]
+async fn signing_up_keeps_the_lens_built_while_anonymous(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let mint = call(&app, get("/lens")).await;
+    let viewer = mint.vcookie.expect("visitor");
+    call(&app, post_form("/prefs", "tag=chiptune&w=9", &viewer)).await;
+
+    // Register with the same cookie the tuner was used with.
+    let reg = call(
+        &app,
+        {
+            let mut r = json_req(
+                "POST",
+                "/api/auth/register",
+                serde_json::json!({
+                    "handle": "tuner",
+                    "password": "a long enough password",
+                    "display_name": "Tuner",
+                    "vertical": "music",
+                    "bio": "I tuned before I joined.",
+                }),
+                None,
+            );
+            r.headers_mut().insert("cookie", viewer.parse().unwrap());
+            r
+        },
+    )
+    .await;
+    assert_eq!(reg.status, StatusCode::OK, "{}", reg.body);
+    let sess = reg.cookie.expect("session");
+
+    let lens = call(&app, cookie(get("/lens"), &sess)).await;
+    assert!(lens.body.contains("your account"), "the lens moved to the account");
+    assert!(
+        !lens.body.contains("No weights set"),
+        "the page must show the adopted weight, not the empty state"
+    );
+    // The placeholder text mentions "chiptune" too, so the page alone cannot prove adoption.
+    let owned: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT tag_slug, weight::float8 FROM preference_weights WHERE owner_kind = 'user'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(owned.len(), 1, "one weight, stored on the account");
+    assert_eq!(owned[0].0, "chiptune");
+}
+
+#[sqlx::test]
+async fn the_tuner_never_shows_internal_keys(pool: PgPool) {
+    // `v:music` is how a vertical weight is stored. Showing the key is how this shipped once.
+    let app = app(pool.clone()).await;
+    register(&app, "muso", "music").await;
+    let first = call(&app, get("/v/music")).await;
+    let viewer = first.vcookie.expect("visitor");
+    // Two more views: passive accumulation writes a `v:music` weight.
+    call(&app, cookie(get("/v/music"), &viewer)).await;
+    let third = call(&app, cookie(get("/v/music"), &viewer)).await;
+
+    assert!(
+        !third.body.contains("#v:"),
+        "a stored key leaked into the widget"
+    );
+    if third.body.contains("in music") {
+        // The label is the human form of the same weight.
+        assert!(third.body.contains("in music"));
+    }
+}

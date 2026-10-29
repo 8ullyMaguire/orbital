@@ -23,6 +23,12 @@ enum Cmd {
         #[arg(long, default_value_t = 500)]
         limit: i64,
     },
+    /// Forget anonymous visitors (and their lenses) who have not been seen in a while.
+    Prune {
+        /// Days of silence before a visitor is forgotten.
+        #[arg(long, default_value_t = 180)]
+        days: i64,
+    },
     /// Bluesky bot and housekeeping.
     Bot {
         #[command(subcommand)]
@@ -59,6 +65,11 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = Config::from_env()?;
     match Cli::parse().cmd {
+        Cmd::Prune { days } => {
+            let pool = db::connect(&cfg).await?;
+            let (visitors, weights) = orbital::store::prune_visitors(&pool, days).await?;
+            println!("pruned {visitors} visitor profiles and {weights} preference rows");
+        }
         Cmd::CheckLinks { limit } => {
             let pool = db::connect(&cfg).await?;
             let (checked, failing, skipped) = orbital::health::run(&pool, limit).await?;

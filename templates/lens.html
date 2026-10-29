@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Your lens — {{ layout.site_name }}{% endblock %}
+{% block description %}The discovery weights you set, saved to {{ scope }}.{% endblock %}
+{% block canonical %}{{ layout.base }}/lens{% endblock %}
+{% block robots %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="wrap vhead" style="--accent:#7c9cff">
+  <a class="crumb" href="/">← All verticals</a>
+  <h1>Your lens</h1>
+  <p class="muted">What you asked to see more of. Saved to {{ scope }}{% if rows.len() == 0 %} — nothing yet{% endif %}.</p>
+</section>
+
+<div class="wrap">
+  {% if rows.len() == 0 %}
+    <div class="empty">
+      <h3>No weights set</h3>
+      <p class="muted">Until you set one, every list is in the same order for everybody. Add a tag below or use the sliders on the directory.</p>
+      {% if pages_seen > 0 %}
+      <p class="sm muted">You have read {{ pages_seen }} page{% if pages_seen == 1 %}{% else %}s{% endif %}. Passive preferences start shaping the order after {{ warmup }}.</p>
+      {% endif %}
+    </div>
+  {% else %}
+  <form method="post" action="/prefs" class="card">
+    <div class="card-h"><h2>{{ rows.len() }} weight{% if rows.len() == 1 %}{% else %}s{% endif %}</h2></div>
+    <table>
+      <thead><tr><th>What</th><th>Strength</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.1 }}</td>
+          <td style="width:60%">
+            <input type="hidden" name="tag" value="{{ r.0 }}">
+            <input type="range" min="0" max="10" step="1" value="{{ r.2 }}" name="w"
+                   aria-label="{{ r.1 }} weight" style="width:100%">
+          </td>
+          <td class="num dim">{{ r.2 }}/10</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="tuner-actions" style="padding:0 0 4px">
+      <button class="btn btn-sm" type="submit">Save</button>
+      <button class="btn btn-sm btn-ghost" type="submit" formaction="/prefs/reset">Clear all</button>
+    </div>
+    <p class="muted xs">A weight of 0 removes that tag. Strength is relative: ten tags at 5 are not the same lens as one tag at 10.</p>
+  </form>
+  {% endif %}
+
+  <form method="post" action="/prefs" class="card" style="margin-top:14px">
+    <div class="card-h"><h2>Add a tag or a category</h2></div>
+    <p class="muted sm">A tag (like <code>chiptune</code>) matches members who carry it. A category (like <code>music</code>) matches everyone in it.</p>
+    <div class="tuner-row tuner-new" style="margin-top:10px">
+      <input type="text" name="new_tag" list="lens-tags" placeholder="chiptune, or v:music" maxlength="40" aria-label="A tag or category to discover">
+      <input type="range" min="0" max="10" step="1" value="5" name="new_w" aria-label="Strength for the new tag">
+    </div>
+    <datalist id="lens-tags">
+      {% for s in suggestions %}<option value="{{ s }}">{% endfor %}
+      {% for v in verticals %}<option value="v:{{ v.slug }}">{% endfor %}
+    </datalist>
+    <div class="tuner-actions">
+      <button class="btn btn-sm" type="submit">Add</button>
+      <a class="btn btn-sm btn-ghost" href="/">Back to the directory</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

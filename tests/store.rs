@@ -138,3 +138,76 @@ async fn preference_weights_round_trip_through_the_store(pool: PgPool) {
     assert!((map["jazz"] - 0.2).abs() < 1e-6);
     assert_eq!(weights[0].0, "chiptune", "strongest first");
 }
+
+#[sqlx::test]
+async fn a_visitors_lens_survives_signing_up(pool: PgPool) {
+    // The tuner is the front door for people without accounts; if the weights vanish at signup, the
+    // funnel taught them that tuning was pointless.
+    let visitor = orbital::prefs::visitor_hash("cookie-abc");
+    orbital::store::set_explicit_prefs(
+        &pool,
+        "visitor",
+        &visitor,
+        &[("chiptune".to_string(), 0.9)],
+    )
+    .await
+    .unwrap();
+    let user = orbital::store::create_user(
+        &pool,
+        orbital::store::NewUser {
+            handle: "tuned",
+            display_name: "Tuned",
+            bio: "",
+            accent: "#000000",
+            password_hash: "x",
+            nsfw_enabled: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    orbital::store::adopt_visitor_prefs(&pool, &visitor, user.id)
+        .await
+        .unwrap();
+
+    let mine = orbital::store::prefs(&pool, "user", &user.id.to_string())
+        .await
+        .unwrap();
+    assert_eq!(mine.len(), 1);
+    assert_eq!(mine[0].0, "chiptune");
+    assert!((mine[0].1 - 0.9).abs() < 1e-6);
+
+    let theirs = orbital::store::prefs(&pool, "visitor", &visitor).await.unwrap();
+    assert!(theirs.is_empty(), "the anonymous rows are gone, not duplicated");
+}
+
+#[sqlx::test]
+async fn pruning_forgets_only_visitors_nobody_has_seen(pool: PgPool) {
+    sqlx::query("INSERT INTO visitor_profiles (visitor_hash, pages_visited, last_seen_at) VALUES ('old', 3, now() - interval '400 days')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO visitor_profiles (visitor_hash, pages_visited) VALUES ('fresh', 3)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for who in ["old", "fresh"] {
+        orbital::store::set_explicit_prefs(&pool, "visitor", who, &[("chiptune".to_string(), 0.5)])
+            .await
+            .unwrap();
+    }
+
+    let (visitors, weights) = orbital::store::prune_visitors(&pool, 180).await.unwrap();
+    assert_eq!(visitors, 1);
+    assert_eq!(weights, 1);
+
+    let left: Vec<(String,)> = sqlx::query_as("SELECT visitor_hash FROM visitor_profiles")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, vec![("fresh".to_string(),)]);
+    assert_eq!(
+        orbital::store::prefs(&pool, "visitor", "fresh").await.unwrap().len(),
+        1
+    );
+}

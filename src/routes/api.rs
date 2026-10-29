@@ -75,6 +75,7 @@ fn user_json(u: &crate::models::User) -> Value {
 
 pub async fn register(
     State(st): State<AppState>,
+    crate::auth::VisitorId(vid): crate::auth::VisitorId,
     Json(input): Json<RegisterInput>,
 ) -> ApiResult<Response> {
     let handle = normalise_handle(&input.handle)?;
@@ -101,6 +102,12 @@ pub async fn register(
     )
     .await?;
     store::set_verticals(&st.pool, user.id, &vertical_slug, &[]).await?;
+    // The lens the visitor built anonymously is the most useful thing they have told us; throwing
+    // it away at the exact moment they get an account would make the tuner a demo.
+    if let Err(e) = store::adopt_visitor_prefs(&st.pool, &crate::prefs::visitor_hash(&vid), user.id).await
+    {
+        tracing::warn!(error = %e, "visitor preferences not adopted");
+    }
     let token = new_token();
     store::create_session(&st.pool, user.id, &token, 30).await?;
     store::touch_login(&st.pool, user.id).await?;

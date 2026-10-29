@@ -200,6 +200,22 @@ pub struct HomeTemplate {
     pub tuner: crate::prefs::TunerView,
 }
 
+// ------------------------------------------------------------------ lens
+
+#[derive(Template, WebTemplate)]
+#[template(path = "lens.html")]
+pub struct LensTemplate {
+    pub layout: Layout,
+    pub verticals: Vec<crate::models::VerticalRow>,
+    /// (stored key, human label, 0..10)
+    pub rows: Vec<(String, String, i64)>,
+    pub suggestions: Vec<String>,
+    /// "your account" or "this browser"
+    pub scope: String,
+    pub pages_seen: i64,
+    pub warmup: i64,
+}
+
 // ------------------------------------------------------------------ vertical
 
 pub struct VerticalHead {

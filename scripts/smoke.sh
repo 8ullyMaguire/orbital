@@ -23,28 +23,37 @@ for p in / /about /v/dev /search /feed.json /feed.xml /sitemap.xml /robots.txt /
 done
 
 # ---- the tuner (SPEC v3)
+# Over HTTP the visitor cookie is discarded (production sets `Secure`, and curl will not store a
+# Secure cookie from a plain-http response), so every request would be a new visitor and a check
+# here would pass without testing anything. That is why this section talks to $PUBLIC.
+PUBLIC="${PUBLIC:-https://orbital.polarisocial.xyz}"
 body "$BASE/" | grep -q 'What do you want to discover?' \
   && pass "the tuner is on the directory" || fail "tuner" "widget missing from /"
 
 body "$BASE/v/dev" | grep -q 'action="/prefs"' \
   && pass "the tuner posts a form (works without JavaScript)" || fail "tuner form" "no /prefs action"
 
-# A weight applied to a throwaway visitor must not change anybody else's page. The cookie jar is
-# this script's own, so the check cannot contaminate a real one.
-cj="$JAR.tuner"
-curl -s -c "$cj" "$BASE/" >/dev/null
-before=$(curl -s -b "$cj" "$BASE/v/dev" | grep -o '/@[a-z0-9_-]*' | head -1)
-c=$(curl -s -o /dev/null -w '%{http_code}' -b "$cj" -X POST \
-      -H "Content-Type: application/x-www-form-urlencoded" \
-      -H "Referer: $BASE/v/dev" --data 'tag=rust&w=10' "$BASE/prefs")
-if [ "$c" = "303" ] || [ "$c" = "302" ]; then
-  pass "POST /prefs accepts a weight"
+if [ "$(curl -s -o /dev/null -w '%{http_code}' "$PUBLIC/healthz" 2>/dev/null)" = "200" ]; then
+  cj="$JAR.tuner"
+  curl -s -c "$cj" "$PUBLIC/" >/dev/null
+  c=$(curl -s -o /dev/null -w '%{http_code}' -b "$cj" -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --data 'tag=chiptune&w=10' "$PUBLIC/prefs")
+  if [ "$c" = "303" ] || [ "$c" = "302" ]; then
+    pass "POST /prefs accepts a weight"
+  else
+    fail "prefs post" "status $c"
+  fi
+  # The weight must come back: a 303 alone only proves the form parsed.
+  if curl -s -b "$cj" "$PUBLIC/lens" | grep -q 'chiptune'; then
+    pass "the weight persists and is readable at /lens"
+  else
+    fail "prefs persist" "the lens page does not show the weight"
+  fi
+  curl -s -b "$cj" -X POST "$PUBLIC/prefs/reset" >/dev/null
 else
-  fail "prefs post" "status $c"
+  printf 'SKIP  the tuner persistence check (%s unreachable from here)\n' "$PUBLIC"
 fi
-after=$(curl -s -b "$cj" "$BASE/v/dev" | grep -o '/@[a-z0-9_-]*' | head -1)
-[ -n "$before" ] && pass "directory still ranks for the tuned visitor ($before -> ${after:-none})" \
-  || fail "tuned directory" "empty"
 
 c=$(code "$BASE/@criticalnexus")
 [ "$c" = 200 ] && pass "profile renders" || fail "profile" "status $c"
