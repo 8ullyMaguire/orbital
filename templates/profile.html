@@ -34,9 +34,9 @@
     {% if p.links.len() > 0 %}
     <div class="links">
       {% for l in p.links %}
-      <a class="linkbtn" href="{{ l.href }}" rel="noopener nofollow" target="_blank" data-link="{{ l.id }}">
+      <a class="linkbtn{% if l.dead %} linkbtn-dead{% endif %}" href="{{ l.href }}" rel="noopener nofollow" target="_blank" data-link="{{ l.id }}"{% if l.dead %} title="{{ l.dead_hint }}"{% endif %}>
         <span class="lb-i">{{ l.icon|safe }}</span>
-        <span class="lb-t"><b>{{ l.label }}</b><small>{{ l.host }}</small></span>
+        <span class="lb-t"><b>{{ l.label }}</b><small>{{ l.host }}</small>{% if l.dead %}<em class="lb-dead">{{ l.dead_hint }}</em>{% endif %}</span>
         {% if l.clicks > 0 %}<span class="lb-c" title="{{ l.clicks }} clicks">{{ l.clicks_label }}</span>{% endif %}
         <span class="lb-arrow" aria-hidden="true">↗</span>
       </a>

@@ -3,6 +3,7 @@ pub mod bot;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod health;
 pub mod html;
 pub mod models;
 pub mod ranking;

@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/about", get(about))
         .route("/v/{slug}", get(vertical))
         .route("/v/{slug}/embed", get(embed))
+        .route("/v/{slug}/next", get(vertical_next))
         .route("/v/{slug}/feed.json", get(vertical_feed))
         .route("/@{handle}", get(profile))
         .route("/u/{handle}", get(profile_redirect))
@@ -640,6 +641,56 @@ pub async fn search(
         tags: tag_rows,
         quick,
     })
+}
+
+// ------------------------------------------------------------------ ring
+
+#[derive(Deserialize)]
+pub struct NextQuery {
+    /// Where the walk started. The ring order is the same one the profile page uses, so entering
+    /// from a category page and entering from a profile walk the same circle.
+    #[serde(default)]
+    pub from: Option<String>,
+}
+
+/// `/v/{slug}/next` — the addressable form of the webring. A profile's ring only exists while you
+/// are on a profile; this makes the walk something you can link to, share, or crawl, and gives the
+/// members ranked 40+ a route to a visitor that does not depend on being near the top.
+pub(crate) async fn vertical_next(
+    State(st): State<AppState>,
+    Path(slug): Path<String>,
+    Query(q): Query<NextQuery>,
+) -> PageResult<Response> {
+    let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
+        return Err(PageError(AppError::NotFound));
+    };
+    let mut members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
+        .await?
+        .into_iter()
+        .filter(|m| visible(m))
+        .collect();
+    if members.is_empty() {
+        return Err(PageError(AppError::NotFound));
+    }
+    let hub_tags = match store::owner_id(&st.pool).await? {
+        Some(id) => store::tags_of(&st.pool, id).await?,
+        None => Vec::new(),
+    };
+    let day = chrono::Utc::now().timestamp() / 86_400;
+    members.sort_by(|a, b| a.handle.cmp(&b.handle));
+    let order = crate::ranking::ring(&members, &hub_tags, &[v.slug.clone()], day);
+
+    let from = q
+        .from
+        .as_deref()
+        .map(|h| h.trim().trim_start_matches('@').to_ascii_lowercase());
+    let pos = from.and_then(|f| order.iter().position(|m| m.handle.eq_ignore_ascii_case(&f)));
+    // No `from`, or a handle that left the vertical: start at the top of the ring rather than 404.
+    let next = match pos {
+        Some(i) => order[(i + 1) % order.len()],
+        None => order[0],
+    };
+    Ok(Redirect::to(&format!("/@{}", next.handle)).into_response())
 }
 
 // ------------------------------------------------------------------ embeds

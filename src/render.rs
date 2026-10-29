@@ -257,6 +257,11 @@ pub struct LinkCard {
     pub icon: String,
     pub clicks: i64,
     pub clicks_label: String,
+    /// Three consecutive failed checks. The card says so instead of sending a visitor to a dead
+    /// site and letting them find out.
+    pub dead: bool,
+    /// A short line under the card when the link is unreachable, e.g. "no answer (3 checks)".
+    pub dead_hint: String,
 }
 
 pub struct Ring {
@@ -378,6 +383,12 @@ pub fn link_card(base: &str, link: &LinkRow, surface: &str, ctx: Option<&str>, p
         icon: icon_svg(&link.icon),
         clicks: link.click_count,
         clicks_label: fmt_count(link.click_count),
+        dead: link.fail_count >= crate::health::FAIL_THRESHOLD,
+        dead_hint: match link.last_status {
+            Some(code) if code > 0 => format!("HTTP {code} on the last {} checks", link.fail_count),
+            _ if link.fail_count > 0 => "no answer on the last checks".to_string(),
+            _ => String::new(),
+        },
     }
 }
 

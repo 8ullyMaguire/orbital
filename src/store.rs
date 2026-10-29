@@ -23,12 +23,12 @@ const USER_COLS_U: &str = "u.id, u.handle, u.display_name, u.bio, u.accent, u.av
      u.is_owner, u.hidden, u.created_at, u.last_active_at";
 
 const LINK_COLS: &str = "id, user_id, vertical_slug, url, label, icon, position, click_count, \
-     hidden, created_at";
+     hidden, created_at, last_status, last_checked, fail_count";
 
 /// Same list, qualified: `links_for` joins `verticals`, which also has `label`
 /// and `icon` columns, so an unqualified list is an ambiguous-reference error.
 const LINK_COLS_L: &str = "l.id, l.user_id, l.vertical_slug, l.url, l.label, l.icon, \
-     l.position, l.click_count, l.hidden, l.created_at";
+     l.position, l.click_count, l.hidden, l.created_at, l.last_status, l.last_checked, l.fail_count";
 
 const VERTICAL_COLS: &str = "slug, label, description, icon, nsfw, sort, min_members";
 
@@ -580,11 +580,12 @@ pub async fn record_click(
     ctx: Option<&str>,
     position: Option<i32>,
     session_hash: &str,
+    referrer_host: Option<&str>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     sqlx::query(
-        "INSERT INTO source_hits (user_id, link_id, surface, vertical_context, position, session_hash)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO source_hits (user_id, link_id, surface, vertical_context, position, session_hash, referrer_host)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(user_id)
     .bind(link_id)
@@ -592,6 +593,7 @@ pub async fn record_click(
     .bind(ctx)
     .bind(position)
     .bind(session_hash)
+    .bind(referrer_host)
     .execute(&mut *tx)
     .await?;
     if let Some(link_id) = link_id {
@@ -1034,4 +1036,66 @@ pub async fn member_count(pool: &PgPool, include_nsfw: bool) -> Result<i64, AppE
     .fetch_one(pool)
     .await?;
     Ok(row.get::<i64, _>("n"))
+}
+
+/// Links the checker has not looked at most recently. Oldest-checked first, so a run that is
+/// interrupted still makes progress across the directory instead of re-checking the first page.
+pub async fn links_to_check(pool: &PgPool, limit: i64) -> Result<Vec<(Uuid, String)>, AppError> {
+    Ok(sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, url FROM links
+          WHERE hidden = false
+          ORDER BY last_checked NULLS FIRST, position, created_at
+          LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Record one check. A success resets the counter, so a site that comes back stops being marked
+/// without anyone touching the row.
+pub async fn record_link_health(
+    pool: &PgPool,
+    link_id: Uuid,
+    status: Option<i32>,
+    ok: bool,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE links
+            SET last_status = $2,
+                last_checked = now(),
+                fail_count = CASE WHEN $3 THEN 0 ELSE fail_count + 1 END
+          WHERE id = $1",
+    )
+    .bind(link_id)
+    .bind(status)
+    .bind(ok)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Which networks send the clicks. `direct` is the null bucket: a visitor who pasted the URL or
+/// arrived from an app that strips Referer.
+pub async fn referrer_breakdown(
+    pool: &PgPool,
+    user_id: Uuid,
+    days: i32,
+) -> Result<Vec<Bucket>, AppError> {
+    Ok(sqlx::query_as::<_, Bucket>(
+        "SELECT coalesce(referrer_host, 'direct') AS key,
+                count(*)::bigint AS clicks,
+                count(DISTINCT session_hash)::bigint AS visitors
+           FROM source_hits
+          WHERE user_id = $1
+            AND created_at > now() - ($2::int * interval '1 day')
+            AND surface <> 'voided'
+          GROUP BY 1
+          ORDER BY clicks DESC
+          LIMIT 12",
+    )
+    .bind(user_id)
+    .bind(days)
+    .fetch_all(pool)
+    .await?)
 }

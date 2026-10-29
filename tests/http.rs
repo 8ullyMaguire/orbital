@@ -34,6 +34,9 @@ struct Res {
     body: String,
     cookie: Option<String>,
     robots: Option<String>,
+    /// Where a redirect points. A webring is a promise about where the next click goes, so the
+    /// test has to read the header rather than the (empty) body.
+    location: Option<String>,
 }
 
 impl Res {
@@ -52,6 +55,11 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         .filter_map(|v| v.to_str().ok())
         .find(|c| c.starts_with("orbital_s="))
         .map(|c| c.split(';').next().unwrap_or("").to_string());
+    let location = res
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string());
     let robots = res
         .headers()
         .get("x-robots-tag")
@@ -63,6 +71,7 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         body: String::from_utf8_lossy(&bytes).to_string(),
         cookie,
         robots,
+        location,
     }
 }
 
@@ -464,4 +473,86 @@ async fn the_router_registers_every_handlers_path(pool: PgPool) {
     let verticals = res.json()["verticals"].as_array().unwrap().len();
     assert_eq!(verticals, 9, "nine SFW starter verticals, got {verticals}");
     let _ = routes::public::router;
+}
+
+#[sqlx::test]
+async fn a_click_remembers_which_network_sent_it(pool: PgPool) {
+    // The dashboard could say which of our pages earned a click and nothing about where the
+    // visitor came from, so "did Bluesky or Mastodon work" was unanswerable.
+    let app = app(pool).await;
+    let sess = register(&app, "networker", "dev").await.cookie.unwrap();
+    let created = call(
+        &app,
+        json_req(
+            "POST",
+            "/api/links",
+            serde_json::json!({"url": "https://example.org/from-bsky"}),
+            Some(&sess),
+        ),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let id = created.json()["link"]["id"].as_str().unwrap().to_string();
+
+    // A click that arrives from a timeline: the href is ours, the referrer is theirs.
+    let mut req = get(&format!("/l/{id}?s=profile"));
+    req.headers_mut()
+        .insert("referer", "https://bsky.app/profile/criticalnexus.bsky.social/post/3k".parse().unwrap());
+    let click = call(&app, req).await;
+    assert!(click.status.is_redirection(), "{}", click.status);
+
+    // A click from one of our own pages is not an attribution: it must not appear as a network.
+    let mut internal = get(&format!("/l/{id}?s=vertical"));
+    internal.headers_mut()
+        .insert("referer", "https://orbital.polarisocial.xyz/v/dev".parse().unwrap());
+    call(&app, internal).await;
+
+    let an = call(&app, cookie(get("/api/analytics?days=7"), &sess)).await;
+    assert_eq!(an.status, StatusCode::OK, "{}", an.body);
+    let refs = an.json()["by_referrer"].as_array().cloned().unwrap_or_default();
+    let keys: Vec<String> = refs.iter().filter_map(|r| r["key"].as_str().map(String::from)).collect();
+    assert!(keys.contains(&"bsky.app".to_string()), "by_referrer = {keys:?}");
+    assert!(
+        !keys.iter().any(|k| k.ends_with("polarisocial.xyz")),
+        "an internal navigation must not count as a network: {keys:?}"
+    );
+}
+
+#[sqlx::test]
+async fn the_vertical_ring_is_walkable_by_url(pool: PgPool) {
+    // The profile page has had prev/next for a while, but only while you are on a profile. The
+    // addressable form is what makes the ring linkable - and what gives the members ranked 40+ a
+    // route to a visitor that does not depend on being near the top of a leaderboard.
+    let app = app(pool).await;
+    for h in ["alpha", "bravo", "charlie"] {
+        register(&app, h, "dev").await;
+    }
+
+    let first = call(&app, get("/v/dev/next")).await;
+    assert!(first.status.is_redirection(), "{}", first.status);
+    let location = first.location.clone().unwrap_or_default();
+    assert!(
+        location.starts_with("/@"),
+        "must redirect to a profile, got {location:?}"
+    );
+
+    // Walking from any member lands on a different member, and the walk wraps.
+    let from_alpha = call(&app, get("/v/dev/next?from=alpha")).await;
+    let from_bravo = call(&app, get("/v/dev/next?from=bravo")).await;
+    assert!(from_alpha.status.is_redirection() && from_bravo.status.is_redirection());
+    assert_ne!(
+        from_alpha.location, from_bravo.location,
+        "walking from two different members must not land on the same profile"
+    );
+    assert_ne!(
+        from_alpha.location.as_deref(),
+        Some("/@alpha"),
+        "the ring must move: a next that returns you to yourself is not a walk"
+    );
+
+    let unknown = call(&app, get("/v/dev/next?from=nobody")).await;
+    assert!(unknown.status.is_redirection(), "an unknown `from` starts at the top");
+
+    let missing = call(&app, get("/v/nope/next")).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND, "no such vertical is a 404");
 }

@@ -33,6 +33,14 @@ pub struct LinkRow {
     pub click_count: i64,
     pub hidden: bool,
     pub created_at: DateTime<Utc>,
+    /// Last HTTP status a checker saw, if it ever saw one. NULL means "never checked", which is
+    /// a different thing from "checked and unreachable".
+    pub last_status: Option<i32>,
+    /// When the checker last looked. NULL means never.
+    pub last_checked: Option<DateTime<Utc>>,
+    /// Consecutive failures. The profile shows a badge at 3, and a success clears it, so no
+    /// moderator has to undo a transient outage.
+    pub fail_count: i32,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]

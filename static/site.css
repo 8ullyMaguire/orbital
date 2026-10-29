@@ -541,3 +541,10 @@ p { margin: 0 0 1em; }
   * { transition: none !important; animation: none !important; }
   html { scroll-behavior: auto; }
 }
+
+/* A link the checker could not reach three times running. Muted rather than hidden: a member may
+   still want the card to stand (the site may be back), but a visitor deserves to be told. */
+.linkbtn-dead { opacity: .72; }
+.linkbtn-dead .lb-t b { text-decoration: line-through dotted rgba(255,255,255,.35); }
+.lb-dead { display: block; font-size: 11px; font-style: normal; color: #ffb4a2; margin-top: 2px; }
+.ring-enter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0 6px; }

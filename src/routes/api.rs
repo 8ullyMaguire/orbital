@@ -508,6 +508,7 @@ pub async fn analytics(
     let days = q.days.unwrap_or(30).clamp(1, 180);
     let (series, top_links, by_surface, by_vertical, visitors, clicks) =
         store::analytics(&st.pool, user.id, days).await?;
+    let by_referrer = store::referrer_breakdown(&st.pool, user.id, days).await?;
     let views: i64 = series.iter().map(|d| d.views).sum();
     Ok(Json(json!({
         "days": days,
@@ -521,6 +522,9 @@ pub async fn analytics(
         "top_links": top_links,
         "by_surface": by_surface,
         "by_vertical": by_vertical,
+        // Which network sent the visitor. The surface says which of our pages earned the click;
+        // this says whether the announcement on Bluesky or the one on Mastodon actually worked.
+        "by_referrer": by_referrer,
     })))
 }
 

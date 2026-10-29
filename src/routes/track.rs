@@ -3,6 +3,7 @@
 //! than a number a dashboard guesses at.
 
 use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
@@ -38,11 +39,34 @@ fn clean_surface(s: Option<String>) -> String {
     }
 }
 
+/// Only the host of the referrer is kept. A full Referer URL is a person's browsing history
+/// attached to a click; the host is the part that answers "which network sent this", and it is
+/// still a coarse fact. Ourselves are dropped: an internal navigation is not an attribution.
+fn referrer_host(headers: &HeaderMap) -> Option<String> {
+    let raw = headers.get(axum::http::header::REFERER)?.to_str().ok()?;
+    let after_scheme = raw.split_once("://").map(|(_, rest)| rest).unwrap_or(raw);
+    let host_port = after_scheme.split('/').next().unwrap_or("");
+    let host = host_port.rsplit_once('@').map(|(_, h)| h).unwrap_or(host_port);
+    let host = host.split(':').next().unwrap_or("").to_ascii_lowercase();
+    if host.is_empty() || host.len() > 100 {
+        return None;
+    }
+    // An identifier, not a path: keep letters, digits, dots and hyphens only.
+    if !host
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return None;
+    }
+    Some(host)
+}
+
 pub async fn click(
     State(st): State<AppState>,
     VisitorId(vid): VisitorId,
     Path(id): Path<Uuid>,
     Query(q): Query<ClickQuery>,
+    headers: HeaderMap,
 ) -> PageResult<Response> {
     let Some(link) = store::link_by_id(&st.pool, id).await? else {
         return Err(PageError(AppError::NotFound));
@@ -73,6 +97,7 @@ pub async fn click(
         ctx.as_deref(),
         q.p,
         &hash,
+        referrer_host(&headers).as_deref().filter(|h| !h.ends_with("polarisocial.xyz")),
     )
     .await
     {

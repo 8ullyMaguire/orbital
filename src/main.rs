@@ -17,6 +17,12 @@ enum Cmd {
     Migrate,
     /// Create the starter verticals and the owner accounts (idempotent).
     Seed,
+    /// Check every outbound link and record which ones still answer.
+    CheckLinks {
+        /// How many links to walk. Oldest-checked first.
+        #[arg(long, default_value_t = 500)]
+        limit: i64,
+    },
     /// Bluesky bot and housekeeping.
     Bot {
         #[command(subcommand)]
@@ -53,6 +59,11 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = Config::from_env()?;
     match Cli::parse().cmd {
+        Cmd::CheckLinks { limit } => {
+            let pool = db::connect(&cfg).await?;
+            let (checked, failing, skipped) = orbital::health::run(&pool, limit).await?;
+            println!("checked {checked}, failing {failing}, skipped {skipped}");
+        }
         Cmd::Migrate => {
             let pool = db::connect(&cfg).await?;
             db::migrate(&pool).await?;
