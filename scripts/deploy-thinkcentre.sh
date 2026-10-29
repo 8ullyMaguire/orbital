@@ -131,9 +131,60 @@ RandomizedDelaySec=1800
 [Install]
 WantedBy=timers.target
 UNIT
+# Nightly dump, and a restore test that proves the dump is a backup rather than a file. The test
+# runs monthly, not nightly: it drops and recreates a scratch database, and that is not a thing to
+# do while somebody is using the machine.
+cat > "$HOME/.config/systemd/user/orbital-backup.service" <<'UNIT'
+[Unit]
+Description=Orbital — nightly database dump
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+ExecStart=/bin/bash -c 'mkdir -p %h/backups/orbital && pg_dump -Fc "$DATABASE_URL" > %h/backups/orbital/orbital-$(date +%%F).dump.part && mv %h/backups/orbital/orbital-$(date +%%F).dump.part %h/backups/orbital/orbital-$(date +%%F).dump && find %h/backups/orbital -name "*.dump" -mtime +14 -delete'
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-backup.timer" <<'UNIT'
+[Unit]
+Description=Nightly Orbital dump
+
+[Timer]
+OnCalendar=*-*-* 03:40:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-restore-test.service" <<'UNIT'
+[Unit]
+Description=Orbital — prove the newest dump restores (destroys and recreates a scratch database)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash %h/code/rust/orbital/scripts/restore-test.sh
+Nice=15
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-restore-test.timer" <<'UNIT'
+[Unit]
+Description=Monthly Orbital restore test
+
+[Timer]
+OnCalendar=*-*-01 04:10:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
 systemctl --user daemon-reload
-systemctl --user enable --now orbital-checklinks.timer
-echo "unit written; link checker timer enabled"
+systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer
+echo "units written; checklinks, backup and restore-test timers enabled"
 REMOTE
 
 say "5/7 nginx site"
