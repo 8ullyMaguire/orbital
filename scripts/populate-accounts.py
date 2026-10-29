@@ -62,6 +62,10 @@ class Client:
             raise SystemExit(f"login failed for {handle}: {status} {body}")
 
 
+# SFW only. Sites whose content is adult (whitebois, suki, stashdb, bnwo-feed,
+# streakforge, blackrep) are listed on the steel titan account instead — a link
+# to one of them from the SFW profile is the exact cross-pollination the
+# segregation exists to prevent.
 CRITICAL = {
     "handle": "criticalnexus",
     "password_key": "ORBITAL_CRITICALNEXUS_PASSWORD",
@@ -81,7 +85,7 @@ CRITICAL = {
         "secondary_verticals": ["indie-web", "writers"],
     },
     "links": [
-        ("https://blog.polarisocial.xyz", "The blog", "pen"),
+        ("https://news.polarisocial.xyz", "News — the feed reader", "rss"),
         ("https://darkhold.polarisocial.xyz", "Darkhold — fanfiction archive", "film"),
         ("https://kindred.polarisocial.xyz", "Kindred — fiction recommender", "link"),
         ("https://ascend.polarisocial.xyz", "Ascend — draw your powers", "gamepad"),
@@ -89,8 +93,6 @@ CRITICAL = {
         ("https://gravity.polarisocial.xyz", "Gravity — federated social", "rss"),
         ("https://radio.polarisocial.xyz", "Radio", "music"),
         ("https://leftist.polarisocial.xyz", "Leftist feeds", "rss"),
-        ("https://streakforge.polarisocial.xyz", "Streakforge", "gamepad"),
-        ("https://blackrep.polarisocial.xyz", "Blackrep — the board", "link"),
         ("https://git.polarisocial.xyz", "The source (Forgejo)", "code"),
         ("https://bsky.app/profile/criticalnexus.bsky.social", "Bluesky", "link"),
     ],
