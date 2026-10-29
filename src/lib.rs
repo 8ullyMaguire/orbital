@@ -62,7 +62,10 @@ pub async fn build_router(state: AppState) -> Router {
             state.clone(),
             nsfw_gate_middleware,
         ))
-        .layer(axum::middleware::from_fn(headers_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            headers_middleware,
+        ))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -127,14 +130,23 @@ async fn nsfw_gate_middleware(
 }
 
 /// Headers a page cannot forge and a segfault cannot skip.
-async fn headers_middleware(req: Request, next: Next) -> Response {
-    let host = req
+///
+/// The adult check reads the configured host, not a `nsfw.` prefix. The prefix
+/// version silently skipped every hostname that did not start with those five
+/// characters, so `noindex` was never sent on the adult surface while the pages
+/// looked gated — a crawler would have indexed the directory.
+async fn headers_middleware(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    let hostname = req
         .headers()
         .get(axum::http::header::HOST)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
-        .to_string();
-    let is_nsfw = host.starts_with("nsfw.");
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+    let is_nsfw =
+        hostname == state.cfg.nsfw_host.to_lowercase() || hostname == "nsfw.localhost";
     let mut res = next.run(req).await;
     let h = res.headers_mut();
     h.insert(

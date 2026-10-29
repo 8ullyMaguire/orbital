@@ -49,7 +49,10 @@ impl Config {
             database_url: String::new(),
             bind_addr: "127.0.0.1:0".into(),
             public_base: base.trim_end_matches('/').to_string(),
-            nsfw_host: "nsfw.test.local".into(),
+            // Deliberately NOT prefixed with `nsfw.`: the header middleware used to
+        // decide the surface with `host.starts_with("nsfw.")`, and a test host
+        // that began with `nsfw.` made that mistake invisible.
+        nsfw_host: "orbitalnsfw.test".into(),
             session_cookie: "orbital_s".into(),
             visitor_cookie: "orbital_v".into(),
             salt: "test-salt".into(),

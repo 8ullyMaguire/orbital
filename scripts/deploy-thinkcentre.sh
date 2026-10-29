@@ -20,6 +20,15 @@ APP_ENV="\$HOME/.config/systemd/user/orbital-app.env"
 
 say() { printf '\n== %s\n' "$*"; }
 
+say "0/7 make the host's tree match the remote — it builds from ITS checkout, not yours"
+ssh "$HOST" bash -s <<REMOTE
+set -euo pipefail
+cd $APP
+git fetch -q origin main
+git checkout -q -B main origin/main
+git log --oneline -1
+REMOTE
+
 say "1/7 build the dashboard bundle (it is embedded in the binary, so this comes first)"
 ssh "$HOST" bash -s <<REMOTE
 set -euo pipefail
@@ -116,7 +125,11 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        # The origin is only reachable through Cloudflare's tunnel, which
+        # speaks plain HTTP on the loopback hop. Forwarding \$scheme would tell
+        # the app "http" and it would then write http:// into canonicals and
+        # og:url for pages the visitor loaded over https.
+        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 30s;

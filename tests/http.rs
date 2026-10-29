@@ -33,6 +33,7 @@ struct Res {
     status: StatusCode,
     body: String,
     cookie: Option<String>,
+    robots: Option<String>,
 }
 
 impl Res {
@@ -51,11 +52,17 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         .filter_map(|v| v.to_str().ok())
         .find(|c| c.starts_with("orbital_s="))
         .map(|c| c.split(';').next().unwrap_or("").to_string());
+    let robots = res
+        .headers()
+        .get("x-robots-tag")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string());
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     Res {
         status,
         body: String::from_utf8_lossy(&bytes).to_string(),
         cookie,
+        robots,
     }
 }
 
@@ -255,22 +262,37 @@ async fn adult_members_never_render_on_the_sfw_host(pool: PgPool) {
     let sfw = call(&app, get("/@adult")).await;
     assert_eq!(sfw.status, StatusCode::NOT_FOUND, "adult profile visible on SFW host");
 
+    // A crawler obeys the header, not the meta tag, and it also governs
+    // non-HTML responses. This assertion is why the middleware reads the
+    // configured host instead of a `nsfw.` prefix.
+    let adult_root = call(
+        &app,
+        cookie(host(get("/"), "orbitalnsfw.test"), "orbital_age=1"),
+    )
+    .await;
+    assert_eq!(adult_root.status, StatusCode::OK);
+    let robots = adult_root.robots.unwrap_or_default();
+    assert!(
+        robots.contains("noindex"),
+        "the adult surface must send X-Robots-Tag: noindex, got {robots:?}"
+    );
+
     // The adult host redirects an unacknowledged visitor to the gate, and the
     // gate explains what it is before anything adult renders.
-    let gated = call(&app, host(get("/@adult"), "nsfw.test.local")).await;
+    let gated = call(&app, host(get("/@adult"), "orbitalnsfw.test")).await;
     assert!(
         gated.status.is_redirection(),
         "an unacknowledged adult request must go to the gate, got {}",
         gated.status
     );
-    let gate_page = call(&app, host(get("/gate?next=%2F%40adult"), "nsfw.test.local")).await;
+    let gate_page = call(&app, host(get("/gate?next=%2F%40adult"), "orbitalnsfw.test")).await;
     assert_eq!(gate_page.status, StatusCode::OK);
     assert!(gate_page.body.contains("18"), "the gate must explain itself");
 
     // A TL0 account is hidden from the adult directory entirely.
     let after = call(
         &app,
-        cookie(host(get("/@adult"), "nsfw.test.local"), "orbital_age=1"),
+        cookie(host(get("/@adult"), "orbitalnsfw.test"), "orbital_age=1"),
     )
     .await;
     assert_eq!(after.status, StatusCode::NOT_FOUND, "TL0 must stay hidden");
