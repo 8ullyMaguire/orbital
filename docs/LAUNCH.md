@@ -19,8 +19,12 @@ and no useful error, so the single-label name is the one that can actually serve
 ## Accounts
 
 `@criticalnexus` — owner, TL3, SFW primary `dev`, secondaries `indie-web` and
-`writers`, 14 links (blog, Darkhold, Kindred, Ascend, Concord, Gravity, PieFed,
-radio, leftist feeds, Streakforge, Blackrep, Forgejo, Bluesky).
+`writers`, 13 links (blog, Darkhold, Kindred, Ascend, Concord, Gravity, radio,
+leftist feeds, Streakforge, Blackrep, Forgejo, Bluesky).
+
+PieFed is deliberately not listed: `piefed.polarisocial.xyz` answers 404 on every
+path while its unit reports active, so it would be a dead link in a flagship
+profile. Re-add it from the dashboard when the app serves a page.
 
 `@steeltitan` — TL2, adult primary `nsfw`, 7 links (BNWO feed, StashDB, Suki,
 Whitebois, and the SFW half is linked from Critical Nexus, never the reverse).

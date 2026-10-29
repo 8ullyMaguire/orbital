@@ -87,7 +87,6 @@ CRITICAL = {
         ("https://ascend.polarisocial.xyz", "Ascend — draw your powers", "gamepad"),
         ("https://concord.polarisocial.xyz", "Concord — the decision forge", "link"),
         ("https://gravity.polarisocial.xyz", "Gravity — federated social", "rss"),
-        ("https://piefed.polarisocial.xyz", "PieFed — federated forum", "link"),
         ("https://radio.polarisocial.xyz", "Radio", "music"),
         ("https://leftist.polarisocial.xyz", "Leftist feeds", "rss"),
         ("https://streakforge.polarisocial.xyz", "Streakforge", "gamepad"),
