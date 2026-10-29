@@ -27,12 +27,62 @@ pub fn normalise_handle(raw: &str) -> Result<String, AppError> {
     Ok(h)
 }
 
+/// Tags people type differently and mean the same thing by.
+///
+/// The tuner takes free text, so `game-dev`, `game dev` and `gamedev` would otherwise be three
+/// lenses that never match each other. This is deliberately a small hand-written list rather than a
+/// fuzzy matcher: a wrong merge is worse than a missed one, and every entry here is a spelling
+/// variant, not a judgement about what a tag means.
+const TAG_ALIASES: &[(&str, &str)] = &[
+    ("gamedev", "game-dev"),
+    ("game-development", "game-dev"),
+    ("indie-game-dev", "game-dev"),
+    ("indiegames", "indie-games"),
+    ("pixelart", "pixel-art"),
+    ("synth-wave", "synthwave"),
+    ("selfhosted", "self-hosting"),
+    ("opensource", "open-source"),
+    ("open-source-software", "open-source"),
+    ("at-proto", "atproto"),
+    ("bluesky-social", "bluesky"),
+    ("b-sky", "bluesky"),
+    ("ai-art", "ai-art"),
+    ("music-production", "music-production"),
+];
+
+/// The canonical form of an already-normalised tag, or the tag itself.
+pub fn canonical_tag(tag: &str) -> String {
+    // Collapse "a--b" and trim stray hyphens before the alias table sees the tag.
+    let mut collapsed = String::with_capacity(tag.len());
+    let mut prev_dash = false;
+    for c in tag.chars() {
+        if c == '-' {
+            if !prev_dash {
+                collapsed.push(c);
+            }
+            prev_dash = true;
+        } else {
+            collapsed.push(c);
+            prev_dash = false;
+        }
+    }
+    let trimmed = collapsed.trim_matches('-');
+    TAG_ALIASES
+        .iter()
+        .find(|(from, _)| *from == trimmed)
+        .map(|(_, to)| to.to_string())
+        .unwrap_or_else(|| trimmed.to_string())
+}
+
 pub fn normalise_tag(raw: &str) -> Result<String, AppError> {
     let t = raw
         .trim()
         .trim_start_matches('#')
         .to_lowercase()
-        .replace([' ', '_'], "-");
+        .replace([' ', '_'], "-")
+        // "-rust-" is a typo, not a different tag: trim the edges before validating the first char.
+        .trim_matches('-')
+        .to_string();
     if t.is_empty() || t.len() > 30 {
         return Err(AppError::Validation(
             "a tag is 1–30 characters".to_string(),
@@ -51,7 +101,7 @@ pub fn normalise_tag(raw: &str) -> Result<String, AppError> {
             "a tag starts with a letter or number".to_string(),
         ));
     }
-    Ok(t)
+    Ok(canonical_tag(&t))
 }
 
 pub fn normalise_slug(raw: &str) -> Result<String, AppError> {
@@ -183,10 +233,28 @@ mod tests {
     }
 
     #[test]
+    fn tag_spellings_collapse_to_one_lens() {
+        // "game dev", "gamedev" and "game-dev" are one tag, or the tuner builds three lenses.
+        for raw in ["game dev", "gamedev", "Game-Dev", "#game_dev"] {
+            let t = normalise_tag(raw).unwrap();
+            assert_eq!(t, "game-dev", "got {t} from {raw}");
+        }
+        assert_eq!(normalise_tag("  pixelart ").unwrap(), "pixel-art");
+        assert_eq!(normalise_tag("a--b---c").unwrap(), "a-b-c");
+        assert_eq!(normalise_tag("-leading-").unwrap(), "leading");
+        // A tag the table does not know is left alone rather than guessed at.
+        assert_eq!(normalise_tag("chiptune").unwrap(), "chiptune");
+    }
+
+    #[test]
     fn tags_fold_spaces_and_hashes() {
         assert_eq!(normalise_tag("#Rust Lang").unwrap(), "rust-lang");
         assert_eq!(normalise_tag("c++").unwrap(), "c++");
-        assert!(normalise_tag("--x").is_err());
+        // Leading hyphens are a typo, not a different tag.
+        assert_eq!(normalise_tag("--x").unwrap(), "x");
+        // Symbols that cannot be in a tag are still refused.
+        assert!(normalise_tag("!!!").is_err());
+        assert!(normalise_tag("").is_err());
     }
 
     #[test]
