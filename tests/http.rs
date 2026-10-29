@@ -1415,3 +1415,38 @@ async fn an_endorsed_tag_lifts_a_member_but_never_swamps_clicks(pool: PgPool) {
     let boost = again.json()["boost"].as_f64().unwrap();
     assert!((boost - 0.2).abs() < 1e-9, "three endorsements reach the cap, got {boost}");
 }
+
+#[sqlx::test]
+async fn the_site_reads_in_spanish_when_asked(pool: PgPool) {
+    let app = app(pool).await;
+
+    let english = call(&app, get("/")).await;
+    assert!(english.body.contains("Skip to content"));
+    assert!(english.body.contains(">Directory<"));
+
+    // An explicit choice, which must outrank the browser.
+    let chosen = call(&app, cookie(get("/"), "orbital_lang=es")).await;
+    assert_eq!(chosen.status, StatusCode::OK);
+    assert!(chosen.body.contains("Ir al contenido"), "the skip link");
+    assert!(chosen.body.contains(">Directorio<"), "the nav");
+    assert!(
+        chosen.body.contains("/lang/en"),
+        "the switch points back to English"
+    );
+    assert!(
+        !chosen.body.contains("(missing translation)"),
+        "every key used by the chrome exists in the table"
+    );
+
+    // And the browser's own preference, for a visitor who has not chosen.
+    let negotiated = call(
+        &app,
+        Request::builder()
+            .uri("/")
+            .header("accept-language", "es-ES,es;q=0.9,en;q=0.8")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(negotiated.body.contains("Ir al contenido"), "Accept-Language is honoured");
+}

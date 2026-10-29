@@ -59,7 +59,7 @@ fn layout_for(
     verticals: &[crate::models::VerticalRow],
     me: Option<&User>,
 ) -> Layout {
-    Layout::new(&ctx.base, false, verticals, me)
+    Layout::new(&ctx.base, false, verticals, me).with_lang(ctx.lang)
 }
 
 // ------------------------------------------------------------------ home

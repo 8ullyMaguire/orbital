@@ -25,6 +25,7 @@ pub struct NavUser {
 
 pub struct Layout {
     pub base: String,
+    pub lang: crate::i18n::Lang,
     pub nsfw: bool,
     pub site_name: String,
     pub tagline: String,
@@ -33,6 +34,32 @@ pub struct Layout {
 }
 
 impl Layout {
+    /// The string for a key in this page's language. Templates call `layout.t("nav.search")`.
+    pub fn t(&self, key: &str) -> &'static str {
+        crate::i18n::t(self.lang, key)
+    }
+
+    /// Where the language switch points: the other language, always.
+    pub fn lang_switch_href(&self) -> &'static str {
+        match self.lang {
+            crate::i18n::Lang::En => "/lang/es",
+            crate::i18n::Lang::Es => "/lang/en",
+        }
+    }
+
+    /// "Español" while reading English, "English" while reading Spanish.
+    pub fn lang_switch_label(&self) -> &'static str {
+        match self.lang {
+            crate::i18n::Lang::En => "Español",
+            crate::i18n::Lang::Es => "English",
+        }
+    }
+
+    pub fn with_lang(mut self, lang: crate::i18n::Lang) -> Self {
+        self.lang = lang;
+        self
+    }
+
     pub fn new(
         base: &str,
         nsfw: bool,
@@ -41,6 +68,7 @@ impl Layout {
     ) -> Self {
         Self {
             base: base.to_string(),
+            lang: crate::i18n::Lang::En,
             nsfw,
             site_name: SITE_NAME.to_string(),
             tagline: TAGLINE.to_string(),

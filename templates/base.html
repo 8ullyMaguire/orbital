@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ layout.lang.code() }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,6 +13,7 @@
   <meta property="og:description" content="{% block ogdesc %}{{ layout.tagline }}{% endblock %}">
   <meta property="og:url" content="{% block ogurl %}{{ layout.base }}/{% endblock %}">
   <meta property="og:image" content="{% block og_image %}{{ layout.base }}/assets/og.png{% endblock %}">
+  <meta property="og:locale" content="{{ layout.lang.code() }}">
   <meta name="twitter:card" content="summary_large_image">
   {% block head %}{% endblock %}
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
@@ -20,30 +21,31 @@
   <link rel="alternate" type="application/feed+json" title="{{ layout.site_name }}" href="{{ layout.base }}/feed.json">
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main">{{ layout.t("skip") }}</a>
 <header class="top">
   <div class="wrap top-in">
     <a class="brand" href="/" title="{{ layout.site_name }} — {{ layout.tagline }}">
       <span class="orb" aria-hidden="true"></span><span>{{ layout.site_name }}</span>
     </a>
-    <nav class="nav" aria-label="Main">
-      <a class="nav-a" href="/">Directory</a>
+    <nav class="nav" aria-label="{{ layout.t("nav.main") }}">
+      <a class="nav-a" href="/">{{ layout.t("nav.directory") }}</a>
       <details class="drop">
-        <summary class="nav-a">Verticals</summary>
+        <summary class="nav-a">{{ layout.t("nav.verticals") }}</summary>
         <div class="drop-panel">
           {% for n in layout.nav %}
           <a class="drop-i" href="/v/{{ n.slug }}">{{ n.icon|safe }}<span>{{ n.label }}</span></a>
           {% endfor %}
         </div>
       </details>
-      <a class="nav-a" href="/search">Search</a>
+      <a class="nav-a" href="/search">{{ layout.t("nav.search") }}</a>
     </nav>
     <div class="top-r">
+      <a class="nav-a sm" href="{{ layout.lang_switch_href() }}" hreflang="{% if layout.lang.code() == "es" %}en{% else %}es{% endif %}" rel="alternate">{{ layout.lang_switch_label() }}</a>
       {% match layout.me %}
       {% when Some with (u) %}
         <a class="btn btn-ghost btn-sm" href="/app/">{{ u.display_name }}</a>
       {% when None %}
-        <a class="btn btn-sm" href="/app/#/join">Add your profile</a>
+        <a class="btn btn-sm" href="/app/#/join">{{ layout.t("cta.add") }}</a>
       {% endmatch %}
     </div>
   </div>
@@ -64,26 +66,26 @@
     </div>
     <div class="foot-cols">
       <div>
-        <h4>Browse</h4>
-        <a href="/">Everything</a>
-        <a href="/search">Search people</a>
-        <a href="{{ layout.base }}/feed.json">JSON feed</a>
-        <a href="{{ layout.base }}/feed.xml">RSS</a>
+        <h4>{{ layout.t("foot.browse") }}</h4>
+        <a href="/">{{ layout.t("foot.everything") }}</a>
+        <a href="/search">{{ layout.t("foot.search") }}</a>
+        <a href="{{ layout.base }}/feed.json">{{ layout.t("foot.feed_json") }}</a>
+        <a href="{{ layout.base }}/feed.xml">{{ layout.t("foot.rss") }}</a>
       </div>
       <div>
-        <h4>Join</h4>
-        <a href="/app/#/join">Create a profile</a>
-        <a href="/app/#/login">Sign in</a>
-        <a href="/about">How it works</a>
+        <h4>{{ layout.t("foot.join") }}</h4>
+        <a href="/app/#/join">{{ layout.t("foot.create") }}</a>
+        <a href="/app/#/login">{{ layout.t("foot.signin") }}</a>
+        <a href="/about">{{ layout.t("foot.how") }}</a>
       </div>
       <div>
-        <h4>Verticals</h4>
+        <h4>{{ layout.t("nav.verticals") }}</h4>
         {% for n in layout.nav %}{% if loop.index < 6 %}<a href="/v/{{ n.slug }}">{{ n.label }}</a>{% endif %}{% endfor %}
       </div>
     </div>
   </div>
   <div class="wrap foot-bot">
-    <span class="muted sm">{{ layout.site_name }} — a directory, not an algorithm. No ads, no trackers, no third-party scripts.</span>
+    <span class="muted sm">{{ layout.site_name }} — {{ layout.t("foot.note") }}</span>
   </div>
 </footer>
 {% block scripts %}{% endblock %}

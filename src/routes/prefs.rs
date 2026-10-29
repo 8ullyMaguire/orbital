@@ -142,11 +142,33 @@ pub async fn on(headers: HeaderMap) -> Result<Response, PageError> {
     Ok(res)
 }
 
+/// `/lang/es` - remember the choice and go back to where the reader was.
+///
+/// The cookie outranks `Accept-Language`, so this is the only way to read a Spanish site on an
+/// English browser (and the reverse), and it survives the next visit.
+pub async fn set_lang(
+    headers: HeaderMap,
+    axum::extract::Path(code): axum::extract::Path<String>,
+) -> Result<Response, PageError> {
+    let lang = crate::i18n::Lang::from_code(&code).unwrap_or(crate::i18n::Lang::En);
+    let mut res = Redirect::to(&back_to(&headers, "/")).into_response();
+    res.headers_mut().append(
+        header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&format!(
+            "orbital_lang={}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax",
+            lang.code()
+        ))
+        .unwrap(),
+    );
+    Ok(res)
+}
+
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/lens", get(lens))
         .route("/prefs/off", get(off))
         .route("/prefs/on", get(on))
+        .route("/lang/{code}", get(set_lang))
         .route("/prefs", post(apply))
         .route("/prefs/reset", post(reset))
 }

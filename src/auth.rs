@@ -192,6 +192,9 @@ impl FromRequestParts<AppState> for PageUser {
 pub struct Ctx {
     pub base: String,
     pub hub_handle: String,
+    /// Decided per request from the cookie and `Accept-Language`, so no handler has to think
+    /// about it and no template can disagree with another on the same page.
+    pub lang: crate::i18n::Lang,
 }
 
 impl Ctx {
@@ -230,6 +233,7 @@ impl FromRequestParts<AppState> for Ctx {
         Ok(Ctx {
             base,
             hub_handle: state.cfg.hub_handle.clone(),
+            lang: crate::i18n::Lang::from_headers(&parts.headers),
         })
     }
 }

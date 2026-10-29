@@ -6,6 +6,7 @@ pub mod error;
 pub mod health;
 pub mod governance;
 pub mod html;
+pub mod i18n;
 pub mod meta;
 pub mod models;
 pub mod og;
