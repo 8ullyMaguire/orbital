@@ -66,10 +66,21 @@ body "$BASE/sitemap.xml" | grep -q 'nsfw' \
   && pass "sitemap lists the adult vertical" || fail "sitemap" "the nsfw vertical is missing"
 
 # ---- auth + links
-H="testpilot$(date +%s)"
+# One fixed account, reused. A timestamped handle per run left a new member in the live directory
+# on every deploy - the smoke test was quietly seeding the product with test pilots.
+H="smoketester"
+PW="correct horse battery"
 reg=$(curl -s -c "$JAR" -X POST "$BASE/api/auth/register" -H 'content-type: application/json' \
-  -d "{\"handle\":\"$H\",\"password\":\"correct horse battery\",\"display_name\":\"Test Pilot\",\"vertical\":\"dev\",\"bio\":\"I test things end to end.\"}")
-echo "$reg" | grep -q '"handle":"'"$H"'"' && pass "register" || fail "register" "${reg:0:160}"
+  -d "{\"handle\":\"$H\",\"password\":\"$PW\",\"display_name\":\"Smoke Tester\",\"vertical\":\"dev\",\"bio\":\"I test things end to end.\"}")
+if echo "$reg" | grep -q '"handle":"'"$H"'"'; then
+  pass "register"
+else
+  # Already exists from a previous run: sign in instead of creating a second one.
+  login=$(curl -s -c "$JAR" -X POST "$BASE/api/auth/login" -H 'content-type: application/json' \
+    -d "{\"handle\":\"$H\",\"password\":\"$PW\"}")
+  echo "$login" | grep -q '"handle":"'"$H"'"' \
+    && pass "login (account already existed)" || fail "register" "${reg:0:160}"
+fi
 
 c=$(code -b "$JAR" "$BASE/api/me")
 [ "$c" = 200 ] && pass "session cookie works" || fail "session" "status $c"

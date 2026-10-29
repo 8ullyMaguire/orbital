@@ -495,6 +495,9 @@ pub async fn profile(
         .map(|(_, m)| {
             let mut c = card(m, &ctx.base, 0, StatMode::Similar, now);
             c.why = similarity_reason(m, &owner_tags, primary.as_deref());
+            // The sidebar's contribution to "how do people find you" rides on the link, or the
+            // click is indistinguishable from a direct visit.
+            c.url = format!("{}?s=similar", c.url);
             c
         })
         .collect();
