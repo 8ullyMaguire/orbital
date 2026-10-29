@@ -32,6 +32,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/me", get(me).patch(update_me))
         .route("/api/me/verify-bsky", post(verify_bsky))
         .route("/api/me/verify-token", post(rotate_token))
+        .route("/api/me/standing", get(standing))
         .route("/api/links", get(list_links).post(create_link))
         .route("/api/links/reorder", post(reorder))
         .route("/api/links/{id}", patch(update_link).delete(delete_link))
@@ -147,8 +148,29 @@ pub async fn logout(State(st): State<AppState>, user: MaybeUser) -> ApiResult<Re
 
 // ------------------------------------------------------------------ me
 
-pub async fn verticals(State(st): State<AppState>) -> ApiResult<Json<Value>> {
-    let rows = store::verticals(&st.pool, false).await?;
+#[derive(Deserialize)]
+pub struct VerticalsQuery {
+    /// `all=1` includes the adult vertical. Its existence is not a secret — the
+    /// listing a member publishes there is — so the catalogue is the same for
+    /// everyone and only the membership data is gated by host.
+    //
+    // Taken as a string rather than a bool: `?all=1` is what people write, and
+    // rejecting it with a 400 deserialize error is a trap for every future
+    // caller. `true`, `1` and `yes` all mean yes.
+    #[serde(default)]
+    pub all: Option<String>,
+}
+
+pub async fn verticals(
+    State(st): State<AppState>,
+    Query(q): Query<VerticalsQuery>,
+) -> ApiResult<Json<Value>> {
+    let all = q
+        .all
+        .as_deref()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "all"))
+        .unwrap_or(false);
+    let rows = store::verticals(&st.pool, all).await?;
     Ok(Json(json!({
         "verticals": rows.iter().map(|v| json!({
             "slug": v.slug, "label": v.label, "description": v.description,
@@ -334,6 +356,12 @@ pub async fn verify_bsky(
 }
 
 // ------------------------------------------------------------------ links
+
+/// The member's own rank, in the same order the public pages show.
+pub async fn standing(State(st): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    let rows = store::standing(&st.pool, user.id, chrono::Utc::now()).await?;
+    Ok(Json(json!({ "standing": rows })))
+}
 
 pub async fn list_links(
     State(st): State<AppState>,

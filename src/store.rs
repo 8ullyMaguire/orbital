@@ -983,6 +983,48 @@ pub async fn sitemap_entries(
     Ok(rows)
 }
 
+/// Ranks for the member's own verticals, computed with the same functions the
+/// public leaderboards use — a dashboard that ranks differently from the page it
+/// describes is a lie with a chart on top.
+pub async fn standing(
+    pool: &PgPool,
+    user_id: Uuid,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<crate::models::Standing>, AppError> {
+    let pairs = verticals_of(pool, user_id).await?;
+    let catalogue = verticals(pool, true).await?;
+    let mut out = Vec::new();
+    for (slug, role) in pairs {
+        let Some(v) = catalogue.iter().find(|v| v.slug == slug) else {
+            continue;
+        };
+        let members: Vec<_> = vertical_members(pool, &slug)
+            .await?
+            .into_iter()
+            .filter(|m| if v.nsfw { m.nsfw_enabled } else { m.verticals.first().map(|p| p != "nsfw").unwrap_or(true) })
+            .collect();
+        let total = members.len() as i64;
+        let top = crate::ranking::rank_top(members.clone());
+        let trending = crate::ranking::rank_trending(members.clone(), now);
+        let me = members.iter().find(|m| m.id == user_id);
+        out.push(crate::models::Standing {
+            label: v.label.clone(),
+            role: role.clone(),
+            vertical: slug,
+            members: total,
+            top_rank: top.iter().position(|m| m.id == user_id).map(|i| i as i64 + 1).unwrap_or(0),
+            trending_rank: trending
+                .iter()
+                .position(|m| m.id == user_id)
+                .map(|i| i as i64 + 1)
+                .unwrap_or(0),
+            clicks_7d: me.map(|m| m.clicks).unwrap_or(0),
+            visitors_7d: me.map(|m| m.visitors_7d).unwrap_or(0),
+        });
+    }
+    Ok(out)
+}
+
 pub async fn member_count(pool: &PgPool, include_nsfw: bool) -> Result<i64, AppError> {
     let sql = format!(
         "SELECT count(*)::bigint AS n FROM users u WHERE hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})"

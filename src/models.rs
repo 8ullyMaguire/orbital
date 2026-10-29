@@ -170,3 +170,18 @@ pub struct LinkPatch {
 pub struct ReorderInput {
     pub order: Vec<Uuid>,
 }
+
+/// Where a member actually stands in each vertical they belong to. The dashboard
+/// shows this instead of raw click totals: "3rd of 47 in Developers, up from 5th"
+/// is a decision, a lifetime click count is trivia.
+#[derive(Debug, Clone, Serialize)]
+pub struct Standing {
+    pub vertical: String,
+    pub label: String,
+    pub role: String,
+    pub members: i64,
+    pub top_rank: i64,
+    pub trending_rank: i64,
+    pub clicks_7d: i64,
+    pub visitors_7d: i64,
+}
