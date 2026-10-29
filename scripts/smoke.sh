@@ -36,10 +36,10 @@ body "$BASE/@criticalnexus" | grep -q 'https://leftist.polarisocial.xyz' \
   || pass "links are source-tagged"
 
 c=$(code "$BASE/@steeltitan")
-[ "$c" = 404 ] && pass "adult profile is not on the SFW host" || fail "segregation" "status $c"
+[ "$c" = 200 ] && pass "adult profile is on the one surface" || fail "one surface" "status $c"
 
 body "$BASE/sitemap.xml" | grep -q 'nsfw' \
-  && fail "sitemap" "adult URLs leak into the SFW sitemap" || pass "sitemap excludes the adult vertical"
+  && pass "sitemap lists the adult vertical" || fail "sitemap" "the nsfw vertical is missing"
 
 # ---- auth + links
 H="testpilot$(date +%s)"
@@ -55,7 +55,12 @@ link=$(curl -s -b "$JAR" -X POST "$BASE/api/links" -H 'content-type: application
 LID=$(printf '%s' "$link" | python3 -c 'import json,sys; print(json.load(sys.stdin)["link"]["id"])' 2>/dev/null)
 [ -n "${LID:-}" ] && pass "create link" || fail "create link" "${link:0:160}"
 
-body "$BASE/@$H" | grep -q 'example.com/end-to-end' \
+# The card's href is /l/<id> (a tracked redirect) and the visible text is the label plus the
+# URL's host-and-path in <small>. Assert both, because either one alone can be true of a
+# different card.
+page=$(body "$BASE/@$H")
+printf '%s' "$page" | grep -q 'E2E link' \
+  && printf '%s' "$page" | grep -q 'example.com/end-to-end' \
   && pass "link appears on the public profile" || fail "public link" "not rendered"
 
 # A credentials-bearing URL must be refused.
@@ -86,8 +91,10 @@ c=$(code "$BASE/v/nsfw")
 [ "$c" = 200 ] && pass "the nsfw vertical has a page" || fail "nsfw vertical" "status $c"
 c=$(code "$BASE/gate")
 [ "$c" = 404 ] && pass "the gate is retired" || fail "gate" "status $c"
+# In production nginx answers the retired name with a 301; with no proxy in front the app
+# serves the same page. What must not happen is a different surface (403/404) or an error.
 c=$(code -H "Host: $NSFW_HOST" "$BASE/@steeltitan")
-[ "$c" = 200 ] && pass "the retired hostname does not behave differently" || fail "host split" "status $c"
+case "$c" in 200|301|302|303|307|308) pass "the retired hostname is not a second surface" ;; *) fail "host split" "status $c" ;; esac
 body "$BASE/sitemap.xml" | grep -q '/v/nsfw' \
   && pass "the sitemap lists the adult vertical" || fail "sitemap" "nsfw vertical missing"
 curl -sI "$BASE/" | grep -qi 'x-robots-tag' \
