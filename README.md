@@ -126,6 +126,8 @@ templates/       askama, compiled at build time
 web/             the Svelte 5 dashboard
 docs/SPEC.md     the specification, including what the first draft got wrong
 docs/PLAN.md     the build order it was implemented from
+docs/DECISIONS.md  the choices that are expensive to reverse, and what was rejected
+docs/LAUNCH.md   deployment record, social posts, what is deliberately unlisted
 ```
 
 ## The adult vertical
