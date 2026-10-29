@@ -143,10 +143,73 @@ reset trust. Every counter in the response is `BIGINT` cast in SQL.
 | `/l/{link_id}` | Click recorder + 302 |
 | `/sitemap.xml`, `/robots.txt` | Discovery plumbing; NSFW host is `noindex` and disallowed |
 | `/join`, `/login`, `/app/*` | Svelte dashboard (static assets embedded in the binary) |
+| `/lens` | the visitor's weights as an editable table; "this browser" or "your account" |
+| `/prefs/off`, `/prefs/on` | personalisation switch for one browser (cookie) |
+| `/lang/{en,es}` | language switch; sets `orbital_lang`, redirects back |
+| `/status` | the estate: every hostname nginx serves, with HTTP code and latency |
+| `/og/{handle}.{png,svg}` | generated social card, from disk when rendered, on demand otherwise |
 
 NSFW host (`orbitalnsfw.polarisocial.xyz`): age gate sets a cookie on POST, then
 the same surface, restricted to `nsfw` members, `noindex, nofollow`, excluded
 from the global sitemap and the global feed. A TL0 member is hidden.
+
+---
+
+## 3b. Writing without a browser (implemented 2026-10-29)
+
+Reading is anonymous; writing belongs to a member. A long-lived token is the credential that fits a
+script, and a session cookie is not:
+
+```
+POST   /api/me/tokens           session-auth → {"token": "orb_…"} shown once
+GET    /api/me/tokens           id, label, created_at, last_used_at — never the token
+POST   /api/me/tokens/{id}/revoke
+GET    /api/v1/me/links         Authorization: Bearer orb_…   (hidden links included)
+POST   /api/v1/me/links         {"url","label","vertical"} → 201, metadata fetched in background
+DELETE /api/v1/me/links?url=…
+```
+
+Rules that are part of the spec, not of the implementation:
+
+- **Only a hash is stored.** `sha256(salt || token)`; a dump cannot be replayed.
+- **Ten live tokens, forty links.** Both refusals are sentences, not silence.
+- **A URL is validated before it is stored** (`https` only, no credentials in the URL), and the
+  same SSRF guard the link checker uses applies when the title is fetched.
+- **A duplicate URL on the same profile is a refusal**, not a second row.
+
+---
+
+## 3c. Governance (implemented 2026-10-29)
+
+D4 deferred the quorum "until there are enough TL3s to constitute one". That time is now, so the
+deferral is retired for two decisions and kept for moderation:
+
+| Decision | Who | Rule |
+|---|---|---|
+| A new vertical exists | any member proposes, TL3 votes | 3 votes accept; the deciding vote applies it in the same transaction |
+| A vertical merges into another | same | members move with their tags, links re-point, the retired vertical is deleted |
+| A tag is endorsed | TL2+ | toggles; 3 endorsements reach a +0.2 cap on relevance |
+
+A merge is a rename of the room, not an eviction: nobody leaves the directory and nobody's primary
+listing becomes a secondary one. The owner may accept or reject without a quorum, which is what a
+directory of four actually needs; the quorum path exists so the rule is written down and tested
+before it is needed.
+
+Moderation flag resolution stays with the owner (D4), unchanged: a quorum over flags would let
+three accounts remove a fourth.
+
+---
+
+## 3d. Language (implemented 2026-10-29)
+
+Two languages, chosen per request: cookie `orbital_lang` → `Accept-Language` → English. The choice is
+rendered from a static table keyed by string (`src/i18n.rs`), and templates ask for keys. Two
+invariants are enforced by tests: every key used in `templates/` exists in the table, and no entry is
+empty or accidentally identical to its English source.
+
+Status: chrome translated (nav, footer, CTA, skip link, metadata `og:locale`), page bodies pending —
+see `ROADMAP.md`. A half-translated page is acceptable only because the fallback is the English
+string, never a blank.
 
 ---
 
@@ -192,6 +255,18 @@ flags(id uuid pk, flagger_id fk null, target_user_id fk, vertical_slug null,
       reason, status text, created_at, resolved_at, resolver_id, note)
 curation(vertical_slug fk, user_id fk, position int, pk(vertical_slug,user_id))
 bot_posts(id bigserial, kind text, subject text, uri text, created_at)
+-- 0002..0005
+links(… title text, favicon text, metadata_at timestamptz)
+source_hits(… referrer_host text, viewer_hash text, fingerprint text)
+preference_weights(owner_kind, owner_id, tag_slug, weight real, source, updated_at)
+visitor_profiles(owner_id pk, pages_seen, first_seen_at, last_seen_at)
+api_tokens(id uuid pk, user_id fk, token_hash unique, label, created_at, last_used_at, revoked_at)
+rank_snapshots(id bigserial, user_id fk, vertical_slug, rank, taken_at)
+tag_aliases(from_tag pk, to_tag, created_at)
+vertical_proposals(id uuid pk, slug, label, description, proposed_by fk, merged_into fk null,
+                   status text, created_at, decided_at)
+vertical_votes(proposal_id fk, user_id fk, weight, created_at, pk(proposal_id, user_id))
+tag_endorsements(tag_slug, user_id fk, created_at, pk(tag_slug, user_id))
 ```
 
 Indexes that exist because a query needs them: `source_hits(user_id,
@@ -209,6 +284,12 @@ created_at)`, `source_hits(user_id, session_hash, created_at)`,
 - Integration (real Postgres): register → login → create links → render profile
   → click → the click appears in analytics and moves the ranking; NSFW link
   never appears on the SFW host; flag → resolve; trending empty hides the tab.
+- Platform (2026-10-29): a token adds a link without a cookie and a bad token is refused; a
+  category is a weight while an invented one is not; a lens stops at 24; personalisation can be
+  switched off and says so; three votes create a vertical and two do not; a merge moves members,
+  keeps their tags and deletes the retired vertical; an endorsement lifts a member by at most 0.2;
+  Spanish renders from a cookie and from `Accept-Language`; `/status` and `/og` answer.
+- Mutation-checked: each of those rules was removed once and the named test went red.
 - Live on the host: every route 200 with the right body, a real click recorded
   end-to-end through nginx, sitemap/robots content, embed renders standalone,
   NSFW gate refuses without the cookie, dashboard reachable and authenticates.

@@ -283,3 +283,99 @@ Nothing about the preference vector is trusted from the client, so nothing needs
   representation to drift.
 - The cost is a page reload on Apply. For a control a person touches once or twice, that is not a
   cost worth a build step.
+
+## D16 — A token, not a session, is what a script gets
+
+**Context.** The public API is read-only and needs no credential. Writing needed a member's browser
+session, which made the MCP server read-only by construction and made "update my links from a
+script" impossible.
+
+**Decision.** `POST /api/me/tokens` mints `orb_…` once; only `sha256(salt || token)` is stored, and
+`Authorization: Bearer` unlocks `GET/POST/DELETE /api/v1/me/links`.
+
+**Consequences.**
+
+- A database dump cannot be replayed, and a token can be revoked without touching the password.
+- Ten live tokens and forty links per member, both refused with a sentence. An API with no ceiling
+  is a table with no ceiling.
+- The token is shown once. Anyone who loses it revokes it; there is no "show it again" path, because
+  that path requires storing the thing that makes it secret.
+- The MCP server still exposes only read tools: the API half is done, the Python half is backlog
+  (`docs/ROADMAP.md`). Stating that is better than shipping a half-wired client.
+
+## D17 — Three votes decide a vertical, and a merge moves people
+
+**Context.** D4 deferred quorum moderation "until there are enough TL3s to constitute one". The
+directory now has enough to test the mechanism, and the taxonomy is the one thing that stays frozen
+without a rule.
+
+**Decision.** Any member proposes a vertical or a merge; three TL3 votes accept it; the deciding vote
+applies the change inside the same transaction. The owner can decide by hand. A merge moves members
+to the target with their tags, re-points their links, and deletes the retired vertical.
+
+**Consequences.**
+
+- The vote that reaches quorum cannot be raced: a second voter either sees `accepted` or gets a
+  conflict, never a second merge.
+- Nobody leaves the directory when a vertical does, and no primary listing silently becomes a
+  secondary one — both of those would be moderated removals dressed as taxonomy.
+- Flag adjudication stays with the owner (D4). A quorum over flags would let three accounts remove a
+  fourth; a quorum over taxonomy only adds rooms.
+- The quorum number lives in code (`governance::QUORUM`) and in the test that votes twice and
+  asserts `accepted: false`.
+
+## D18 — An endorsement is a separate term, not a bigger relevance
+
+**Context.** The obvious implementation is `relevance += 0.2 × endorsed_share`. The test written for
+it failed: relevance saturates at 1.0 for a member who holds every tag in the viewer's lens, which is
+precisely the member an endorsement is meant to distinguish.
+
+**Decision.** Endorsements score as their own additive term, `0.4 × (0.2 × share)`, outside
+`relevance`, capped at three endorsements per tag.
+
+**Consequences.**
+
+- The lift is +0.08 against clicks weighted 0.6, so an endorsement refines a lens and cannot replace
+  attention. That ratio is the promise the ranking page makes.
+- The boost is computed from the member's best-endorsed tag (`max`, not `sum`), so a member with ten
+  lightly-endorsed tags is not outranked by one very popular one.
+- Endorsements do not apply to the un-tuned order, which stays clicks and visitors. "Honest default"
+  means one thing only.
+
+## D19 — A static dictionary, guarded by a test that reads the templates
+
+**Context.** Full i18n needs strings in two languages and templates that ask for them by key. A
+runtime catalog (JSON, fluent, gettext) adds a file to deploy and a parser to trust.
+
+**Decision.** A `static` table in `src/i18n.rs` (`(key, en, es)`), `layout.t("key")` in templates, and
+a test that greps `templates/` for every `layout.t("…")` and fails if the key is missing. A second
+test forbids empty or accidentally-English entries.
+
+**Consequences.**
+
+- Adding a string is one line in one file, and forgetting one is a red test rather than a Spanish
+  page with an English sentence in the middle.
+- The fallback is a visible `(missing translation)` rather than a blank or a crash: a bug you can
+  see in review.
+- The templates still carry literal English in their bodies; that is a mechanical backlog, and the
+  key test makes the remaining work enumerable rather than a memory exercise.
+
+## D20 — The status page is generated from nginx, not hand-kept
+
+**Context.** "Is the estate up" had no answer that did not involve me being asked. A hard-coded list
+of hostnames would drift the first time a site was added.
+
+**Decision.** The deploy writes `static/estate.txt` from the `server_name` directives nginx actually
+serves; `/status` probes that list with a 60-second cache and shows code and latency per host.
+
+**Consequences.**
+
+- The page cannot disagree with the network it describes. It also cannot list a host that nginx does
+  not serve, which is the failure a hand-kept list hides.
+- The first version was wrong in a way that looked like an outage: it kept only the first label of
+  each hostname, so every probe asked DNS for `https://ascend` and the page read "0 of 12" while
+  every site answered 200. The fix is in the deploy, and the lesson is that a generated list still
+  needs its contents checked once.
+- Probing is cached and non-blocking per host (a `JoinSet`), so a dead host costs one timeout on a
+  minute-stale page, not the whole page.
+
