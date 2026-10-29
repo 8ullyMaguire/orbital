@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ layout.site_name }} — {{ layout.tagline }}{% endblock %}
+{% block description %}A directory of people across {{ layout.nav.len() }} themed verticals. Each profile is a person and their links, ranked by real visitors.{% endblock %}
+{% block content %}
+<section class="hero wrap">
+  <p class="eyebrow"><span class="dotlive"></span> {{ total_members }} {% if total_members == 1 %}person{% else %}people{% endif %} · {{ layout.nav.len() }} verticals · {{ total_clicks }} outbound clicks recorded</p>
+  <h1>Find people by<br><em>what they make</em>.</h1>
+  <p class="lede">{{ layout.site_name }} is a directory of humans and their links, sorted into verticals. No feed, no algorithm, no growth team — a page per person, a leaderboard per craft, and the numbers are measured rather than claimed.</p>
+  <form class="searchrow" action="/search" method="get" role="search">
+    <input type="search" name="q" placeholder="A name, a handle, a tag, a site…" aria-label="Search people" value="{{ q }}">
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <p class="hint muted sm">Or start in
+    {% for v in quick %}<a href="/v/{{ v.0 }}">{{ v.1 }}</a>{% if !loop.last %} · {% endif %}{% endfor %}
+  </p>
+</section>
+
+<section class="wrap section">
+  <div class="section-h">
+    <h2>Verticals</h2>
+    <p class="muted sm">One leaderboard per craft. Ranked by distinct visitors, not by who shouted loudest.</p>
+  </div>
+  <div class="vgrid">
+    {% for v in verticals %}
+    <a class="vcard" href="/v/{{ v.slug }}" style="--accent:{{ v.accent }}">
+      <div class="vcard-h">
+        <span class="vico">{{ v.icon|safe }}</span>
+        <span class="vname">{{ v.label }}</span>
+        <span class="pill">{{ v.members }}</span>
+      </div>
+      <p class="muted sm vdesc">{{ v.description }}</p>
+      {% if v.top.len() > 0 %}
+      <div class="vtop">
+        {% for m in v.top %}<span class="vtop-i" title="{{ m.display_name }}">{{ m.avatar_mini|safe }}<span>{{ m.display_name }}</span></span>{% endfor %}
+      </div>
+      {% else %}
+      <p class="sm empty-hint">Founding season — this vertical is open.</p>
+      {% endif %}
+    </a>
+    {% endfor %}
+    {% if other.len() > 0 %}
+    <div class="vcard vcard-other">
+      <div class="vcard-h"><span class="vico">•</span><span class="vname">Other</span><span class="pill">{{ other.len() }}</span></div>
+      <p class="muted sm vdesc">Smaller verticals, still growing: {% for o in other %}<a href="/v/{{ o.slug }}">{{ o.label }}</a>{% if !loop.last %}, {% endif %}{% endfor %}.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if trending.len() > 0 %}
+<section class="wrap section">
+  <div class="section-h">
+    <h2>Trending this week</h2>
+    <p class="muted sm">Distinct visitors in the last seven days, damped for brand-new accounts.</p>
+  </div>
+  <div class="mgrid">
+    {% for m in trending %}{% include "member_card.html" %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="wrap section">
+  <div class="section-h">
+    <h2>New to the directory</h2>
+    <p class="muted sm">Everyone who joined recently, newest first. No threshold to clear.</p>
+  </div>
+  <div class="mgrid">
+    {% for m in new_members %}{% include "member_card.html" %}{% endfor %}
+  </div>
+</section>
+
+{% if picks.len() > 0 %}
+<section class="wrap section">
+  <div class="section-h">
+    <h2>Curator's picks</h2>
+    <p class="muted sm">Hand-picked, manually ordered. The editorial layer, not the ranking.</p>
+  </div>
+  <div class="mgrid">
+    {% for m in picks %}{% include "member_card.html" %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="wrap cta-band">
+  <div>
+    <h2>One page for everything you make.</h2>
+    <p class="muted">A handle, a password, your links. You pick a vertical, you appear on its leaderboard, and your sidebar neighbours are people who share your tags — not whoever paid.</p>
+  </div>
+  <a class="btn btn-lg" href="/app/#/join">Create your profile</a>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Report a profile — {{ layout.site_name }}{% endblock %}
+{% block robots %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block canonical %}{{ layout.base }}/report{% endblock %}
+{% block content %}
+<section class="wrap prose">
+  {% if done %}
+  <h1 class="h-sm">Thank you</h1>
+  <p class="muted">The report is in the queue. If it is about ranking manipulation, the profile's counters are frozen while it is looked at.</p>
+  <p><a class="btn" href="/@{{ handle }}">Back to the profile</a></p>
+  {% else %}
+  <h1 class="h-sm">Report a profile</h1>
+  {% if !error.is_empty() %}<p class="errline">{{ error }}</p>{% endif %}
+  <p class="muted">Reports are looked at by the curator of the vertical the profile is in. Reasons that matter: ranking manipulation, impersonation, a link that goes somewhere other than it says, illegal content.</p>
+  <form method="post" action="/report" class="form">
+    <label>Profile handle
+      <input name="handle" value="{{ handle }}" placeholder="handle" required>
+    </label>
+    <label>Vertical
+      <input name="vertical" value="{{ vertical }}" placeholder="dev (optional)">
+    </label>
+    <label>Reason
+      <select name="reason">
+        <option value="ranking manipulation">Ranking manipulation (sockpuppets, click farm)</option>
+        <option value="impersonation">Impersonation</option>
+        <option value="misleading link">A link goes somewhere other than it says</option>
+        <option value="illegal content">Illegal content</option>
+        <option value="other">Something else</option>
+      </select>
+    </label>
+    <label>Detail
+      <textarea name="detail" rows="4" placeholder="What did you see?"></textarea>
+    </label>
+    <button class="btn" type="submit">Send report</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

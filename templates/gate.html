@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}18+ — {{ layout.site_name }}{% endblock %}
+{% block robots %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block canonical %}{{ layout.base }}/{% endblock %}
+{% block content %}
+<section class="wrap gate">
+  <div class="gatebox">
+    <p class="eyebrow">Age check</p>
+    <h1>This part of {{ layout.site_name }} is for adults.</h1>
+    <p class="muted">The directory you are opening lists adult creators and links to explicit material. It is kept on its own host, out of the main directory, and out of search engines.</p>
+    <form method="post" action="/gate">
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn btn-lg" type="submit" name="ok" value="1">I am 18 or older — continue</button>
+    </form>
+    <p class="sm muted"><a href="{{ sfw_url }}">Take me back to the main directory</a>. Your answer is remembered for a year on this browser only.</p>
+    <p class="sm muted">If you are under 18, close this page.</p>
+  </div>
+</section>
+{% endblock %}

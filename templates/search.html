@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{% if !q.is_empty() %}“{{ q }}” — {% endif %}Search — {{ layout.site_name }}{% endblock %}
+{% block canonical %}{{ layout.base }}/search{% endblock %}
+{% block robots %}{% if !q.is_empty() %}<meta name="robots" content="noindex, follow">{% endif %}{% endblock %}
+{% block content %}
+<section class="wrap section">
+  <h1 class="h-sm">Search the directory</h1>
+  <form class="searchrow" action="/search" method="get" role="search">
+    <input type="search" name="q" value="{{ q }}" placeholder="A name, a handle, a tag, a site…" aria-label="Search" autofocus>
+    <button class="btn" type="submit">Search</button>
+  </form>
+
+  {% if !q.is_empty() %}
+    <p class="muted sm">{{ members.len() }} {% if members.len() == 1 %}person{% else %}people{% endif %} match “{{ q }}”.</p>
+    {% if tags.len() > 0 %}
+    <div class="chips">{% for t in tags %}<a class="chip" href="/search?q={{ t.slug }}">#{{ t.slug }}<span class="chip-n">{{ t.count }}</span></a>{% endfor %}</div>
+    {% endif %}
+
+    {% if members.len() == 0 %}
+    <div class="empty">
+      <h3>Nobody matches that</h3>
+      <p class="muted">Try a broader word, or <a href="/">browse the verticals</a>.</p>
+    </div>
+    {% else %}
+    <div class="mgrid">
+      {% for m in members %}{% include "member_card.html" %}{% endfor %}
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="muted">Search by name, handle, tag or the sites someone links to.</p>
+    <div class="chips">{% for v in quick %}<a class="chip" href="/v/{{ v.0 }}">{{ v.1 }}</a>{% endfor %}</div>
+  {% endif %}
+</section>
+{% endblock %}

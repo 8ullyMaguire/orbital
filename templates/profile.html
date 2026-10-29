@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ p.display_name }} (@{{ p.handle }}) — {{ layout.site_name }}{% endblock %}
+{% block description %}{{ p.meta_description }}{% endblock %}
+{% block canonical %}{{ p.canonical }}{% endblock %}
+{% block ogurl %}{{ p.canonical }}{% endblock %}
+{% block ogtype %}profile{% endblock %}
+{% block ogtitle %}{{ p.display_name }} (@{{ p.handle }}){% endblock %}
+{% block ogdesc %}{{ p.meta_description }}{% endblock %}
+{% block head %}{% if p.nsfw %}<meta name="robots" content="noindex, nofollow">{% endif %}<script type="application/ld+json">{{ p.jsonld|safe }}</script>{% endblock %}
+{% block bodyclass %}profile-body{% endblock %}
+{% block content %}
+<div class="wrap profile" style="--accent:{{ p.accent }}">
+  <div class="pmain">
+    <header class="phead">
+      {{ p.avatar|safe }}
+      <div class="phead-b">
+        <h1>{{ p.display_name }}{% if p.verified %} <a class="tick-lg" href="{{ p.bsky_url }}" title="Verified Bluesky account" rel="me noopener">✓</a>{% endif %}</h1>
+        <p class="phandle">@{{ p.handle }}{% if p.custom_domain.len() > 0 %} · <a href="https://{{ p.custom_domain }}" rel="me noopener">{{ p.custom_domain }}</a>{% endif %}</p>
+        <div class="pbadges">
+          {% for b in p.verticals %}<a class="badge" href="{{ b.href }}">{{ b.icon|safe }}<span>{{ b.label }}</span>{% if b.role == "secondary" %}<em>0.7×</em>{% endif %}</a>{% endfor %}
+          {% if p.trust_label.len() > 0 %}<span class="badge badge-t" title="Trust level">{{ p.trust_label }}</span>{% endif %}
+        </div>
+      </div>
+    </header>
+
+    {% if !p.bio.is_empty() %}<p class="pbio">{{ p.bio }}</p>{% endif %}
+
+    {% if p.tags.len() > 0 %}
+    <div class="chips chips-flat">
+      {% for t in p.tags %}<a class="chip" href="/search?q={{ t }}">#{{ t }}</a>{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if p.links.len() > 0 %}
+    <div class="links">
+      {% for l in p.links %}
+      <a class="linkbtn" href="{{ l.href }}" rel="noopener nofollow" target="_blank" data-link="{{ l.id }}">
+        <span class="lb-i">{{ l.icon|safe }}</span>
+        <span class="lb-t"><b>{{ l.label }}</b><small>{{ l.host }}</small></span>
+        {% if l.clicks > 0 %}<span class="lb-c" title="{{ l.clicks }} clicks">{{ l.clicks_label }}</span>{% endif %}
+        <span class="lb-arrow" aria-hidden="true">↗</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty"><p class="muted">No links yet.</p></div>
+    {% endif %}
+
+    <div class="pstats">
+      <div><b>{{ p.stat_visitors }}</b><span>distinct visitors</span></div>
+      <div><b>{{ p.stat_clicks }}</b><span>outbound clicks</span></div>
+      <div><b>{{ p.stat_7d }}</b><span>last 7 days</span></div>
+      <div><b>{{ p.stat_joined }}</b><span>joined</span></div>
+    </div>
+
+    <div class="pactions">
+      <button class="btn btn-ghost btn-sm" type="button" data-copy="{{ p.canonical }}">Copy profile link</button>
+      <a class="btn btn-ghost btn-sm" href="/report?u={{ p.handle }}">Report</a>
+      {% if p.is_self %}<a class="btn btn-sm" href="/app/#/profile">Edit your profile</a>{% endif %}
+    </div>
+
+    {% for r in p.rings %}
+    <nav class="ring" aria-label="Webring: {{ r.center }}">
+      {% if r.prev_href.len() > 0 %}<a class="ring-a" href="{{ r.prev_href }}">← {{ r.prev_name }}</a>{% else %}<span class="ring-a off">← start</span>{% endif %}
+      <a class="ring-c" href="{{ r.center_href }}">{{ r.center }}</a>
+      {% if r.next_href.len() > 0 %}<a class="ring-a" href="{{ r.next_href }}">{{ r.next_name }} →</a>{% else %}<span class="ring-a off">end →</span>{% endif %}
+    </nav>
+    {% endfor %}
+  </div>
+
+  <aside class="pside">
+    {% if p.similar.len() > 0 %}
+    <div class="side-card">
+      <h3>People like {{ p.first_name }}</h3>
+      <p class="muted sm">Shared tags, not paid placement.</p>
+      <ul class="sim">
+        {% for s in p.similar %}
+        <li><a href="{{ s.url }}">{{ s.avatar_mini|safe }}<span class="sim-b"><b>{{ s.display_name }}</b><small>@{{ s.handle }}</small></span><span class="sim-why">{{ s.why }}</span></a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="side-card">
+      <h3>In the directory</h3>
+      <ul class="side-list">
+        <li><a href="/">All {% if p.total_members == 1 %}1 person{% else %}{{ p.total_members }} people{% endif %}</a></li>
+        {% for b in p.verticals %}
+        <li><a href="{{ b.href }}">{{ b.label }} leaderboard</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-copy]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var url = b.getAttribute('data-copy');
+    var done = function () { var t = b.textContent; b.textContent = 'Copied'; setTimeout(function(){ b.textContent = t; }, 1400); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(url).then(done, done); }
+    else { window.prompt('Copy this link', url); }
+  });
+});
+</script>
+{% endblock %}

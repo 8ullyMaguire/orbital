@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ layout.site_name }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{{ layout.tagline }}{% endblock %}">
+  <link rel="canonical" href="{% block canonical %}{{ layout.base }}/{% endblock %}">
+  {% block robots %}{% endblock %}
+  <meta property="og:site_name" content="{{ layout.site_name }}">
+  <meta property="og:type" content="{% block ogtype %}website{% endblock %}">
+  <meta property="og:title" content="{% block ogtitle %}{{ layout.site_name }}{% endblock %}">
+  <meta property="og:description" content="{% block ogdesc %}{{ layout.tagline }}{% endblock %}">
+  <meta property="og:url" content="{% block ogurl %}{{ layout.base }}/{% endblock %}">
+  <meta property="og:image" content="{{ layout.base }}/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  {% block head %}{% endblock %}
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="alternate" type="application/feed+json" title="{{ layout.site_name }}" href="{{ layout.base }}/feed.json">
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="/" title="{{ layout.site_name }} — {{ layout.tagline }}">
+      <span class="orb" aria-hidden="true"></span><span>{{ layout.site_name }}</span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a class="nav-a" href="/">Directory</a>
+      <details class="drop">
+        <summary class="nav-a">Verticals</summary>
+        <div class="drop-panel">
+          {% for n in layout.nav %}
+          <a class="drop-i" href="/v/{{ n.slug }}">{{ n.icon|safe }}<span>{{ n.label }}</span></a>
+          {% endfor %}
+        </div>
+      </details>
+      <a class="nav-a" href="/search">Search</a>
+    </nav>
+    <div class="top-r">
+      {% match layout.me %}
+      {% when Some with (u) %}
+        <a class="btn btn-ghost btn-sm" href="/app/">{{ u.display_name }}</a>
+      {% when None %}
+        <a class="btn btn-sm" href="/app/#/join">Add your profile</a>
+      {% endmatch %}
+    </div>
+  </div>
+</header>
+
+<main id="main">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <span class="orb" aria-hidden="true"></span>
+      <div>
+        <strong>{{ layout.site_name }}</strong>
+        <p class="muted sm">{{ layout.tagline }}</p>
+      </div>
+    </div>
+    <div class="foot-cols">
+      <div>
+        <h4>Browse</h4>
+        <a href="/">Everything</a>
+        <a href="/search">Search people</a>
+        <a href="{{ layout.base }}/feed.json">JSON feed</a>
+        <a href="{{ layout.base }}/feed.xml">RSS</a>
+      </div>
+      <div>
+        <h4>Join</h4>
+        <a href="/app/#/join">Create a profile</a>
+        <a href="/app/#/login">Sign in</a>
+        <a href="/about">How it works</a>
+      </div>
+      <div>
+        <h4>Verticals</h4>
+        {% for n in layout.nav %}{% if loop.index < 6 %}<a href="/v/{{ n.slug }}">{{ n.label }}</a>{% endif %}{% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="wrap foot-bot">
+    <span class="muted sm">{{ layout.site_name }} — a directory, not an algorithm. No ads, no trackers, no third-party scripts.</span>
+  </div>
+</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

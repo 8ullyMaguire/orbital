@@ -1,0 +1,9 @@
+<a class="mcard" href="{{ m.url }}" style="--accent:{{ m.accent }}">
+  {{ m.avatar|safe }}
+  <span class="mcard-b">
+    <span class="mcard-t"><b>{{ m.display_name }}</b>{% if m.is_new %}<span class="tag-new">new</span>{% endif %}</span>
+    <span class="mcard-h">@{{ m.handle }}{% if m.verified %} <span class="tick" title="Bluesky verified">✓</span>{% endif %}</span>
+    {% if !m.tagline.is_empty() %}<span class="mcard-d">{{ m.tagline }}</span>{% endif %}
+  </span>
+  <span class="mcard-s">{{ m.stat }}</span>
+</a>

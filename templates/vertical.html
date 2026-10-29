@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ v.label }} — {{ layout.site_name }}{% endblock %}
+{% block description %}{{ v.description }} {% if v.members > 0 %}{{ v.members }} people in this vertical, ranked by distinct visitors.{% endif %}{% endblock %}
+{% block canonical %}{{ layout.base }}/v/{{ v.slug }}{% endblock %}
+{% block ogurl %}{{ layout.base }}/v/{{ v.slug }}{% endblock %}
+{% block ogtitle %}{{ v.label }} — {{ layout.site_name }}{% endblock %}
+{% block ogdesc %}{{ v.description }}{% endblock %}
+{% block head %}{% if v.nsfw %}<meta name="robots" content="noindex, nofollow">{% endif %}{% endblock %}
+{% block content %}
+<section class="vhead wrap" style="--accent:{{ v.accent }}">
+  <a class="crumb" href="/">← All verticals</a>
+  <div class="vhead-h">
+    <span class="vico vico-lg">{{ v.icon|safe }}</span>
+    <div>
+      <h1>{{ v.label }}</h1>
+      <p class="muted">{{ v.description }}</p>
+      <p class="sm meta">{{ v.members }} people{% if v.visitors_total > 0 %} · {{ v.visitors_total }} distinct visitors sent out{% endif %}</p>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <nav class="tabs" aria-label="Rankings">
+    {% for t in tabs %}<a class="tab{% if t.active %} on{% endif %}" href="{{ t.href }}">{{ t.label }}{% if t.count > 0 %}<span class="tab-n">{{ t.count }}</span>{% endif %}</a>{% endfor %}
+  </nav>
+
+  {% if active_tag.len() > 0 || tags.len() > 0 %}
+  <div class="chips">
+    {% if active_tag.len() > 0 %}<a class="chip chip-on" href="{{ clear_tag }}">#{{ active_tag }} ✕</a>{% endif %}
+    {% for t in tags %}{% if t.slug != active_tag %}<a class="chip" href="{{ t.href }}">#{{ t.slug }}<span class="chip-n">{{ t.count }}</span></a>{% endif %}{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if rows.len() == 0 %}
+  <div class="empty">
+    {% if tab == "trending" %}
+    <h3>No traffic measured yet</h3>
+    <p class="muted">Trending needs visitors in the last seven days and there are none yet, so the tab is hidden rather than padded with whoever joined last.</p>
+    {% else if tab == "curated" %}
+    <h3>Nothing curated here yet</h3>
+    <p class="muted">This is the editorial layer: someone has to choose. Check <a href="/v/{{ v.slug }}">Top</a> instead.</p>
+    {% else %}
+    <h3>This vertical is empty</h3>
+    <p class="muted">Nobody has claimed {{ v.label }} yet. <a href="/app/#/join">Be the first</a> and the leaderboard starts with you.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <ol class="rank">
+    {% for m in rows %}
+    <li class="row" style="--accent:{{ m.accent }}">
+      <span class="rank-n">{{ m.rank }}</span>
+      {{ m.avatar|safe }}
+      <div class="row-b">
+        <div class="row-t">
+          <a class="row-name" href="{{ m.url }}">{{ m.display_name }}</a>
+          <span class="row-h">@{{ m.handle }}{% if m.verified %} <span class="tick" title="Bluesky verified">✓</span>{% endif %}</span>
+          {% if m.is_new %}<span class="tag-new">new</span>{% endif %}
+          {% if m.role == "secondary" %}<span class="tag-sec" title="Listed here as a secondary vertical, ranked at 0.7×">secondary</span>{% endif %}
+        </div>
+        {% if !m.tagline.is_empty() %}<p class="row-d">{{ m.tagline }}</p>{% endif %}
+        {% if m.tags.len() > 0 %}<div class="row-tags">{% for t in m.tags %}<a class="tag" href="/v/{{ v.slug }}?tag={{ t }}">#{{ t }}</a>{% endfor %}</div>{% endif %}
+      </div>
+      <div class="row-s">
+        <b>{{ m.stat_value }}</b><span>{{ m.stat_label }}</span>
+      </div>
+      <a class="row-go" href="{{ m.url }}" aria-label="Open {{ m.display_name }}">→</a>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  <details class="embedbox">
+    <summary>Embed this leaderboard on your site</summary>
+    <p class="muted sm">Top 5 or Trending 5, live, with a join link. Paste this anywhere that accepts HTML:</p>
+    <pre><code>{{ embed_snippet }}</code></pre>
+    <p class="sm muted">Preview: <a href="{{ layout.base }}/v/{{ v.slug }}/embed?view={{ tab }}&count=5" target="_blank" rel="noopener">/v/{{ v.slug }}/embed?view={{ tab }}&amp;count=5</a></p>
+  </details>
+
+</div>
+{% endblock %}
