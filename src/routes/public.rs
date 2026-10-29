@@ -39,8 +39,17 @@ pub fn router() -> Router<AppState> {
         .route("/report", get(report).post(report_post))
 }
 
+/// Visibility is about the PRIMARY vertical, not about the adult flag. A member
+/// with a SFW primary and an adult secondary belongs on the SFW leaderboard (and
+/// their SFW card says nothing about the other listing); a member whose primary
+/// is the adult vertical belongs nowhere near it.
 pub(crate) fn visible(m: &MemberStat, is_nsfw: bool) -> bool {
-    is_nsfw || !m.nsfw_enabled
+    let adult = m.verticals.first().map(|v| v == "nsfw").unwrap_or(false);
+    if is_nsfw {
+        adult && m.trust_level >= 1
+    } else {
+        !adult
+    }
 }
 
 pub(crate) fn card(m: &MemberStat, base: &str, rank: usize, mode: StatMode, now: chrono::DateTime<Utc>) -> MemberCard {
@@ -1046,3 +1055,51 @@ pub async fn report_post(
 
 // ------------------------------------------------------------------ helpers
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn member(verticals: &[&str], trust: i16) -> MemberStat {
+        MemberStat {
+            id: Uuid::new_v4(),
+            handle: "h".into(),
+            display_name: "H".into(),
+            bio: String::new(),
+            accent: "#7c5cff".into(),
+            avatar_url: None,
+            trust_level: trust,
+            bsky_handle: None,
+            nsfw_enabled: verticals.contains(&"nsfw"),
+            created_at: chrono::Utc::now(),
+            last_active_at: chrono::Utc::now(),
+            role: "primary".into(),
+            visitors: 0,
+            visitors_7d: 0,
+            clicks: 0,
+            tags: Vec::new(),
+            verticals: verticals.iter().map(|v| v.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_sfw_primary_member_belongs_on_the_sfw_host_even_with_an_adult_secondary() {
+        let m = member(&["dev", "nsfw"], 2);
+        assert!(visible(&m, false), "a SFW-primary member must rank on the SFW host");
+    }
+
+    #[test]
+    fn an_adult_primary_member_never_shows_on_the_sfw_host() {
+        let m = member(&["nsfw", "dev"], 3);
+        assert!(!visible(&m, false), "the primary vertical decides, not the secondary list");
+    }
+
+    #[test]
+    fn the_adult_directory_shows_only_adult_members_with_trust() {
+        assert!(visible(&member(&["nsfw"], 2), true));
+        assert!(!visible(&member(&["nsfw"], 0), true), "TL0 stays hidden");
+        assert!(!visible(&member(&["dev", "nsfw"], 2), true), "not an adult primary");
+        assert!(!visible(&member(&["dev"], 2), true), "never in the adult list");
+    }
+}

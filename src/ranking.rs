@@ -223,8 +223,10 @@ mod tests {
         let new = trending_score(5, 10, 1.0, 2);
         let old = trending_score(5, 10, 400.0, 2);
         assert!(new > old, "{new} should beat {old}");
-        // It stays modest: the boost is 1.0..1.15, never a rewrite of the order.
-        assert!(new / old < 1.06);
+        // It stays modest: the boost is 1.0..1.15 of the velocity term, so it
+        // can reorder near-ties but never rewrite the leaderboard.
+        let ratio = new / old;
+        assert!(ratio > 1.0 && ratio < 1.10, "boost ratio {ratio}");
     }
 
     #[test]

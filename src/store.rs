@@ -32,6 +32,13 @@ const LINK_COLS_L: &str = "l.id, l.user_id, l.vertical_slug, l.url, l.label, l.i
 
 const VERTICAL_COLS: &str = "slug, label, description, icon, nsfw, sort, min_members";
 
+/// A member whose PRIMARY vertical is the adult one must never appear on the SFW
+/// host, even when they also list an SFW vertical as a secondary: that listing
+/// would disclose their adult membership. Written once and reused, because four
+/// restatements of a visibility rule are four different rules.
+const SFW_PRIMARY_ONLY: &str = "NOT EXISTS (SELECT 1 FROM user_verticals uv3 \
+     WHERE uv3.user_id = u.id AND uv3.role = 'primary' AND uv3.vertical_slug = 'nsfw')";
+
 /// Visitor and click stats computed **in one vertical's context**: a click
 /// recorded while the visitor was looking at /v/<slug> counts for that
 /// vertical, and a click with no vertical context counts everywhere (it came
@@ -344,8 +351,7 @@ pub async fn all_members(pool: &PgPool, include_nsfw: bool) -> Result<Vec<Member
         "SELECT u.id, u.handle, u.display_name, u.bio, u.accent, u.avatar_url, u.trust_level,
                 u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at, 'primary'::text AS role, {}
            FROM users u
-          WHERE u.hidden = false
-            AND ($1 OR u.nsfw_enabled = false)
+          WHERE u.hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})
           ORDER BY u.created_at DESC",
         member_stats("NULL::text")
     );
@@ -736,7 +742,7 @@ pub async fn search(
                 u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at, 'primary'::text AS role, {}
            FROM users u
           WHERE u.hidden = false
-            AND ($2 OR u.nsfw_enabled = false)
+            AND ($2 OR {SFW_PRIMARY_ONLY})
             AND (u.handle ILIKE $1 OR u.display_name ILIKE $1 OR u.bio ILIKE $1
                  OR EXISTS (SELECT 1 FROM tags t WHERE t.user_id = u.id AND t.tag_slug ILIKE $1)
                  OR EXISTS (SELECT 1 FROM links l WHERE l.user_id = u.id AND l.url ILIKE $1))
@@ -944,15 +950,16 @@ pub async fn curated_any(
 
 /// (listed members, outbound clicks) for the front page's honesty line.
 pub async fn totals(pool: &PgPool, include_nsfw: bool) -> Result<(i64, i64), AppError> {
-    let row = sqlx::query(
+    let sql = format!(
         "SELECT
            (SELECT count(*)::bigint FROM users u WHERE u.hidden = false
-              AND ($1 OR u.nsfw_enabled = false)) AS members,
+              AND ($1 OR {SFW_PRIMARY_ONLY})) AS members,
            (SELECT count(*)::bigint FROM source_hits sh
               JOIN users u ON u.id = sh.user_id
-             WHERE u.hidden = false AND ($1 OR u.nsfw_enabled = false)
-               AND sh.surface <> 'voided') AS clicks",
-    )
+             WHERE u.hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})
+               AND sh.surface <> 'voided') AS clicks"
+    );
+    let row = sqlx::query(&sql)
     .bind(include_nsfw)
     .fetch_one(pool)
     .await?;
@@ -963,12 +970,13 @@ pub async fn sitemap_entries(
     pool: &PgPool,
     include_nsfw: bool,
 ) -> Result<Vec<(String, chrono::DateTime<chrono::Utc>)>, AppError> {
-    let rows = sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+    let sql = format!(
         "SELECT handle, GREATEST(last_active_at, created_at) AS updated
-           FROM users
-          WHERE hidden = false AND ($1 OR nsfw_enabled = false)
-          ORDER BY created_at DESC",
-    )
+           FROM users u
+          WHERE hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})
+          ORDER BY created_at DESC"
+    );
+    let rows = sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(&sql)
     .bind(include_nsfw)
     .fetch_all(pool)
     .await?;
@@ -976,9 +984,10 @@ pub async fn sitemap_entries(
 }
 
 pub async fn member_count(pool: &PgPool, include_nsfw: bool) -> Result<i64, AppError> {
-    let row = sqlx::query(
-        "SELECT count(*)::bigint AS n FROM users WHERE hidden = false AND ($1 OR nsfw_enabled = false)",
-    )
+    let sql = format!(
+        "SELECT count(*)::bigint AS n FROM users u WHERE hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})"
+    );
+    let row = sqlx::query(&sql)
     .bind(include_nsfw)
     .fetch_one(pool)
     .await?;
