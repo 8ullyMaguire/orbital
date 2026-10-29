@@ -204,6 +204,10 @@ pub async fn me(State(st): State<AppState>, CurrentUser(user): CurrentUser) -> A
             "position": l.position, "click_count": l.click_count,
             "clicks_label": fmt_count(l.click_count),
             "vertical_slug": l.vertical_slug, "hidden": l.hidden,
+            // The member's own view of their health. The profile badge tells visitors; this
+            // tells the person who can actually fix it.
+            "last_status": l.last_status, "last_checked": l.last_checked,
+            "fail_count": l.fail_count, "failing": l.fail_count >= crate::health::FAIL_THRESHOLD,
         })).collect::<Vec<_>>(),
         "public_url": format!("{}/@{}", st.cfg.public_base, user.handle),
     })))

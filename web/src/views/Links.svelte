@@ -186,7 +186,14 @@
                 <button class="btn btn-ghost btn-sm" onclick={() => (editing = null)}>Cancel</button>
               </td>
             {:else}
-              <td>{#if l.label}{l.label}{:else}<span class="dim">(unlabelled)</span>{/if}</td>
+              <td>
+                {#if l.label}{l.label}{:else}<span class="dim">(unlabelled)</span>{/if}
+                {#if l.failing}
+                  <div class="xs" style="color:#ffb4a2">
+                    {l.last_status ? `HTTP ${l.last_status}` : 'no answer'} on the last {l.fail_count} checks
+                  </div>
+                {/if}
+              </td>
               <td class="dim xs mono" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 {l.url}
               </td>
