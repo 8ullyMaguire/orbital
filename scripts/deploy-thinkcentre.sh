@@ -98,7 +98,42 @@ PrivateTmp=true
 [Install]
 WantedBy=default.target
 UNIT
-echo "unit written"
+
+# The link checker: a directory of outbound links rots silently, so something has to ask whether
+# they still resolve. Oneshot, daily. No restart policy: if a run fails the next one is a day away
+# and the failure belongs in the journal, not in a restart loop.
+cat > "$HOME/.config/systemd/user/orbital-checklinks.service" <<'UNIT'
+[Unit]
+Description=Orbital — check every outbound link and record which ones still answer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/personal/documents/code/rust/orbital
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+EnvironmentFile=%h/.config/systemd/user/orbital-app.env
+ExecStart=%h/.cargo-target/orbital/release/orbital check-links --limit 500
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-checklinks.timer" <<'UNIT'
+[Unit]
+Description=Daily Orbital link check
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl --user daemon-reload
+systemctl --user enable --now orbital-checklinks.timer
+echo "unit written; link checker timer enabled"
 REMOTE
 
 say "5/7 nginx site"
