@@ -242,3 +242,44 @@ deduplication depends on it.
   with `Retry-After`) absorbs the abuse.
 - View counts and referrer attribution never see API reads. That is correct — an API consumer is not
   a visitor — but it means the numbers on a profile describe the site, not the API.
+
+## D14 — The anonymous preference vector lives in Postgres, not in a cookie
+
+**Context.** SPEC v3 §5 stores the visitor's discovery weights in "an encrypted cookie, 30-day TTL"
+and keeps a `PreferenceWeight` table whose identity column is a nullable session hash. Both halves of
+that are worse than they look. A cookie is a client-controlled blob: signing it correctly is real
+cryptography we would have to write twice (once to sign, once to verify), and anything we get wrong
+is a viewer choosing their own ranking weights at best. It is also size-capped — roughly forty tag
+weights before browsers start dropping it, which is a silent failure at exactly the point the feature
+becomes interesting.
+
+**Decision.** One table, two owners: `preference_weights(owner_kind ∈ {user, visitor}, owner_id, tag,
+weight, source)`. The visitor's `owner_id` is a SHA-256 of the existing `orbital_v` cookie, truncated
+to 32 hex characters. The cookie keeps doing the only thing it ever did — naming a returning browser.
+Nothing about the preference vector is trusted from the client, so nothing needs encrypting.
+
+**Consequences.**
+
+- A visitor who clears cookies loses their lens, and that is the correct amount of loss: the same is
+  true of the visitor id itself, and `visitor_profiles` already assumed it.
+- Members and anonymous visitors share one code path — `prefs::load` differs only in which owner it
+  reads, so "my weights" and "your weights" cannot drift apart.
+- The hashed owner is what makes the audience spelling safe: `source_hits.viewer_hash` and
+  `preference_weights.owner_id` join, and no query ever returns a cookie value.
+- Personalisation is not applied until the fifth page view unless the visitor has explicit weights.
+  A list that reshuffles under someone who has seen four pages reads as broken, not tailored.
+
+## D15 — The tuner is a form, not a widget
+
+**Context.** The obvious implementation is a slider panel that `fetch`es `/api/prefs` on mouse-up.
+
+**Decision.** `<details>` + `<form method=post action=/prefs>`, sliders included, no JavaScript.
+
+**Consequences.**
+
+- It works before the SPA has loaded, with JavaScript disabled, and in a text browser — which
+  matters because the tuner is the front door for people who have not signed up yet.
+- Server-side render means the weights are the ones the ranking will use: there is no second
+  representation to drift.
+- The cost is a page reload on Apply. For a control a person touches once or twice, that is not a
+  cost worth a build step.

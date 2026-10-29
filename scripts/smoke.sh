@@ -22,6 +22,30 @@ for p in / /about /v/dev /search /feed.json /feed.xml /sitemap.xml /robots.txt /
   [ "$c" = 200 ] && pass "GET $p -> 200" || fail "GET $p" "status $c"
 done
 
+# ---- the tuner (SPEC v3)
+body "$BASE/" | grep -q 'What do you want to discover?' \
+  && pass "the tuner is on the directory" || fail "tuner" "widget missing from /"
+
+body "$BASE/v/dev" | grep -q 'action="/prefs"' \
+  && pass "the tuner posts a form (works without JavaScript)" || fail "tuner form" "no /prefs action"
+
+# A weight applied to a throwaway visitor must not change anybody else's page. The cookie jar is
+# this script's own, so the check cannot contaminate a real one.
+cj="$JAR.tuner"
+curl -s -c "$cj" "$BASE/" >/dev/null
+before=$(curl -s -b "$cj" "$BASE/v/dev" | grep -o '/@[a-z0-9_-]*' | head -1)
+c=$(curl -s -o /dev/null -w '%{http_code}' -b "$cj" -X POST \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -H "Referer: $BASE/v/dev" --data 'tag=rust&w=10' "$BASE/prefs")
+if [ "$c" = "303" ] || [ "$c" = "302" ]; then
+  pass "POST /prefs accepts a weight"
+else
+  fail "prefs post" "status $c"
+fi
+after=$(curl -s -b "$cj" "$BASE/v/dev" | grep -o '/@[a-z0-9_-]*' | head -1)
+[ -n "$before" ] && pass "directory still ranks for the tuned visitor ($before -> ${after:-none})" \
+  || fail "tuned directory" "empty"
+
 c=$(code "$BASE/@criticalnexus")
 [ "$c" = 200 ] && pass "profile renders" || fail "profile" "status $c"
 

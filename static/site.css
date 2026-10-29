@@ -548,3 +548,38 @@ p { margin: 0 0 1em; }
 .linkbtn-dead .lb-t b { text-decoration: line-through dotted rgba(255,255,255,.35); }
 .lb-dead { display: block; font-size: 11px; font-style: normal; color: #ffb4a2; margin-top: 2px; }
 .ring-enter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0 6px; }
+
+/* The tuner: a form, not a widget. It works with JavaScript off because it is a form. */
+.tuner {
+  margin: 18px auto;
+  max-width: 720px;
+  border: 1px solid var(--line, #24262c);
+  border-radius: 12px;
+  background: var(--panel, #14161a);
+  padding: 0 16px;
+}
+.tuner > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+.tuner > summary::-webkit-details-marker { display: none; }
+.tuner > summary::before { content: "▸"; color: var(--dim, #8a8f99); }
+.tuner[open] > summary::before { content: "▾"; }
+.tuner-hint { margin-left: auto; font-weight: 400; font-size: 11px; color: var(--dim, #8a8f99); text-transform: uppercase; letter-spacing: .08em; }
+.tuner-form { padding-bottom: 14px; }
+.tuner-row { display: grid; grid-template-columns: 140px 1fr 28px; gap: 10px; align-items: center; margin: 7px 0; font-size: 13px; }
+.tuner-row input[type="range"] { width: 100%; accent-color: var(--accent, #7c9cff); }
+.tuner-row output { text-align: right; color: var(--dim, #8a8f99); font-variant-numeric: tabular-nums; }
+.tuner-tag { color: var(--fg, #e7e9ee); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tuner-new { grid-template-columns: 140px 1fr; }
+.tuner-new input[type="text"] {
+  background: #0f1115; border: 1px solid var(--line, #24262c); color: inherit;
+  border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px;
+}
+.tuner-actions { display: flex; gap: 8px; margin-top: 12px; }

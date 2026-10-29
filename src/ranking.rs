@@ -47,6 +47,24 @@ pub fn cosine(a: &[String], b: &[String]) -> f64 {
     shared / ((a.len() as f64).sqrt() * (b.len() as f64).sqrt())
 }
 
+/// How much of what the viewer asked for this member actually is.
+///
+/// `Σ(w[t] · has_tag[t]) / Σ w[t]` — a weighted share, so 1.0 means "every tag I care about is on
+/// this profile" regardless of how many weights there are. Zero for a viewer with no weights:
+/// not-applicable and not-relevant must not look the same, but both contribute nothing.
+pub fn tag_relevance(tags: &[String], weights: &[(String, f64)]) -> f64 {
+    let total: f64 = weights.iter().map(|(_, w)| w.max(0.0)).sum();
+    if total <= 0.0 || tags.is_empty() {
+        return 0.0;
+    }
+    let hit: f64 = weights
+        .iter()
+        .filter(|(t, w)| *w > 0.0 && tags.iter().any(|tag| tag == t))
+        .map(|(_, w)| *w)
+        .sum();
+    (hit / total).clamp(0.0, 1.0)
+}
+
 pub fn recency(last_active: DateTime<Utc>, now: DateTime<Utc>) -> f64 {
     let days = (now - last_active).num_seconds().max(0) as f64 / 86_400.0;
     0.5f64.powf(days / 30.0)
@@ -75,42 +93,92 @@ pub fn vertical_match_full(candidate_verticals: &[String], context: Option<&str>
     }
 }
 
-/// The sidebar formula from the spec, in the order it was written.
+/// The sidebar formula from v3: the viewer's stated taste dominates, the page owner gives context,
+/// and the hub owner's pull is a light hand (0.15, down from 0.35).
+///
+/// The viewer term is their **weights** when they have any, and their own tags when they do not —
+/// a signed-in member who never opened the tuner still gets a sidebar about them rather than a
+/// sidebar about whoever happens to be popular. The six terms sum to 1 in both cases, so a score
+/// means the same thing whether or not the viewer has tuned anything.
 pub fn similarity(
     viewer_tags: &[String],
     owner_tags: &[String],
+    hub_tags: &[String],
+    viewer_weights: &[(String, f64)],
     candidate: &MemberStat,
     context: Option<&str>,
     now: DateTime<Utc>,
 ) -> f64 {
-    0.35 * cosine(&candidate.tags, viewer_tags)
+    let relevance = if viewer_weights.is_empty() {
+        cosine(&candidate.tags, viewer_tags)
+    } else {
+        tag_relevance(&candidate.tags, viewer_weights)
+    };
+    0.40 * relevance
         + 0.25 * cosine(&candidate.tags, owner_tags)
-        + 0.20 * vertical_match_full(&candidate.verticals, context)
-        + 0.10 * recency(candidate.last_active_at, now)
-        + 0.10 * (candidate.trust_level as f64 / 3.0)
+        + 0.15 * cosine(&candidate.tags, hub_tags)
+        + 0.10 * vertical_match_full(&candidate.verticals, context)
+        + 0.05 * recency(candidate.last_active_at, now)
+        + 0.05 * (candidate.trust_level as f64 / 3.0)
 }
 
-pub fn rank_top(mut members: Vec<MemberStat>) -> Vec<MemberStat> {
-    members.sort_by(|a, b| {
-        b.visitors
-            .cmp(&a.visitors)
-            .then_with(|| b.clicks.cmp(&a.clicks))
-            .then_with(|| a.created_at.cmp(&b.created_at))
+/// Top: 60% all-time attention, 40% "is this what the viewer asked for".
+///
+/// With no viewer weights the second term is absent and the ordering is exactly the click ranking
+/// it has always been — the regression this function is tested against.
+pub fn rank_top(members: Vec<MemberStat>, weights: &[(String, f64)]) -> Vec<MemberStat> {
+    if weights.is_empty() {
+        let mut members = members;
+        members.sort_by(|a, b| {
+            b.visitors
+                .cmp(&a.visitors)
+                .then_with(|| b.clicks.cmp(&a.clicks))
+                .then_with(|| a.created_at.cmp(&b.created_at))
+        });
+        return members;
+    }
+    let max_clicks = members.iter().map(|m| m.clicks).max().unwrap_or(0).max(1) as f64;
+    let mut scored: Vec<(f64, MemberStat)> = members
+        .into_iter()
+        .map(|m| {
+            let clicks = m.clicks as f64 / max_clicks;
+            let rel = tag_relevance(&m.tags, weights);
+            (0.6 * clicks + 0.4 * rel, m)
+        })
+        .collect();
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.1.handle.cmp(&b.1.handle))
     });
-    members
+    scored.into_iter().map(|(_, m)| m).collect()
 }
 
-pub fn rank_trending(members: Vec<MemberStat>, now: DateTime<Utc>) -> Vec<MemberStat> {
+pub fn rank_trending(
+    members: Vec<MemberStat>,
+    now: DateTime<Utc>,
+    weights: &[(String, f64)],
+) -> Vec<MemberStat> {
     let max_7d = members.iter().map(|m| m.visitors_7d).max().unwrap_or(0);
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
         .map(|m| {
-            let s = trending_score(
-                m.visitors_7d,
-                max_7d,
-                age_days(m.created_at, now),
-                m.trust_level,
-            );
+            let s = if weights.is_empty() {
+                trending_score(
+                    m.visitors_7d,
+                    max_7d,
+                    age_days(m.created_at, now),
+                    m.trust_level,
+                )
+            } else {
+                let velocity = if max_7d > 0 {
+                    0.5 * (m.visitors_7d as f64 / max_7d as f64)
+                } else {
+                    0.0
+                };
+                let boost = 0.1 * (1.0 + 0.15 / ((age_days(m.created_at, now) + 2.0).log2()));
+                0.3 * tag_relevance(&m.tags, weights) + velocity + boost + 0.1 * trust_mult(m.trust_level)
+            };
             (s, m)
         })
         .filter(|(s, _)| *s > 0.0)
@@ -119,9 +187,30 @@ pub fn rank_trending(members: Vec<MemberStat>, now: DateTime<Utc>) -> Vec<Member
     scored.into_iter().map(|(_, m)| m).collect()
 }
 
-pub fn rank_new(mut members: Vec<MemberStat>) -> Vec<MemberStat> {
-    members.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    members
+/// New: recency first, but a fresh profile matching the viewer rises above one that does not.
+pub fn rank_new(
+    members: Vec<MemberStat>,
+    now: DateTime<Utc>,
+    weights: &[(String, f64)],
+) -> Vec<MemberStat> {
+    if weights.is_empty() {
+        let mut members = members;
+        members.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        return members;
+    }
+    let mut scored: Vec<(f64, MemberStat)> = members
+        .into_iter()
+        .map(|m| {
+            let rec = 0.5f64.powf(age_days(m.created_at, now) / 14.0);
+            (0.7 * rec + 0.3 * tag_relevance(&m.tags, weights), m)
+        })
+        .collect();
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.created_at.cmp(&a.1.created_at))
+    });
+    scored.into_iter().map(|(_, m)| m).collect()
 }
 
 /// Deterministic 0..1 from a string. Used for the ring's daily noise, so the
@@ -155,6 +244,39 @@ pub fn ring<'a>(
             .then_with(|| a.1.handle.cmp(&b.1.handle))
     });
     scored.into_iter().map(|(_, m)| m).collect()
+}
+
+/// The preference-aware ring step: where `next` goes for *this* viewer.
+///
+/// 0.6 what the viewer asked for, 0.3 continuity from where they are now, 0.1 novelty (an
+/// unvisited member). With no weights it returns `None` and the caller falls back to ring order.
+pub fn ring_next<'a>(
+    members: &'a [MemberStat],
+    current: Uuid,
+    weights: &[(String, f64)],
+    visited: &std::collections::HashSet<Uuid>,
+) -> Option<&'a MemberStat> {
+    if weights.is_empty() {
+        return None;
+    }
+    let anchor = members.iter().find(|m| m.id == current)?;
+    let best = members
+        .iter()
+        .filter(|m| m.id != current)
+        .map(|m| {
+            let novelty = if visited.contains(&m.id) { 0.0 } else { 1.0 };
+            let score = 0.6 * tag_relevance(&m.tags, weights)
+                + 0.3 * cosine(&m.tags, &anchor.tags)
+                + 0.1 * novelty;
+            (score, m)
+        })
+        .max_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                // Deterministic tie-break: a ring that reshuffles on equal scores feels random.
+                .then_with(|| b.1.handle.cmp(&a.1.handle))
+        });
+    best.map(|(_, m)| m)
 }
 
 pub fn neighbours<'a>(
@@ -206,6 +328,7 @@ mod tests {
         let out = rank_trending(
             vec![member("quiet", 0, 2, 2, &[]), member("loud", 9, 400, 2, &[])],
             now,
+            &[],
         );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].handle, "loud");
@@ -214,7 +337,7 @@ mod tests {
     #[test]
     fn trending_is_empty_when_nobody_has_traffic() {
         let now = Utc::now();
-        let out = rank_trending(vec![member("a", 0, 1, 0, &[])], now);
+        let out = rank_trending(vec![member("a", 0, 1, 0, &[])], now, &[]);
         assert!(out.is_empty(), "a zero-traffic vertical must hide the tab");
     }
 
@@ -289,5 +412,75 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 1, 31, 0, 0, 0).unwrap();
         let thirty = now - Duration::days(30);
         assert!((recency(thirty, now) - 0.5).abs() < 1e-6);
+    
+    #[test]
+    fn relevance_is_a_weighted_share_and_zero_without_weights() {
+        let tags = vec!["chiptune".to_string(), "godot".to_string()];
+        assert_eq!(tag_relevance(&tags, &[]), 0.0, "no weights, no opinion");
+        assert_eq!(
+            tag_relevance(&tags, &[("chiptune".into(), 1.0)]),
+            1.0,
+            "one asked-for tag, present"
+        );
+        assert_eq!(
+            tag_relevance(&tags, &[("jazz".into(), 1.0)]),
+            0.0,
+            "asked for something they do not have"
+        );
+        // Half the weight is on a tag the member has.
+        let half = tag_relevance(&tags, &[("chiptune".into(), 0.5), ("jazz".into(), 0.5)]);
+        assert!((half - 0.5).abs() < 1e-9, "got {half}");
     }
+
+    #[test]
+    fn the_tuner_lifts_a_matching_member_above_a_busier_one() {
+        let mut a = member("quiet-chiptune", 1, 40, 2, &["chiptune"]);
+        a.clicks = 1;
+        let mut b = member("busy-podcast", 1, 40, 2, &["podcast"]);
+        b.clicks = 100;
+        let weights = vec![("chiptune".to_string(), 1.0)];
+
+        let plain = rank_top(vec![a.clone(), b.clone()], &[]);
+        assert_eq!(plain[0].handle, "busy-podcast", "clicks decide without a lens");
+
+        let tuned = rank_top(vec![a, b], &weights);
+        assert_eq!(tuned[0].handle, "quiet-chiptune", "the lens decides with one");
+    }
+
+    #[test]
+    fn no_weights_reproduces_the_old_ordering_exactly() {
+        let mut a = member("a", 10, 5, 2, &["x"]);
+        a.clicks = 5;
+        let mut b = member("b", 10, 5, 2, &["x"]);
+        b.clicks = 90;
+        let mut c = member("c", 10, 5, 2, &["x"]);
+        c.clicks = 5;
+        let order = rank_top(vec![a, b, c], &[]);
+        assert_eq!(
+            order.iter().map(|m| m.handle.as_str()).collect::<Vec<_>>(),
+            vec!["b", "c", "a"],
+            "clicks first, then the older account, as before"
+        );
+    }
+
+    #[test]
+    fn the_ring_step_prefers_what_the_viewer_asked_for() {
+        let start = member("start", 0, 40, 2, &["chiptune"]);
+        let podcast = member("podcast-person", 0, 40, 2, &["podcast"]);
+        let chiptune = member("chiptune-person", 0, 40, 2, &["chiptune"]);
+        let all = vec![start.clone(), podcast.clone(), chiptune.clone()];
+
+        // No weights: no opinion, and the caller keeps its ring order.
+        assert!(ring_next(&all, start.id, &[], &Default::default()).is_none());
+
+        let next = ring_next(
+            &all,
+            start.id,
+            &[("chiptune".to_string(), 1.0)],
+            &Default::default(),
+        )
+        .expect("a personalised step");
+        assert_eq!(next.handle, "chiptune-person");
+    }
+}
 }

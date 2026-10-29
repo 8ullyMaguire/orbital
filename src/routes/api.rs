@@ -513,6 +513,22 @@ pub async fn analytics(
     let (series, top_links, by_surface, by_vertical, visitors, clicks) =
         store::analytics(&st.pool, user.id, days).await?;
     let by_referrer = store::referrer_breakdown(&st.pool, user.id, days).await?;
+    // What the people who actually clicked care about, bucketed so a member reads a shape rather
+    // than a decimal. Aggregates only: no visitor id leaves this query.
+    let audience: Vec<serde_json::Value> = store::audience_tags(&st.pool, user.id, 12)
+        .await?
+        .into_iter()
+        .map(|(tag, mean, n)| {
+            let strength = if mean >= 0.6 {
+                "strong"
+            } else if mean >= 0.3 {
+                "moderate"
+            } else {
+                "weak"
+            };
+            serde_json::json!({ "tag": tag, "strength": strength, "mean": (mean * 100.0).round() / 100.0, "visitors": n })
+        })
+        .collect();
     let views: i64 = series.iter().map(|d| d.views).sum();
     Ok(Json(json!({
         "days": days,
@@ -529,6 +545,7 @@ pub async fn analytics(
         // Which network sent the visitor. The surface says which of our pages earned the click;
         // this says whether the announcement on Bluesky or the one on Mastodon actually worked.
         "by_referrer": by_referrer,
+        "audience_tags": audience,
     })))
 }
 

@@ -6,6 +6,7 @@ pub mod error;
 pub mod health;
 pub mod html;
 pub mod models;
+pub mod prefs;
 pub mod ranking;
 pub mod render;
 pub mod routes;
@@ -54,6 +55,7 @@ pub async fn build_router(state: AppState) -> Router {
         .merge(routes::api::router())
         .merge(routes::apiv1::router())
         .merge(routes::track::router())
+        .merge(routes::prefs::router())
         .merge(routes::assets::router())
         .route("/healthz", axum::routing::get(healthz))
         .layer(axum::middleware::from_fn_with_state(

@@ -1,0 +1,25 @@
+<details class="tuner"{% if tuner.active %} open{% endif %}>
+  <summary><span>What do you want to discover?</span><span class="tuner-hint">{% if tuner.active %}tuned{% else %}optional{% endif %}</span></summary>
+  <form method="post" action="/prefs" class="tuner-form">
+    <p class="sm muted">Drag a tag up to see more of it. This changes the order of these lists for you — not for anyone else.</p>
+    {% for r in tuner.rows %}
+    <label class="tuner-row">
+      <span class="tuner-tag">#{{ r.tag }}</span>
+      <input type="range" min="0" max="10" step="1" value="{{ r.weight }}" name="w" aria-label="{{ r.tag }} weight">
+      <input type="hidden" name="tag" value="{{ r.tag }}">
+      <output>{{ r.weight }}</output>
+    </label>
+    {% endfor %}
+    <label class="tuner-row tuner-new">
+      <input type="text" name="new_tag" list="tuner-tags" placeholder="add a tag…" maxlength="40" aria-label="A tag to discover">
+      <input type="range" min="0" max="10" step="1" value="5" name="new_w" aria-label="Weight for the new tag">
+    </label>
+    <datalist id="tuner-tags">
+      {% for s in tuner.suggestions %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+    <div class="tuner-actions">
+      <button class="btn btn-sm" type="submit">Apply</button>
+      {% if tuner.active %}<button class="btn btn-sm btn-ghost" type="submit" formaction="/prefs/reset">Reset</button>{% endif %}
+    </div>
+  </form>
+</details>

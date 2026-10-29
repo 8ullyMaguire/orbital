@@ -98,6 +98,9 @@ pub async fn click(
         q.p,
         &hash,
         referrer_host(&headers).as_deref().filter(|h| !h.ends_with("polarisocial.xyz")),
+        // The hashed visitor id: this is what lets a member be told what their audience cares
+        // about without any visitor id being stored in the clear.
+        Some(&crate::prefs::visitor_hash(&vid)),
     )
     .await
     {

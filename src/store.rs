@@ -581,11 +581,12 @@ pub async fn record_click(
     position: Option<i32>,
     session_hash: &str,
     referrer_host: Option<&str>,
+    viewer_hash: Option<&str>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     sqlx::query(
-        "INSERT INTO source_hits (user_id, link_id, surface, vertical_context, position, session_hash, referrer_host)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO source_hits (user_id, link_id, surface, vertical_context, position, session_hash, referrer_host, viewer_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(user_id)
     .bind(link_id)
@@ -594,6 +595,7 @@ pub async fn record_click(
     .bind(position)
     .bind(session_hash)
     .bind(referrer_host)
+    .bind(viewer_hash)
     .execute(&mut *tx)
     .await?;
     if let Some(link_id) = link_id {
@@ -1006,8 +1008,8 @@ pub async fn standing(
             .filter(|m| if v.nsfw { m.nsfw_enabled } else { m.verticals.first().map(|p| p != "nsfw").unwrap_or(true) })
             .collect();
         let total = members.len() as i64;
-        let top = crate::ranking::rank_top(members.clone());
-        let trending = crate::ranking::rank_trending(members.clone(), now);
+        let top = crate::ranking::rank_top(members.clone(), &[]);
+        let trending = crate::ranking::rank_trending(members.clone(), now, &[]);
         let me = members.iter().find(|m| m.id == user_id);
         out.push(crate::models::Standing {
             label: v.label.clone(),
@@ -1098,4 +1100,192 @@ pub async fn referrer_breakdown(
     .bind(days)
     .fetch_all(pool)
     .await?)
+}
+
+// ------------------------------------------------------------ preferences
+
+/// A viewer's weights: explicit entries first, then passive ones decayed by age.
+///
+/// Explicit wins on collision rather than adding: a slider the person moved is a statement, and a
+/// click they made three weeks ago must not outvote it.
+pub async fn prefs(
+    pool: &PgPool,
+    owner_kind: &str,
+    owner_id: &str,
+) -> Result<Vec<(String, f64)>, AppError> {
+    // Casts are not decoration: `weight` is a real (float4) and EXTRACT returns numeric, and sqlx
+    // refuses to decode either into f64 at runtime. The failure mode is a ColumnDecode that a
+    // caller is tempted to swallow, which turns every viewer into "no preferences".
+    let rows: Vec<(String, f64, String, f64)> = sqlx::query_as(
+        "SELECT tag_slug, weight::float8, source,
+                (EXTRACT(EPOCH FROM (now() - updated_at)) / 86400.0)::float8
+           FROM preference_weights
+          WHERE owner_kind = $1 AND owner_id = $2",
+    )
+    .bind(owner_kind)
+    .bind(owner_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut out: std::collections::HashMap<String, (f64, bool)> = std::collections::HashMap::new();
+    for (tag, weight, source, age_days) in rows {
+        let explicit = source == "explicit";
+        let w = if explicit {
+            weight
+        } else {
+            crate::prefs::decayed(weight, age_days)
+        };
+        match out.get(&tag) {
+            Some((_, true)) if !explicit => {}
+            _ => {
+                out.insert(tag, (w, explicit));
+            }
+        }
+    }
+    let mut weights: Vec<(String, f64)> = out
+        .into_iter()
+        .map(|(tag, (w, _))| (tag, w))
+        .filter(|(_, w)| *w > 0.001)
+        .collect();
+    weights.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    Ok(weights)
+}
+
+/// Replace a viewer's explicit weights. An empty list clears them; weight 0 deletes one entry.
+pub async fn set_explicit_prefs(
+    pool: &PgPool,
+    owner_kind: &str,
+    owner_id: &str,
+    entries: &[(String, f64)],
+) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM preference_weights WHERE owner_kind = $1 AND owner_id = $2")
+        .bind(owner_kind)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await?;
+    for (tag, weight) in entries {
+        if *weight <= 0.0 {
+            continue;
+        }
+        sqlx::query(
+            "INSERT INTO preference_weights (owner_kind, owner_id, tag_slug, weight, source, updated_at)
+             VALUES ($1, $2, $3, $4, 'explicit', now())
+             ON CONFLICT (owner_kind, owner_id, tag_slug)
+             DO UPDATE SET weight = EXCLUDED.weight, source = 'explicit', updated_at = now()",
+        )
+        .bind(owner_kind)
+        .bind(owner_id)
+        .bind(tag)
+        .bind(*weight as f32)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Add passive signal, capped at 1.0, without touching tags the viewer set explicitly.
+pub async fn accumulate_passive(
+    pool: &PgPool,
+    visitor_hash: &str,
+    signal: &[(String, f64)],
+) -> Result<(), AppError> {
+    for (tag, delta) in signal {
+        sqlx::query(
+            "INSERT INTO preference_weights (owner_kind, owner_id, tag_slug, weight, source, updated_at)
+             VALUES ('visitor', $1, $2, LEAST($3::real, 1.0), 'passive', now())
+             ON CONFLICT (owner_kind, owner_id, tag_slug)
+             DO UPDATE SET weight = LEAST(preference_weights.weight + EXCLUDED.weight, 1.0),
+                           updated_at = now()
+              WHERE preference_weights.source = 'passive'",
+        )
+        .bind(visitor_hash)
+        .bind(tag)
+        .bind(*delta as f32)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Count a page view. Returns the new total, which is what decides whether personalisation applies.
+pub async fn touch_visitor(pool: &PgPool, visitor_hash: &str) -> Result<i64, AppError> {
+    // `pages_visited` is an int4 in the schema; decoding it as i64 fails at runtime with a
+    // ColumnDecode, which a caller that ignores errors turns into "no preferences, ever".
+    let row: (i32,) = sqlx::query_as(
+        "INSERT INTO visitor_profiles (visitor_hash, pages_visited) VALUES ($1, 1)
+         ON CONFLICT (visitor_hash)
+         DO UPDATE SET pages_visited = visitor_profiles.pages_visited + 1, last_seen_at = now()
+         RETURNING pages_visited",
+    )
+    .bind(visitor_hash)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0 as i64)
+}
+
+pub async fn visitor_pages(pool: &PgPool, visitor_hash: &str) -> Result<i64, AppError> {
+    let row: Option<(i32,)> =
+        sqlx::query_as("SELECT pages_visited FROM visitor_profiles WHERE visitor_hash = $1")
+            .bind(visitor_hash)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|r| r.0 as i64).unwrap_or(0))
+}
+
+/// What the people who clicked this member's links care about, strongest first.
+///
+/// Aggregated only: the query never returns a visitor id, and the mean is bucketed by the caller.
+pub async fn audience_tags(
+    pool: &PgPool,
+    user_id: Uuid,
+    limit: i64,
+) -> Result<Vec<(String, f64, i64)>, AppError> {
+    Ok(sqlx::query_as(
+        "WITH audience AS (
+             SELECT DISTINCT viewer_hash FROM source_hits
+              WHERE user_id = $1 AND viewer_hash IS NOT NULL AND surface <> 'voided'
+         )
+         SELECT pw.tag_slug, avg(pw.weight)::float8, count(*)::bigint
+           FROM preference_weights pw
+           JOIN audience a ON a.viewer_hash = pw.owner_id
+          WHERE pw.owner_kind = 'visitor'
+          GROUP BY 1
+          ORDER BY 2 DESC, 3 DESC, 1
+          LIMIT $2",
+    )
+    .bind(user_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Tags of the hub owner: the gravitational-pull term in the sidebar, now a light hand.
+pub async fn hub_tags(pool: &PgPool) -> Result<Vec<String>, AppError> {
+    let row: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM users WHERE is_owner = true ORDER BY created_at LIMIT 1")
+            .fetch_optional(pool)
+            .await?;
+    match row {
+        Some((id,)) => tags_of(pool, id).await,
+        None => Ok(Vec::new()),
+    }
+}
+
+/// The tags people actually carry, most used first: the tuner's suggestion list.
+pub async fn popular_tags(pool: &PgPool, limit: i64) -> Result<Vec<String>, AppError> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT t.tag_slug FROM tags t JOIN users u ON u.id = t.user_id
+          WHERE u.hidden = false
+          GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
 }

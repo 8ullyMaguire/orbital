@@ -146,6 +146,23 @@ A click records the host of its `Referer`, never the path, and never our own hos
 `GET /api/analytics` returns `by_referrer`, which is the only way to tell whether an announcement
 on one network did anything.
 
+## Personalisation (SPEC v3)
+
+Every visitor — signed in or not — can say what they want to discover, and that lens reorders Top,
+Trending, New, the similar-profiles sidebar and the webring step for them alone. It is stored as
+`tag → weight` per member or per anonymous visitor, explicit weights never decay, passive ones
+(browsing) fade with a 30-day half-life, and passive personalisation does not engage until the fifth
+page view.
+
+```
+GET  /            the tuner sits above the vertical grid
+POST /prefs       tag=<slug>&w=<0..10> pairs, plus new_tag/new_w; redirects back
+POST /prefs/reset clears the explicit weights
+```
+
+The model is in `docs/SPEC-V3.md`, the implementation plan in `docs/PLAN-V3.md`, the storage decision
+in `docs/DECISIONS.md` D14, and why it is a plain form in D15.
+
 ## Public read API
 
 `/api/v1` is read-only, needs no account, and returns what the pages show — nothing more.

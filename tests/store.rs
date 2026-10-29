@@ -108,3 +108,33 @@ async fn the_test_config_never_points_at_a_real_host(pool: PgPool) {
     assert!(!cfg.secure_cookies);
     let _ = pool;
 }
+
+#[sqlx::test]
+async fn preference_weights_round_trip_through_the_store(pool: PgPool) {
+    // The decode is the part that breaks silently (float4/numeric into f64), so this asserts the
+    // values come back as written, from both sources, with explicit winning on collision.
+    orbital::store::set_explicit_prefs(
+        &pool,
+        "visitor",
+        "hash-1",
+        &[("chiptune".to_string(), 1.0), ("godot".to_string(), 0.4)],
+    )
+    .await
+    .unwrap();
+    orbital::store::accumulate_passive(
+        &pool,
+        "hash-1",
+        &[("chiptune".to_string(), 0.3), ("jazz".to_string(), 0.2)],
+    )
+    .await
+    .unwrap();
+
+    let weights = orbital::store::prefs(&pool, "visitor", "hash-1").await.unwrap();
+    let map: std::collections::HashMap<&str, f64> =
+        weights.iter().map(|(t, w)| (t.as_str(), *w)).collect();
+
+    assert!((map["chiptune"] - 1.0).abs() < 1e-6, "explicit wins, unreduced by passive");
+    assert!((map["godot"] - 0.4).abs() < 1e-6);
+    assert!((map["jazz"] - 0.2).abs() < 1e-6);
+    assert_eq!(weights[0].0, "chiptune", "strongest first");
+}

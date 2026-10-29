@@ -197,6 +197,7 @@ pub struct HomeTemplate {
     pub total_clicks: i64,
     pub quick: Vec<(String, String)>,
     pub q: String,
+    pub tuner: crate::prefs::TunerView,
 }
 
 // ------------------------------------------------------------------ vertical
@@ -237,6 +238,7 @@ pub struct VerticalTemplate {
     pub active_tag: String,
     pub clear_tag: String,
     pub embed_snippet: String,
+    pub tuner: crate::prefs::TunerView,
 }
 
 // ------------------------------------------------------------------ profile

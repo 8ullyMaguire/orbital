@@ -70,13 +70,26 @@ pub struct HomeQuery {
     pub q: String,
 }
 
+/// The weights that apply to this request. A signed-in member's own, otherwise the anonymous
+/// visitor's; empty when personalisation has not kicked in yet (the warm-up rule lives in
+/// `prefs::ViewerPrefs::ranking`).
+async fn viewer_weights(st: &AppState, vid: &str, user: Option<&User>) -> Vec<(String, f64)> {
+    let loaded = match user {
+        Some(u) => crate::prefs::load_member(&st.pool, u.id).await,
+        None => crate::prefs::load(&st.pool, vid).await,
+    };
+    loaded.map(|v| v.ranking().to_vec()).unwrap_or_default()
+}
+
 pub async fn home(
     State(st): State<AppState>,
     ctx: Ctx,
     PageUser(user): PageUser,
+    VisitorId(vid): VisitorId,
     Query(q): Query<HomeQuery>,
 ) -> PageResult<HomeTemplate> {
     let now = Utc::now();
+    let weights = viewer_weights(&st, &vid, user.as_ref()).await;
     let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
     let mut other: Vec<SmallVertical> = Vec::new();
@@ -94,7 +107,7 @@ pub async fn home(
             });
             continue;
         }
-        let ranked = ranking::rank_top(members);
+        let ranked = ranking::rank_top(members, &weights);
         let top = ranked
             .iter()
             .take(3)
@@ -111,30 +124,18 @@ pub async fn home(
             top,
         });
     }
-    // A vertical with an adult flag never appears on the SFW host, and the SFW
-    // verticals never appear on the adult host: the two directories are separate
-    // products that happen to share a binary.
-    if false {
-        cards.retain(|c| {
-            verticals
-                .iter()
-                .any(|v| v.slug == c.slug && v.nsfw)
-        });
-        other.retain(|o| verticals.iter().any(|v| v.slug == o.slug && v.nsfw));
-    }
-
     let all = store::all_members(&st.pool, true).await?;
     let all: Vec<MemberStat> = all
         .into_iter()
         .filter(|m| visible(m))
         .collect();
-    let trending: Vec<MemberCard> = ranking::rank_trending(all.clone(), now)
+    let trending: Vec<MemberCard> = ranking::rank_trending(all.clone(), now, &weights)
         .iter()
         .take(6)
         .enumerate()
         .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Trending, now))
         .collect();
-    let new_members: Vec<MemberCard> = ranking::rank_new(all.clone())
+    let new_members: Vec<MemberCard> = ranking::rank_new(all.clone(), now, &weights)
         .iter()
         .take(6)
         .enumerate()
@@ -154,8 +155,16 @@ pub async fn home(
         .map(|c| (c.slug.clone(), c.label.clone()))
         .collect();
 
+    // A directory page carries no tag signal - it *is* the directory - but it is still a page the
+    // visitor read, and the warm-up counter is what decides when personalisation may start.
+    if let Err(e) = crate::prefs::visit(&st.pool, &vid, &[]).await {
+        tracing::warn!(error = %e, "page view not recorded");
+    }
+    let tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
+
     Ok(HomeTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
+        tuner,
         verticals: cards,
         other,
         trending,
@@ -184,8 +193,10 @@ pub async fn vertical(
     PageUser(user): PageUser,
     Path(slug): Path<String>,
     Query(q): Query<VerticalQuery>,
+    VisitorId(vid): VisitorId,
 ) -> PageResult<VerticalTemplate> {
     let now = Utc::now();
+    let weights = viewer_weights(&st, &vid, user.as_ref()).await;
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
@@ -219,8 +230,8 @@ pub async fn vertical(
     };
 
     let ranked: Vec<MemberStat> = match tab.as_str() {
-        "trending" => ranking::rank_trending(filtered.clone(), now),
-        "new" => ranking::rank_new(filtered.clone()),
+        "trending" => ranking::rank_trending(filtered.clone(), now, &weights),
+        "new" => ranking::rank_new(filtered.clone(), now, &weights),
         "curated" => {
             let curated = store::curated(&st.pool, &v.slug).await?;
             curated
@@ -228,7 +239,7 @@ pub async fn vertical(
                 .filter(|m| visible(m))
                 .collect()
         }
-        _ => ranking::rank_top(filtered.clone()),
+        _ => ranking::rank_top(filtered.clone(), &weights),
     };
     let mode = match tab.as_str() {
         "trending" => StatMode::Trending,
@@ -239,8 +250,21 @@ pub async fn vertical(
         .iter()
         .take(100)
         .enumerate()
-        .map(|(i, m)| card(m, &ctx.base, i + 1, mode, now))
+        .map(|(i, m)| {
+            let mut c = card(m, &ctx.base, i + 1, mode, now);
+            // Where this profile was found, carried as `?s=v:<slug>` so the profile page can label
+            // the click. Without it every click says "profile" and the dashboard cannot answer
+            // "how do people find you" at all.
+            c.url = format!("{}?s={}", c.url, urlencode(&format!("v:{}", v.slug)));
+            c
+        })
         .collect();
+
+    // Reading a category is a weak signal that the viewer cares about it: 0.05 a page, capped.
+    if let Err(e) = crate::prefs::visit(&st.pool, &vid, &[(format!("v:{}", v.slug), 0.05)]).await {
+        tracing::warn!(error = %e, "vertical view not recorded");
+    }
+    let tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
 
     let visitors_total: i64 = members.iter().map(|m| m.visitors).sum();
     let mut tag_counts: std::collections::BTreeMap<String, i64> = Default::default();
@@ -272,7 +296,7 @@ pub async fn vertical(
             label: "Trending".into(),
             href: format!("/v/{}?tab=trending", v.slug),
             active: tab == "trending",
-            count: ranking::rank_trending(members.clone(), now).len() as i64,
+            count: ranking::rank_trending(members.clone(), now, &weights).len() as i64,
         },
         Tab {
             label: "New".into(),
@@ -312,6 +336,7 @@ pub async fn vertical(
         active_tag: active_tag.clone(),
         clear_tag: format!("/v/{}?tab={}", v.slug, tab),
         embed_snippet,
+        tuner,
     })
 }
 
@@ -321,15 +346,31 @@ pub async fn profile_redirect(Path(handle): Path<String>) -> Redirect {
     Redirect::permanent(&format!("/@{handle}"))
 }
 
+#[derive(Deserialize)]
+pub struct ProfileQuery {
+    /// Where the visitor came from: `v:<slug>`, `similar`, `ring`. Absent means a direct link.
+    #[serde(default)]
+    pub s: Option<String>,
+}
+
 pub async fn profile(
     State(st): State<AppState>,
     ctx: Ctx,
     PageUser(user): PageUser,
     VisitorId(vid): VisitorId,
     Path(handle): Path<String>,
+    Query(pq): Query<ProfileQuery>,
     _headers: HeaderMap,
 ) -> PageResult<Response> {
     let now = Utc::now();
+    // Where the click came from, from the ?s= the listing carried. Whitelisted, because it ends up
+    // in an analytics column.
+    let surface = match pq.s.as_deref().map(|s| s.trim()) {
+        Some("similar") => "similar".to_string(),
+        Some("ring") => "ring".to_string(),
+        Some(v) if v.starts_with("v:") && v.len() > 2 && v.len() <= 40 => v.replace('\'', ""),
+        _ => "profile".to_string(),
+    };
     let Ok(handle) = normalise_handle(&handle) else {
         return Err(PageError(AppError::NotFound));
     };
@@ -382,7 +423,15 @@ pub async fn profile(
     let link_cards: Vec<LinkCard> = links
         .iter()
         .enumerate()
-        .map(|(i, l)| link_card(&ctx.base, l, "profile", ctx_vertical.as_deref(), i + 1))
+        .map(|(i, l)| {
+            link_card(
+                &ctx.base,
+                l,
+                surface.as_str(),
+                ctx_vertical.as_deref(),
+                i + 1,
+            )
+        })
         .collect();
 
     let tags = store::tags_of(&st.pool, owner.id).await?;
@@ -406,16 +455,34 @@ pub async fn profile(
     // Similar profiles: same formula as the spec, computed here from tag sets.
     let all = store::all_members(&st.pool, true).await?;
     let owner_tags = store::tags_of(&st.pool, owner.id).await?;
+    // Reading a profile is the strongest passive signal we take: +0.15 per tag it carries, capped.
+    let signal: Vec<(String, f64)> = owner_tags
+        .iter()
+        .map(|t| (t.clone(), 0.15))
+        .collect();
+    if let Err(e) = crate::prefs::visit(&st.pool, &vid, &signal).await {
+        tracing::warn!(error = %e, "profile view not recorded");
+    }
     let viewer_tags = match &user {
         Some(u) if u.id != owner.id => store::tags_of(&st.pool, u.id).await?,
         _ => owner_tags.clone(),
     };
+    let weights = viewer_weights(&st, &vid, user.as_ref()).await;
+    let hub_tags = store::hub_tags(&st.pool).await?;
     let mut scored: Vec<(f64, &MemberStat)> = all
         .iter()
         .filter(|m| m.id != owner.id && visible(m))
         .map(|m| {
             (
-                ranking::similarity(&viewer_tags, &owner_tags, m, primary.as_deref(), now),
+                ranking::similarity(
+                    &viewer_tags,
+                    &owner_tags,
+                    &hub_tags,
+                    &weights,
+                    m,
+                    primary.as_deref(),
+                    now,
+                ),
                 m,
             )
         })
@@ -658,6 +725,7 @@ pub struct NextQuery {
 /// members ranked 40+ a route to a visitor that does not depend on being near the top.
 pub(crate) async fn vertical_next(
     State(st): State<AppState>,
+    VisitorId(vid): VisitorId,
     Path(slug): Path<String>,
     Query(q): Query<NextQuery>,
 ) -> PageResult<Response> {
@@ -684,13 +752,32 @@ pub(crate) async fn vertical_next(
         .from
         .as_deref()
         .map(|h| h.trim().trim_start_matches('@').to_ascii_lowercase());
-    let pos = from.and_then(|f| order.iter().position(|m| m.handle.eq_ignore_ascii_case(&f)));
-    // No `from`, or a handle that left the vertical: start at the top of the ring rather than 404.
-    let next = match pos {
-        Some(i) => order[(i + 1) % order.len()],
-        None => order[0],
+    let current = from.and_then(|f| {
+        members
+            .iter()
+            .find(|m| m.handle.eq_ignore_ascii_case(&f))
+            .map(|m| m.id)
+    });
+    // With weights, the step is the viewer's own walk (SPEC v3 §3): relevance, continuity, novelty.
+    // Without them it is the ring order that has always been here.
+    let weights = crate::prefs::load(&st.pool, &vid)
+        .await
+        .map(|v| v.ranking().to_vec())
+        .unwrap_or_default();
+    let visited = std::collections::HashSet::new();
+    let personalised = current.and_then(|id| crate::ranking::ring_next(&members, id, &weights, &visited));
+    let next = match (personalised, current) {
+        (Some(m), _) => m,
+        (None, Some(id)) => {
+            let pos = order.iter().position(|m| m.id == id);
+            match pos {
+                Some(i) => order[(i + 1) % order.len()],
+                None => order[0],
+            }
+        }
+        (None, None) => order[0],
     };
-    Ok(Redirect::to(&format!("/@{}", next.handle)).into_response())
+    Ok(Redirect::to(&format!("/@{}?s=ring", next.handle)).into_response())
 }
 
 // ------------------------------------------------------------------ embeds
@@ -723,10 +810,12 @@ pub async fn embed(
         .into_iter()
         .filter(|m| !m.nsfw_enabled)
         .collect();
+    // An embed is one artefact served to somebody else's page: personalising it would mean a
+    // different iframe per visitor and a cache that can never be shared. Weights stay out.
     let (ranked, mode) = match view.as_str() {
-        "trending" => (ranking::rank_trending(members, now), StatMode::Trending),
-        "new" => (ranking::rank_new(members), StatMode::New),
-        _ => (ranking::rank_top(members), StatMode::Top),
+        "trending" => (ranking::rank_trending(members, now, &[]), StatMode::Trending),
+        "new" => (ranking::rank_new(members, now, &[]), StatMode::New),
+        _ => (ranking::rank_top(members, &[]), StatMode::Top),
     };
     let cards: Vec<MemberCard> = ranked
         .iter()

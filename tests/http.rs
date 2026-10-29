@@ -39,6 +39,8 @@ struct Res {
     location: Option<String>,
     etag: Option<String>,
     cors: Option<String>,
+    /// The anonymous visitor id: the thing a preference profile is keyed to.
+    vcookie: Option<String>,
 }
 
 impl Res {
@@ -77,6 +79,13 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         .get("x-robots-tag")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.to_string());
+    let vcookie = res
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find(|c| c.starts_with("orbital_v="))
+        .map(|c| c.split(';').next().unwrap_or("").to_string());
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     Res {
         status,
@@ -86,6 +95,7 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         location,
         etag,
         cors,
+        vcookie,
     }
 }
 
@@ -748,5 +758,196 @@ async fn the_read_api_does_not_hand_out_a_cookie(pool: PgPool) {
             .map(|c| c.starts_with("orbital_v="))
             .unwrap_or(false)),
         "a page still mints the visitor id"
+    );
+}
+
+fn post_form(path: &str, body: &str, c: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("cookie", c)
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+/// Tags are set through the store, not an endpoint: there is no tag API, and a test that needs a
+/// member with a tag should say so directly rather than route it through a product feature.
+async fn give_tags(pool: &PgPool, handle: &str, tags: &[&str]) {
+    for t in tags {
+        sqlx::query(
+            "INSERT INTO tags (user_id, tag_slug) SELECT id, $2 FROM users WHERE handle = $1
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(handle)
+        .bind(t)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+}
+
+fn order_of(body: &str, handles: &[&str]) -> Vec<String> {
+    let mut found: Vec<(usize, String)> = handles
+        .iter()
+        .filter_map(|h| body.find(&format!("/@{h}")).map(|i| (i, h.to_string())))
+        .collect();
+    found.sort_by_key(|(i, _)| *i);
+    found.into_iter().map(|(_, h)| h).collect()
+}
+
+#[sqlx::test]
+async fn the_tuner_reorders_the_list_for_one_viewer_only(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "robi", "music").await;
+    register(&app, "zara", "music").await;
+    give_tags(&pool, "robi", &["chiptune"]).await;
+    give_tags(&pool, "zara", &["podcast"]).await;
+
+    // A cold visitor: no weights, so the ordering is the honest one (handle order, no traffic).
+    let cold = call(&app, get("/v/music")).await;
+    let viewer = cold.vcookie.clone().expect("the page mints a visitor id");
+    let before = order_of(&cold.body, &["robi", "zara"]);
+    assert_eq!(before, vec!["robi", "zara"], "cold order");
+
+    // Tune: chiptune at full weight.
+    let applied = call(&app, post_form("/prefs", "tag=chiptune&w=10", &viewer)).await;
+    assert_eq!(applied.status, StatusCode::SEE_OTHER, "{}", applied.body);
+
+    let tuned = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert_eq!(
+        order_of(&tuned.body, &["robi", "zara"]),
+        vec!["robi", "zara"],
+        "robi already led; the point is that the weight changed the score, checked below"
+    );
+
+    // The same list for a *different* visitor is unchanged: a lens is not a global re-sort.
+    let other = call(&app, get("/v/music")).await;
+    let other_viewer = other.vcookie.expect("second visitor");
+    assert_ne!(other_viewer, viewer);
+    assert_eq!(order_of(&other.body, &["robi", "zara"]), before);
+}
+
+#[sqlx::test]
+async fn the_tuner_can_change_which_member_leads(pool: PgPool) {
+    // Two members with no traffic: the cold order is the handle order, and the tuner has to be
+    // able to invert it, or the weights are decorative.
+    let app = app(pool.clone()).await;
+    register(&app, "aaron", "music").await;
+    register(&app, "zoe", "music").await;
+    give_tags(&pool, "aaron", &["podcast"]).await;
+    give_tags(&pool, "zoe", &["chiptune"]).await;
+
+    let cold = call(&app, get("/v/music")).await;
+    let viewer = cold.vcookie.expect("visitor");
+    assert_eq!(order_of(&cold.body, &["aaron", "zoe"]), vec!["aaron", "zoe"]);
+
+    let raw = viewer.trim_start_matches("orbital_v=").to_string();
+    let loaded = orbital::prefs::load(&pool, &raw).await.expect("load prefs");
+    println!("DEBUG before applied={} weights={:?}", loaded.applied, loaded.weights);
+    let posted = call(&app, post_form("/prefs", "tag=chiptune&w=10", &viewer)).await;
+    assert_eq!(posted.status, StatusCode::SEE_OTHER, "post /prefs: {}", posted.body);
+    let stored: Vec<(String, f32, String)> =
+        sqlx::query_as("SELECT tag_slug, weight, source FROM preference_weights")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(!stored.is_empty(), "the tuner must store something: {stored:?}");
+    let after = orbital::prefs::load(&pool, &raw).await.expect("load prefs");
+    println!("DEBUG after applied={} weights={:?}", after.applied, after.weights);
+    let tuned = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert_eq!(
+        order_of(&tuned.body, &["aaron", "zoe"]),
+        vec!["zoe", "aaron"],
+        "a full weight on chiptune lifts zoe above the alphabetically first member"
+    );
+}
+
+#[sqlx::test]
+async fn reading_a_profile_leaves_a_passive_preference(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "robi", "music").await;
+    give_tags(&pool, "robi", &["chiptune"]).await;
+
+    let first = call(&app, get("/@robi")).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.body);
+    let viewer = first.vcookie.expect("visitor");
+
+    let pages: (i32,) =
+        sqlx::query_as("SELECT pages_visited FROM visitor_profiles")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pages.0, 1, "the page view is counted");
+
+    let row: (String, f32, String) = sqlx::query_as(
+        "SELECT tag_slug, weight, source FROM preference_weights
+          WHERE owner_kind = 'visitor' AND source = 'passive'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("reading a profile leaves passive signal");
+    assert_eq!(row.0, "chiptune");
+    assert!((row.1 - 0.15).abs() < 1e-6);
+    assert_eq!(row.2, "passive");
+    assert!(viewer.starts_with("orbital_v="));
+}
+
+#[sqlx::test]
+async fn a_profile_link_carries_where_the_visitor_found_it(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let reg = register(&app, "robi", "music").await;
+    let sess = reg.cookie.expect("session");
+    call(
+        &app,
+        json_req(
+            "POST",
+            "/api/links",
+            serde_json::json!({ "url": "https://example.com/from-the-ring", "label": "Ring test" }),
+            Some(&sess),
+        ),
+    )
+    .await;
+
+    let direct = call(&app, get("/@robi")).await;
+    assert!(direct.body.contains("s=profile"), "a direct visit says so");
+
+    let from_ring = call(&app, get("/@robi?s=ring")).await;
+    assert!(
+        from_ring.body.contains("s=ring"),
+        "the ring's arrival must label the click, or the dashboard cannot tell the surfaces apart"
+    );
+
+    // A crafted value is not an analytics column: anything unknown falls back to `profile`, and the
+    // value never reaches the page. (The page has legitimate inline scripts, so the assertion is
+    // that the *surface* is the fallback, not that the word "script" is absent.)
+    let junk = call(&app, get("/@robi?s=%3Cscript%3Ealert(1)%3C/script%3E")).await;
+    assert_eq!(junk.status, StatusCode::OK);
+    assert!(junk.body.contains("s=profile"));
+    assert!(!junk.body.contains("alert(1)"), "the query value must not be reflected");
+}
+
+#[sqlx::test]
+async fn the_ring_follows_what_the_visitor_asked_for(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "start", "music").await;
+    register(&app, "podcaster", "music").await;
+    register(&app, "chiptuneer", "music").await;
+    give_tags(&pool, "start", &["chiptune"]).await;
+    give_tags(&pool, "podcaster", &["podcast"]).await;
+    give_tags(&pool, "chiptuneer", &["chiptune"]).await;
+
+    // Cold: with no weights the walk stays on the ring order, which is not preference-shaped.
+    let cold = call(&app, get("/v/music/next?from=start")).await;
+    assert_eq!(cold.status, StatusCode::SEE_OTHER);
+    let viewer = cold.vcookie.clone().expect("visitor");
+
+    call(&app, post_form("/prefs", "tag=chiptune&w=10", &viewer)).await;
+    let tuned = call(&app, cookie(get("/v/music/next?from=start"), &viewer)).await;
+    assert_eq!(tuned.status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        tuned.location.as_deref(),
+        Some("/@chiptuneer?s=ring"),
+        "the walk should go to the member the viewer asked for, and say it came from the ring"
     );
 }

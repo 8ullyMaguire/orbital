@@ -119,6 +119,25 @@
          announcement or the Mastodon one actually brought anybody. Host only - no paths. -->
     <Bars buckets={data?.by_referrer ?? []} empty="No referrer recorded yet. Social apps often strip it." />
   </div>
+  <div class="card">
+    <div class="card-h"><h2>What your visitors care about</h2></div>
+    {#if data?.audience_tags?.length}
+      <div class="chips">
+        {#each data.audience_tags as t (t.tag)}
+          <span class="chip" title="{t.visitors} of your visitors · mean weight {t.mean}">
+            #{t.tag}<span class="chip-n">{t.strength}</span>
+          </span>
+        {/each}
+      </div>
+      <p class="muted xs" style="margin-top:10px">
+        Aggregated from the discovery weights of people who clicked your links — counts only,
+        never a visitor. If your audience cares about something you don't write about, that is
+        the most useful sentence on this page.
+      </p>
+    {:else}
+      <p class="muted sm">Nobody with preferences has clicked yet. Share your page and check back.</p>
+    {/if}
+  </div>
 </div>
 
 <div class="card" style="margin-top:14px">
