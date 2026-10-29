@@ -2,6 +2,12 @@
 {% block title %}{{ layout.site_name }} — {{ layout.tagline }}{% endblock %}
 {% block description %}A directory of people across {{ layout.nav.len() }} themed verticals. Each profile is a person and their links, ranked by real visitors.{% endblock %}
 {% block content %}
+{% if tuner.personalized %}
+<p class="wrap sm muted" style="margin:10px auto 0">
+  <span class="chip chip-on">Ranked with your lens</span>
+  <a href="/lens" style="margin-left:8px">edit</a>
+</p>
+{% endif %}
 {% include "tuner.html" %}
 <section class="hero wrap">
   <p class="eyebrow"><span class="dotlive"></span> {{ total_members }} {% if total_members == 1 %}person{% else %}people{% endif %} · {{ layout.nav.len() }} verticals · {{ total_clicks }} outbound clicks recorded</p>

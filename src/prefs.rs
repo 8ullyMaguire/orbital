@@ -42,6 +42,10 @@ pub struct TunerView {
     pub suggestions: Vec<String>,
     /// True once the viewer has weights of their own (so the block opens expanded).
     pub active: bool,
+    /// True when those weights are actually reordering anything (`ViewerPrefs::applied`). A passive
+    /// weight from one page view is a note to self, not a lens — claiming "ranked with your lens"
+    /// after a single visit would be a lie the page tells on the site's behalf.
+    pub personalized: bool,
 }
 
 impl TunerView {
@@ -66,6 +70,7 @@ impl TunerView {
             .collect();
         Self {
             active: !rows.is_empty(),
+            personalized: viewer.applied,
             rows,
             suggestions,
         }
@@ -110,7 +115,9 @@ pub async fn load(pool: &PgPool, raw_visitor: &str) -> Result<ViewerPrefs, AppEr
     let hash = visitor_hash(raw_visitor);
     let pages = store::visitor_pages(pool, &hash).await?;
     let weights = store::prefs(pool, "visitor", &hash).await?;
-    let explicit = !weights.is_empty();
+    // Passive weights are a note to self, not an instruction: only an explicit weight (or the
+    // warm-up) may reorder a list. Asking "are there any weights" conflated the two.
+    let explicit = store::has_explicit_prefs(pool, "visitor", &hash).await?;
     Ok(ViewerPrefs {
         applied: explicit || pages >= WARMUP_PAGES,
         pages_seen: pages,
@@ -120,8 +127,9 @@ pub async fn load(pool: &PgPool, raw_visitor: &str) -> Result<ViewerPrefs, AppEr
 
 /// Same, for a signed-in member: their weights are explicit-only (they tuned, or they did not).
 pub async fn load_member(pool: &PgPool, user_id: uuid::Uuid) -> Result<ViewerPrefs, AppError> {
-    let weights = store::prefs(pool, "user", &user_id.to_string()).await?;
-    let applied = !weights.is_empty();
+    let id = user_id.to_string();
+    let weights = store::prefs(pool, "user", &id).await?;
+    let applied = store::has_explicit_prefs(pool, "user", &id).await?;
     Ok(ViewerPrefs {
         applied,
         pages_seen: 0,

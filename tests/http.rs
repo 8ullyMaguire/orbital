@@ -1040,3 +1040,49 @@ async fn the_tuner_never_shows_internal_keys(pool: PgPool) {
         assert!(third.body.contains("in music"));
     }
 }
+
+#[sqlx::test]
+async fn a_tuned_visitor_is_told_the_order_is_theirs(pool: PgPool) {
+    // Personalisation nobody can see is indistinguishable from a coincidence.
+    let app = app(pool.clone()).await;
+    register(&app, "muso", "music").await;
+
+    let cold = call(&app, get("/v/music")).await;
+    assert!(!cold.body.contains("Ranked with your lens"));
+    let viewer = cold.vcookie.expect("visitor");
+
+    call(&app, post_form("/prefs", "tag=chiptune&w=8", &viewer)).await;
+    let tuned = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert!(
+        tuned.body.contains("Ranked with your lens"),
+        "a tuned viewer must be told the list is theirs"
+    );
+    assert!(tuned.body.contains("href=\"/lens\""), "and where to change it");
+}
+
+#[sqlx::test]
+async fn passive_weights_wait_for_the_warm_up(pool: PgPool) {
+    // A vertical view writes a passive `v:music` weight immediately. If that counted as a tuned
+    // lens, one page view would reorder the site under a first-time visitor.
+    let app = app(pool.clone()).await;
+    register(&app, "muso", "music").await;
+    register(&app, "other", "music").await;
+
+    let first = call(&app, get("/v/music")).await;
+    let viewer = first.vcookie.expect("visitor");
+    assert!(first.body.contains("in music"), "the passive weight is visible in the tuner");
+    assert!(
+        !first.body.contains("Ranked with your lens"),
+        "but it is not yet a lens"
+    );
+
+    // Four more views: still inside the warm-up.
+    for _ in 0..4 {
+        call(&app, cookie(get("/v/music"), &viewer)).await;
+    }
+    let fifth = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert!(
+        fifth.body.contains("Ranked with your lens"),
+        "after five pages personalisation is allowed to apply"
+    );
+}

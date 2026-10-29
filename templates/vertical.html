@@ -24,6 +24,13 @@
     {% for t in tabs %}<a class="tab{% if t.active %} on{% endif %}" href="{{ t.href }}">{{ t.label }}{% if t.count > 0 %}<span class="tab-n">{{ t.count }}</span>{% endif %}</a>{% endfor %}
   </nav>
 
+  {% if tuner.personalized %}
+  <p class="sm muted" style="margin:10px 0 0">
+    <span class="chip chip-on">Ranked with your lens</span>
+    <a href="/lens" style="margin-left:8px">edit what you asked for</a>
+  </p>
+  {% endif %}
+
   {% include "tuner.html" %}
 
   {% if active_tag.len() > 0 || tags.len() > 0 %}

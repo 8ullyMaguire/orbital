@@ -1155,6 +1155,27 @@ pub async fn prefs(
     Ok(weights)
 }
 
+/// Does this owner have any weight they set themselves?
+///
+/// `prefs()` returns explicit and passive weights merged, so "the viewer has weights" is not the
+/// same question as "the viewer tuned something" — and only the second one lets personalisation
+/// start before the warm-up. Conflating them made a single page view look like an explicit choice.
+pub async fn has_explicit_prefs(
+    pool: &PgPool,
+    owner_kind: &str,
+    owner_id: &str,
+) -> Result<bool, AppError> {
+    let row: Option<(i32,)> = sqlx::query_as(
+        "SELECT 1 FROM preference_weights
+          WHERE owner_kind = $1 AND owner_id = $2 AND source = 'explicit' LIMIT 1",
+    )
+    .bind(owner_kind)
+    .bind(owner_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
 /// Replace a viewer's explicit weights. An empty list clears them; weight 0 deletes one entry.
 pub async fn set_explicit_prefs(
     pool: &PgPool,
