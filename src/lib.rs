@@ -37,7 +37,7 @@ pub struct AppState {
 pub async fn build_state(cfg: Config) -> anyhow::Result<AppState> {
     let pool = db::connect(&cfg).await?;
     let http = reqwest::Client::builder()
-        .user_agent("orbital/0.1 (+https://links.polarisocial.xyz)")
+        .user_agent("orbital/0.1 (+https://orbital.polarisocial.xyz)")
         .timeout(std::time::Duration::from_secs(10))
         .build()?;
     Ok(AppState {

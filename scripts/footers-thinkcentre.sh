@@ -43,7 +43,7 @@ cat > $SNIPPET <<'SNIP'
 proxy_set_header Accept-Encoding "";
 sub_filter_once on;
 sub_filter_types text/html;
-sub_filter '</body>' '<div style="padding:14px 20px;text-align:center;font:13px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#8d93b0;background:#06070d;border-top:1px solid #ffffff14"><a href="https://links.polarisocial.xyz/?s=footer" style="color:#b3a6ff;text-decoration:none">Built in public &middot; the people behind these projects are listed on Orbital &#8594;</a></div></body>';
+sub_filter '</body>' '<div style="padding:14px 20px;text-align:center;font:13px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#8d93b0;background:#06070d;border-top:1px solid #ffffff14"><a href="https://orbital.polarisocial.xyz/?s=footer" style="color:#b3a6ff;text-decoration:none">Built in public &middot; the people behind these projects are listed on Orbital &#8594;</a></div></body>';
 SNIP
 
 for s in $SITES; do

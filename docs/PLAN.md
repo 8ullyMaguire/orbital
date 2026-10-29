@@ -108,8 +108,8 @@ sitemap/feeds/rails; `X-Robots-Tag: noindex, nofollow` on every response.
 
 Verify:
 ```
-curl -s -H 'Host: nsfwlinks.polarisocial.xyz' localhost:8090/@steeltitan | grep -c '18'  # gate
-curl -sI -H 'Host: nsfwlinks.polarisocial.xyz' localhost:8090/ | grep -i robots           # noindex
+curl -s -H 'Host: orbitalnsfw.polarisocial.xyz' localhost:8090/@steeltitan | grep -c '18'  # gate
+curl -sI -H 'Host: orbitalnsfw.polarisocial.xyz' localhost:8090/ | grep -i robots           # noindex
 curl -s localhost:8090/sitemap.xml | grep -c nsfw                                          # 0
 ```
 
@@ -138,7 +138,7 @@ the unit and nginx site, restarts, and verifies every route against the loopback
 Verify:
 ```
 ./deploy.sh                       # prints each route check, all 200/short bodies
-curl -s https://links.polarisocial.xyz/ | grep -o '<title>[^<]*'
+curl -s https://orbital.polarisocial.xyz/ | grep -o '<title>[^<]*'
 systemctl --user is-active orbital                                # active
 psql -tAc "select count(*) from users"                            # 2
 ```
@@ -154,8 +154,8 @@ credential block in `~/.hermes/.env`; docs committed; SecondBrain note.
 
 1. `cargo test` green on this host (unit + integration against 5498).
 2. `./deploy.sh` prints OK for every route and the service is `active`, `NRestarts=0`.
-3. `https://links.polarisocial.xyz/@criticalnexus` renders all 6 live SFW sites as
-   links; `https://nsfwlinks.polarisocial.xyz/@steeltitan` renders the 6 NSFW ones
+3. `https://orbital.polarisocial.xyz/@criticalnexus` renders all 6 live SFW sites as
+   links; `https://orbitalnsfw.polarisocial.xyz/@steeltitan` renders the 6 NSFW ones
    behind the gate and carries `noindex`.
 4. A click through a profile link is recorded and visible in that member's
    analytics.

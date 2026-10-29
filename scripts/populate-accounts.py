@@ -4,7 +4,7 @@
 Idempotent: links already present (same URL) are left alone, and the profile
 patch is a set-operation, so re-running it repairs rather than duplicates.
 
-    ORBITAL_BASE=https://links.polarisocial.xyz ./scripts/populate-accounts.py
+    ORBITAL_BASE=https://orbital.polarisocial.xyz ./scripts/populate-accounts.py
 
 Credentials are read from ~/.hermes/.env (ORBITAL_CRITICALNEXUS_PASSWORD /
 ORBITAL_STEELTITAN_PASSWORD) and never printed.
@@ -18,7 +18,7 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("ORBITAL_BASE", "https://links.polarisocial.xyz").rstrip("/")
+BASE = os.environ.get("ORBITAL_BASE", "https://orbital.polarisocial.xyz").rstrip("/")
 ENV = pathlib.Path.home() / ".hermes" / ".env"
 UA = "Mozilla/5.0 (X11; Linux x86_64) orbital-populate/1.0"
 

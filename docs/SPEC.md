@@ -9,8 +9,8 @@ widget.
 **North star: the number of people who discover a member's profile.** Every
 decision below is ranked against that, not against feature parity with the draft.
 
-Live: `https://links.polarisocial.xyz` (SFW) and
-`https://nsfwlinks.polarisocial.xyz` (age-gated, `noindex`).
+Live: `https://orbital.polarisocial.xyz` (SFW) and
+`https://orbitalnsfw.polarisocial.xyz` (age-gated, `noindex`).
 
 ---
 
@@ -140,7 +140,7 @@ reset trust. Every counter in the response is `BIGINT` cast in SQL.
 | `/sitemap.xml`, `/robots.txt` | Discovery plumbing; NSFW host is `noindex` and disallowed |
 | `/join`, `/login`, `/app/*` | Svelte dashboard (static assets embedded in the binary) |
 
-NSFW host (`nsfwlinks.polarisocial.xyz`): age gate sets a cookie on POST, then
+NSFW host (`orbitalnsfw.polarisocial.xyz`): age gate sets a cookie on POST, then
 the same surface, restricted to `nsfw` members, `noindex, nofollow`, excluded
 from the global sitemap and the global feed. A TL0 member is hidden.
 

@@ -49,8 +49,8 @@ if [ ! -f "\$f" ]; then
   SALT=\$(openssl rand -hex 32)
   cat > "\$f" <<EOF
 BIND_ADDR=127.0.0.1:$BACKEND_PORT
-PUBLIC_BASE=https://links.polarisocial.xyz
-NSFW_HOST=nsfwlinks.polarisocial.xyz
+PUBLIC_BASE=https://orbital.polarisocial.xyz
+NSFW_HOST=orbitalnsfw.polarisocial.xyz
 SECURE_COOKIES=1
 SESSION_SALT=\$SALT
 HUB_HANDLE=criticalnexus
@@ -101,7 +101,7 @@ ssh "$HOST" "sudo tee $NGINX_FILE >/dev/null" <<REMOTE
 server {
     listen $PUBLIC_PORT;
     listen [::]:$PUBLIC_PORT;
-    server_name links.polarisocial.xyz nsfwlinks.polarisocial.xyz;
+    server_name orbital.polarisocial.xyz orbitalnsfw.polarisocial.xyz;
 
     client_max_body_size 2m;
     gzip on;
@@ -161,11 +161,11 @@ hdr=\$(curl -sI "http://127.0.0.1:$PUBLIC_PORT/" | head -1)
 echo "nginx /            \$hdr"
 echo -n "title:             "; curl -s "http://127.0.0.1:$PUBLIC_PORT/" | grep -o '<title>[^<]*' | head -1
 echo -n "dashboard shell:   "; curl -s "http://127.0.0.1:$PUBLIC_PORT/app/" | grep -c 'app-' || true
-echo -n "adult gate:        "; curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: nsfwlinks.polarisocial.xyz' "http://127.0.0.1:$PUBLIC_PORT/"
+echo -n "adult gate:        "; curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: orbitalnsfw.polarisocial.xyz' "http://127.0.0.1:$PUBLIC_PORT/"
 echo -n "sfw profile:       "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@criticalnexus"
 echo -n "adult on sfw host: "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@steeltitan"
 REMOTE
 
 say "done"
-echo "public:  https://links.polarisocial.xyz"
-echo "adult:   https://nsfwlinks.polarisocial.xyz (gated, noindex)"
+echo "public:  https://orbital.polarisocial.xyz"
+echo "adult:   https://orbitalnsfw.polarisocial.xyz (gated, noindex)"

@@ -29,7 +29,7 @@ impl Config {
                 .trim_end_matches('/')
                 .to_string(),
             nsfw_host: std::env::var("NSFW_HOST")
-                .unwrap_or_else(|_| "nsfwlinks.polarisocial.xyz".into()),
+                .unwrap_or_else(|_| "orbitalnsfw.polarisocial.xyz".into()),
             session_cookie: std::env::var("SESSION_COOKIE").unwrap_or_else(|_| "orbital_s".into()),
             visitor_cookie: std::env::var("VISITOR_COOKIE").unwrap_or_else(|_| "orbital_v".into()),
             salt: std::env::var("SESSION_SALT")

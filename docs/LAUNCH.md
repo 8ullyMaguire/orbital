@@ -6,12 +6,12 @@ What is live, what is left, and the words to share it with.
 
 | Surface | URL | State |
 |---|---|---|
-| SFW directory | https://links.polarisocial.xyz | live, indexed, sitemap + feeds |
-| Dashboard | https://links.polarisocial.xyz/app/ | live, session auth |
-| Adult directory | https://nsfwlinks.polarisocial.xyz | live, cookie age gate, `noindex`, empty sitemap |
+| SFW directory | https://orbital.polarisocial.xyz | live, indexed, sitemap + feeds |
+| Dashboard | https://orbital.polarisocial.xyz/app/ | live, session auth |
+| Adult directory | https://orbitalnsfw.polarisocial.xyz | live, cookie age gate, `noindex`, empty sitemap |
 | Footer band | 9 SFW sites on thinkcentre | injected by nginx, see `scripts/footers-thinkcentre.sh` |
 
-The adult host is `nsfwlinks.polarisocial.xyz` and not `nsfw.links.polarisocial.xyz`
+The adult host is `orbitalnsfw.polarisocial.xyz` and not `nsfw.orbital.polarisocial.xyz`
 for one concrete reason: Cloudflare's Universal SSL covers `*.polarisocial.xyz`,
 one label deep. A two-level hostname fails the TLS handshake with no certificate
 and no useful error, so the single-label name is the one that can actually serve.
@@ -51,9 +51,9 @@ behalf needs one of those set up first; the text below is ready to paste.
 >
 > No ads, no tracking, server-rendered, one binary, Postgres. Open source.
 >
-> https://links.polarisocial.xyz
+> https://orbital.polarisocial.xyz
 >
-> Mine: https://links.polarisocial.xyz/@criticalnexus
+> Mine: https://orbital.polarisocial.xyz/@criticalnexus
 
 Attach `static/og.png` (1200×630). Pin it.
 
@@ -64,7 +64,7 @@ Attach `static/og.png` (1200×630). Pin it.
 >
 > 10 verticals · server-rendered · one Rust binary · Postgres · open source
 >
-> https://links.polarisocial.xyz
+> https://orbital.polarisocial.xyz
 
 Pin it.
 
@@ -72,9 +72,9 @@ Pin it.
 
 > A directory of makers, sorted by what people click. Ten verticals, each with
 > its own leaderboard, ring, feed and embeddable widget. Server-rendered, no ads,
-> no tracking, one binary: https://links.polarisocial.xyz
+> no tracking, one binary: https://orbital.polarisocial.xyz
 >
-> https://links.polarisocial.xyz/@criticalnexus
+> https://orbital.polarisocial.xyz/@criticalnexus
 
 ## What is deliberately not built
 
