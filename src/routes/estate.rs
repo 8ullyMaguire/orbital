@@ -39,10 +39,22 @@ fn read_estate() -> Vec<(String, String)> {
         .map(|l| l.trim())
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(|l| match l.split_once('|') {
-            Some((host, label)) => (host.trim().to_string(), label.trim().to_string()),
-            None => (l.to_string(), l.to_string()),
+            Some((host, label)) => {
+                let host = host.trim().to_string();
+                (host.clone(), capitalise(label.trim()))
+            }
+            None => (l.to_string(), capitalise(l)),
         })
         .collect()
+}
+
+/// "orbital" reads like a config key; "Orbital" reads like a place.
+fn capitalise(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 /// Probing nineteen hosts on every page view would be a self-inflicted load test, so the answer is
