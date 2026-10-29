@@ -68,8 +68,15 @@ fn member_stats(ctx: &str) -> String {
              '{{}}'::text[]) AS tags,
     COALESCE((SELECT array_agg(v.slug ORDER BY CASE WHEN uv2.role = 'primary' THEN 0 ELSE 1 END, v.sort)
                 FROM user_verticals uv2 JOIN verticals v ON v.slug = uv2.vertical_slug
-               WHERE uv2.user_id = u.id), '{{}}'::text[]) AS verticals
-"#
+               WHERE uv2.user_id = u.id), '{{}}'::text[]) AS verticals,
+    -- How strongly this member's tags are seconded: three endorsements on any of their tags reach
+    -- the cap, so a member with many lightly-endorsed tags is not outranked by one very popular one.
+    COALESCE((SELECT LEAST(1.0, max(cnt)::float8 / {full})
+                FROM (SELECT count(*) AS cnt FROM tags t
+                        JOIN tag_endorsements te ON te.tag_slug = t.tag_slug
+                       WHERE t.user_id = u.id GROUP BY t.tag_slug) s), 0)::float8 AS endorse
+"#,
+        full = crate::governance::ENDORSE_FULL
     )
 }
 

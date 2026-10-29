@@ -1305,3 +1305,113 @@ async fn rank_delta_reports_where_you_were(pool: PgPool) {
     assert_eq!(first["previous"], 9);
     assert_eq!(first["delta"], 6);
 }
+
+// ---------------------------------------------------------------- governance (v4 remainder)
+
+#[sqlx::test]
+async fn three_votes_create_a_vertical(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let mut voters = Vec::new();
+    for handle in ["v1", "v2", "v3"] {
+        let s = register(&app, handle, "dev").await.cookie.expect("session");
+        sqlx::query("UPDATE users SET trust_level = 3 WHERE handle = $1")
+            .bind(handle)
+            .execute(&pool)
+            .await
+            .unwrap();
+        voters.push(s);
+    }
+    let made = call(
+        &app,
+        json_req(
+            "POST",
+            "/api/verticals/proposals",
+            json!({"slug": "radio", "label": "Radio", "description": "People who broadcast."}),
+            Some(&voters[0]),
+        ),
+    )
+    .await;
+    assert_eq!(made.status, StatusCode::OK, "{}", made.body);
+    let id = made.json()["id"].as_str().unwrap().to_string();
+
+    // Two votes are not a decision.
+    for s in &voters[..2] {
+        let r = call(&app, json_req("POST", &format!("/api/verticals/proposals/{id}/vote"), json!({}), Some(s))).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+        assert_eq!(r.json()["accepted"], false);
+    }
+    let third = call(&app, json_req("POST", &format!("/api/verticals/proposals/{id}/vote"), json!({}), Some(&voters[2]))).await;
+    assert_eq!(third.json()["accepted"], true, "{}", third.body);
+    assert!(sqlx::query_as::<_, (String,)>("SELECT slug FROM verticals WHERE slug = 'radio'")
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+        .is_some());
+}
+
+#[sqlx::test]
+async fn a_merge_moves_the_members_and_their_tags(pool: PgPool) {
+    // The decision: a merge is a rename of the room, not an eviction.
+    let app = app(pool.clone()).await;
+    let boss = register(&app, "boss", "dev").await.cookie.expect("session");
+    sqlx::query("UPDATE users SET is_owner = true, trust_level = 3 WHERE handle = 'boss'")
+        .execute(&pool).await.unwrap();
+    let muso = register(&app, "muso", "music").await.cookie.expect("session");
+    let muso_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'muso'")
+        .fetch_one(&pool).await.unwrap();
+    sqlx::query("INSERT INTO tags (user_id, tag_slug) VALUES ($1, 'chiptune')")
+        .bind(muso_id).execute(&pool).await.unwrap();
+    let _ = muso;
+
+    let made = call(&app, json_req("POST", "/api/verticals/proposals",
+        json!({"slug": "music", "label": "Music", "merged_into": "art"}), Some(&boss))).await;
+    assert_eq!(made.status, StatusCode::OK, "{}", made.body);
+    let id = made.json()["id"].as_str().unwrap().to_string();
+    let voted = call(&app, json_req("POST", &format!("/api/verticals/proposals/{id}/vote"), json!({}), Some(&boss))).await;
+    // One owner vote is not quorum, so decide by hand the way an operator would.
+    assert_eq!(voted.json()["accepted"], false);
+    let decided = call(&app, json_req("POST", &format!("/api/admin/proposals/{id}/decide"),
+        json!({"accept": true}), Some(&boss))).await;
+    assert_eq!(decided.status, StatusCode::OK, "{}", decided.body);
+
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT vertical_slug, role FROM user_verticals WHERE user_id = $1")
+        .bind(muso_id).fetch_all(&pool).await.unwrap();
+    assert!(rows.iter().any(|(s, r)| s == "art" && r == "primary"), "moved, still primary: {rows:?}");
+    assert!(!rows.iter().any(|(s, _)| s == "music"), "the retired room is gone");
+    let tags: (i64,) = sqlx::query_as("SELECT count(*) FROM tags WHERE user_id = $1")
+        .bind(muso_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(tags.0, 1, "their tags came with them");
+    // The room itself is gone: leaving it would list an empty vertical forever.
+    let old: Option<(String,)> = sqlx::query_as("SELECT slug FROM verticals WHERE slug = 'music'")
+        .fetch_optional(&pool).await.unwrap();
+    assert!(old.is_none(), "the retired vertical must not survive the merge");
+}
+
+#[sqlx::test]
+async fn an_endorsed_tag_lifts_a_member_but_never_swamps_clicks(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let mut endorsers = Vec::new();
+    for handle in ["e1", "e2", "e3"] {
+        let s = register(&app, handle, "dev").await.cookie.expect("session");
+        sqlx::query("UPDATE users SET trust_level = 2 WHERE handle = $1")
+            .bind(handle).execute(&pool).await.unwrap();
+        endorsers.push(s);
+    }
+    // A TL1 member may not endorse.
+    let low = register(&app, "low", "dev").await.cookie.expect("session");
+    let refused = call(&app, json_req("POST", "/api/tags/chiptune/endorse", json!({}), Some(&low))).await;
+    assert_eq!(refused.status, StatusCode::FORBIDDEN);
+
+    for s in &endorsers {
+        let r = call(&app, json_req("POST", "/api/tags/chiptune/endorse", json!({}), Some(s))).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    }
+    let last = call(&app, json_req("POST", "/api/tags/chiptune/endorse", json!({}), Some(&endorsers[0]))).await;
+    // Toggling: the same person endorsing twice takes it back.
+    assert_eq!(last.json()["endorsements"], 2, "{}", last.body);
+    let again = call(&app, json_req("POST", "/api/tags/chiptune/endorse", json!({}), Some(&endorsers[0]))).await;
+    assert_eq!(again.json()["endorsements"], 3, "{}", again.body);
+    let boost = again.json()["boost"].as_f64().unwrap();
+    assert!((boost - 0.2).abs() < 1e-9, "three endorsements reach the cap, got {boost}");
+}

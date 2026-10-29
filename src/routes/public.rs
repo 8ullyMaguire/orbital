@@ -1157,6 +1157,7 @@ mod tests {
             visitors: 0,
             visitors_7d: 0,
             clicks: 0,
+            endorse: 0.0,
             tags: Vec::new(),
             verticals: verticals.iter().map(|v| v.to_string()).collect(),
         }

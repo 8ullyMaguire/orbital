@@ -4,6 +4,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod health;
+pub mod governance;
 pub mod html;
 pub mod meta;
 pub mod models;

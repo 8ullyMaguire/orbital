@@ -80,6 +80,10 @@ pub struct MemberStat {
     pub clicks: i64,
     pub tags: Vec<String>,
     pub verticals: Vec<String>,
+    /// 0..1: how strongly this member's own tags are seconded by other members. Filled by the
+    /// stats fragment, defaulted everywhere else so a query that does not care still decodes.
+    #[sqlx(default)]
+    pub endorse: f64,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

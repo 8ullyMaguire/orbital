@@ -47,6 +47,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/tag-alias", post(admin_tag_alias))
         .route("/api/me/rank-delta", get(my_rank_delta))
         .route("/api/admin/farms", get(admin_farms))
+        .route("/api/verticals/proposals", get(proposals).post(propose_vertical))
+        .route("/api/verticals/proposals/{id}/vote", post(vote_proposal))
+        .route("/api/admin/proposals/{id}/decide", post(decide_proposal))
+        .route("/api/tags/{tag}/endorse", post(endorse_tag))
         .merge(super::tokens::router())
         .route("/api/admin/curation/{slug}", post(admin_curation))
 }
@@ -888,4 +892,76 @@ pub async fn admin_farms(
         })
         .collect();
     Ok(Json(json!({"since_days": 7, "threshold": 20, "clients": out})))
+}
+
+/// `GET /api/verticals/proposals` — what is on the table, and how close it is to quorum.
+pub async fn proposals(State(st): State<AppState>) -> ApiResult<Json<Value>> {
+    let rows = crate::governance::list(&st.pool).await?;
+    Ok(Json(json!({"quorum": crate::governance::QUORUM, "proposals": rows})))
+}
+
+/// `POST /api/verticals/proposals` — any member may propose; TL3 members decide.
+pub async fn propose_vertical(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    let field = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    let merged_into = body
+        .get("merged_into")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty());
+    let id = crate::governance::propose(
+        &st.pool,
+        &user,
+        field("slug"),
+        field("label"),
+        field("description"),
+        merged_into,
+    )
+    .await?;
+    Ok(Json(json!({"id": id, "quorum": crate::governance::QUORUM})))
+}
+
+/// `POST /api/verticals/proposals/{id}/vote` — the vote that reaches quorum applies it, in the same
+/// transaction, so two voters cannot merge a vertical twice.
+pub async fn vote_proposal(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    let (votes, accepted) = crate::governance::vote(&st.pool, &user, id).await?;
+    Ok(Json(json!({
+        "votes": votes,
+        "quorum": crate::governance::QUORUM,
+        "accepted": accepted
+    })))
+}
+
+/// `POST /api/admin/proposals/{id}/decide` — accept or reject without waiting for the quorum.
+pub async fn decide_proposal(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    guard(&user)?;
+    let accept = body.get("accept").and_then(|v| v.as_bool()).unwrap_or(false);
+    crate::governance::decide(&st.pool, id, accept).await?;
+    Ok(Json(json!({"decided": if accept { "accepted" } else { "rejected" }})))
+}
+
+/// `POST /api/tags/{tag}/endorse` — TL2+, toggles, and says where the tag now stands.
+pub async fn endorse_tag(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(tag): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let count = crate::governance::endorse(&st.pool, &user, &tag).await?;
+    Ok(Json(json!({
+        "tag": tag,
+        "endorsements": count,
+        "boost": crate::governance::ENDORSE_BOOST * (count as f64 / crate::governance::ENDORSE_FULL).min(1.0),
+        "needed_for_full": crate::governance::ENDORSE_FULL as i64
+    })))
 }

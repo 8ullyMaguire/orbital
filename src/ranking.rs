@@ -170,7 +170,12 @@ pub fn rank_top(members: Vec<MemberStat>, weights: &[(String, f64)]) -> Vec<Memb
         .map(|m| {
             let clicks = m.clicks as f64 / max_clicks;
             let rel = relevance(&m, weights);
-            (0.6 * clicks + 0.4 * rel, m)
+            // Endorsements are a separate term, not a bigger `rel`: relevance saturates at 1.0 for a
+            // member who holds every tag in the lens, so adding inside it did nothing for exactly
+            // the members it was meant to reward. 0.4 x 0.2 is the same +0.08 the relevance term
+            // would have given, and it cannot swamp clicks: 0.6 is six times its ceiling.
+            let endorse = crate::governance::ENDORSE_BOOST * m.endorse.clamp(0.0, 1.0);
+            (0.6 * clicks + 0.4 * rel + 0.4 * endorse, m)
         })
         .collect();
     scored.sort_by(|a, b| {
@@ -346,6 +351,7 @@ mod tests {
             clicks: visitors_7d,
             tags: tags.iter().map(|s| s.to_string()).collect(),
             verticals: vec!["dev".into()],
+            endorse: 0.0,
         }
     }
 
@@ -500,6 +506,30 @@ mod tests {
             vec!["b", "c", "a"],
             "clicks first, then the older account, as before"
         );
+    }
+
+    #[test]
+    fn an_endorsed_tag_is_worth_a_little_more() {
+        // Same clicks, so the relevance term decides; the handles are ordered so that a tie would
+        // go to `aaa`. Three endorsements (endorse = 1.0) must be enough to flip it, and the cap
+        // means they cannot flip much more than that.
+        let mut plain = member("aaa", 1, 40, 2, &["chiptune"]);
+        plain.clicks = 70;
+        let mut liked = member("zzz", 1, 40, 2, &["chiptune"]);
+        liked.clicks = 70;
+        liked.endorse = 1.0;
+        let weights = vec![("chiptune".to_string(), 1.0)];
+        // Both hold the tag, so relevance is saturated for both: the endorsement is the only
+        // difference, which is exactly the case the additive term exists for.
+
+        let order = rank_top(vec![plain.clone(), liked.clone()], &weights);
+        assert_eq!(order[0].handle, "zzz", "an endorsed tag lifts its member");
+
+        // Without the endorsement the same pair falls back to the tie-break.
+        let mut liked_plain = liked.clone();
+        liked_plain.endorse = 0.0;
+        let order = rank_top(vec![plain, liked_plain], &weights);
+        assert_eq!(order[0].handle, "aaa", "no endorsement, no lift");
     }
 
     #[test]
