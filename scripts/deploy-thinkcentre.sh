@@ -156,11 +156,6 @@ map \$http_cf_connecting_ip \$orbital_client {
 limit_req_zone  \$orbital_client zone=orbital_api:10m rate=60r/m;
 limit_conn_zone \$orbital_client zone=orbital_api_conn:10m;
 
-# A five-second cache in front of the origin. The app already says max-age=60; the
-# point of this one is to absorb a burst without the app doing the work twice.
-proxy_cache_path /var/cache/nginx/orbital_api levels=1:2 keys_zone=orbital_api_cache:10m
-                 max_size=64m inactive=10m use_temp_path=off;
-
 server {
     listen $PUBLIC_PORT;
     listen [::]:$PUBLIC_PORT;
@@ -192,15 +187,12 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_read_timeout 30s;
 
-        proxy_cache orbital_api_cache;
-        proxy_cache_key "\$scheme\$host\$request_uri";
-        proxy_cache_valid 200 5s;
-        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
-        proxy_cache_background_update on;
-        proxy_cache_lock on;
+        # No proxy_cache here on purpose. With a cache in front, nginx answers 200 from the
+        # cache and never consults the app's ETag, so a conditional request stops being one.
+        # Cloudflare's edge absorbs the burst instead - which only works because the app stopped
+        # sending Set-Cookie on /api/v1.
 
         include /etc/nginx/snippets/estate-security-headers.conf;
-        add_header X-Cache-Status \$upstream_cache_status always;
         # 429 without a Retry-After is a client that cannot back off politely.
         add_header Retry-After 2 always;
     }

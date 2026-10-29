@@ -80,7 +80,7 @@ fn cached(headers: &HeaderMap, value: Value) -> Response {
             (header::CONTENT_TYPE, "application/json; charset=utf-8".to_string()),
             (header::ETAG, etag),
             (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string()),
-            (header::ACCESS_CONTROL_EXPOSE_HEADERS, "etag, x-cache-status".to_string()),
+            (header::ACCESS_CONTROL_EXPOSE_HEADERS, "etag".to_string()),
         ],
         Json(value),
     )

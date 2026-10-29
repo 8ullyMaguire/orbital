@@ -82,8 +82,16 @@ async fn visitor_middleware(
     let fresh = existing.is_none();
     let vid = existing.unwrap_or_else(auth::new_visitor_id);
     req.extensions_mut().insert(VisitorId(vid.clone()));
+
+    // The read API answers the same bytes to everybody, so it must not hand out an identity: a
+    // `Set-Cookie` makes a response uncacheable at nginx and at Cloudflare (measured: `cf-cache-
+    // status: DYNAMIC` while the response said `max-age=60`), which turned every scrape into an
+    // origin hit and made the advertised cache lifetime a lie. Nothing under /api/v1 counts a view
+    // or a click, so there is nothing for the id to do there.
+    let api_read = req.uri().path().starts_with("/api/v1/");
+
     let mut res = next.run(req).await;
-    if fresh {
+    if fresh && !api_read {
         res.headers_mut()
             .append(SET_COOKIE, auth::visitor_cookie(&state.cfg, &vid));
     }

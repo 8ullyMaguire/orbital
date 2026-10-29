@@ -720,3 +720,33 @@ async fn the_read_api_validates_and_speaks_cors(pool: PgPool) {
         assert_eq!(r.cors.as_deref(), Some("*"), "{path} has no CORS header");
     }
 }
+
+#[sqlx::test]
+async fn the_read_api_does_not_hand_out_a_cookie(pool: PgPool) {
+    // A `Set-Cookie` makes a response uncacheable: measured in production, Cloudflare answered
+    // `cf-cache-status: DYNAMIC` for a response that advertised `max-age=60`. Nothing under
+    // /api/v1 counts a view, so the visitor id has no work to do there - but every HTML page still
+    // needs one, or view deduplication stops working.
+    let app = app(pool).await;
+
+    let api = app.clone().oneshot(get("/api/v1/stats")).await.unwrap();
+    assert_eq!(api.status(), StatusCode::OK);
+    assert!(
+        api.headers().get("set-cookie").is_none(),
+        "the read API must stay cacheable"
+    );
+    assert_eq!(
+        api.headers().get("cache-control").and_then(|v| v.to_str().ok()),
+        Some("public, max-age=60")
+    );
+
+    let page = app.clone().oneshot(get("/")).await.unwrap();
+    assert_eq!(page.status(), StatusCode::OK);
+    assert!(
+        page.headers().get_all("set-cookie").iter().any(|v| v
+            .to_str()
+            .map(|c| c.starts_with("orbital_v="))
+            .unwrap_or(false)),
+        "a page still mints the visitor id"
+    );
+}
