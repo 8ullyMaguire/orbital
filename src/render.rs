@@ -326,16 +326,6 @@ pub struct EmbedTemplate {
     pub join_url: String,
 }
 
-// ------------------------------------------------------------------ gate
-
-#[derive(Template, WebTemplate)]
-#[template(path = "gate.html")]
-pub struct GateTemplate {
-    pub layout: Layout,
-    pub next: String,
-    pub sfw_url: String,
-}
-
 #[derive(Template, WebTemplate)]
 #[template(path = "about.html")]
 pub struct AboutTemplate {

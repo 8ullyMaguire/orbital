@@ -105,7 +105,6 @@ async fn a_second_primary_is_refused_by_the_index(pool: PgPool) {
 async fn the_test_config_never_points_at_a_real_host(pool: PgPool) {
     let cfg = Config::for_test("http://orbital.test");
     assert!(cfg.public_base.starts_with("http://"));
-    assert_eq!(cfg.nsfw_host, "orbitalnsfw.test");
     assert!(!cfg.secure_cookies);
     let _ = pool;
 }

@@ -18,7 +18,7 @@ use axum::extract::{Request, State};
 use axum::http::header::{HeaderValue, SET_COOKIE};
 use axum::http::HeaderName;
 use axum::middleware::Next;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::Router;
 use sqlx::PgPool;
 use tower_http::compression::CompressionLayer;
@@ -58,14 +58,7 @@ pub async fn build_router(state: AppState) -> Router {
             state.clone(),
             visitor_middleware,
         ))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            nsfw_gate_middleware,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            headers_middleware,
-        ))
+        .layer(axum::middleware::from_fn(headers_middleware))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -95,58 +88,13 @@ async fn visitor_middleware(
     res
 }
 
-/// The adult host is gated at the edge of the router rather than in each
-/// handler: a page added later cannot forget the check, because there is
-/// nothing to forget.
-async fn nsfw_gate_middleware(
-    State(state): State<AppState>,
-    req: Request,
-    next: Next,
-) -> Response {
-    let host = req
-        .headers()
-        .get(axum::http::header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
-    let is_nsfw = host == state.cfg.nsfw_host.to_lowercase() || host == "nsfw.localhost";
-    if is_nsfw {
-        let path = req.uri().path().to_string();
-        let exempt = path == "/gate"
-            || path == "/robots.txt"
-            || path == "/favicon.ico"
-            || path.starts_with("/assets/");
-        let ok = auth::cookie_value(req.headers(), "orbital_age").as_deref() == Some("1");
-        if !exempt && !ok {
-            let next_path = if path.starts_with('/') { path } else { "/".into() };
-            let target = format!("/gate?next={}", crate::render::urlencode(&next_path));
-            return axum::response::Redirect::to(&target).into_response();
-        }
-    }
-    next.run(req).await
-}
-
 /// Headers a page cannot forge and a segfault cannot skip.
 ///
-/// The adult check reads the configured host, not a `nsfw.` prefix. The prefix
-/// version silently skipped every hostname that did not start with those five
-/// characters, so `noindex` was never sent on the adult surface while the pages
-/// looked gated — a crawler would have indexed the directory.
-async fn headers_middleware(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let hostname = req
-        .headers()
-        .get(axum::http::header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
-    let is_nsfw =
-        hostname == state.cfg.nsfw_host.to_lowercase() || hostname == "nsfw.localhost";
+/// There used to be an `X-Robots-Tag: noindex` branch here for the adult hostname. That surface is
+/// retired (see DECISIONS D2): the directory holds links, not media, so there is no second
+/// surface to keep out of an index. The remaining headers are unconditional, which is the point —
+/// a header that depends on a host comparison is a header that can silently stop being sent.
+async fn headers_middleware(req: Request, next: Next) -> Response {
     let mut res = next.run(req).await;
     let h = res.headers_mut();
     h.insert(
@@ -157,11 +105,5 @@ async fn headers_middleware(State(state): State<AppState>, req: Request, next: N
         HeaderName::from_static("referrer-policy"),
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
-    if is_nsfw {
-        h.insert(
-            HeaderName::from_static("x-robots-tag"),
-            HeaderValue::from_static("noindex, nofollow, noarchive"),
-        );
-    }
     res
 }

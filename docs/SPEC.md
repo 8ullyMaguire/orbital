@@ -10,7 +10,8 @@ widget.
 decision below is ranked against that, not against feature parity with the draft.
 
 Live: `https://orbital.polarisocial.xyz` (SFW) and
-`https://orbitalnsfw.polarisocial.xyz` (age-gated, `noindex`).
+`https://orbitalnsfw.polarisocial.xyz` — retired as a surface by DECISIONS D9; it now answers with a
+301 to the equivalent path on the main host.
 
 ---
 

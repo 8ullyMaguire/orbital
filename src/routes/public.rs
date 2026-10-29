@@ -2,7 +2,7 @@
 //! without signing in, rendered as HTML by the Rust process.
 
 use axum::extract::{Path, Query, State};
-use axum::http::{header, HeaderMap, HeaderValue};
+use axum::http::{header, HeaderMap};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::{Form, Router};
@@ -19,7 +19,6 @@ use crate::store;
 use crate::text::{first_line, normalise_handle};
 use crate::AppState;
 
-const AGE_COOKIE: &str = "orbital_age";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,21 +34,17 @@ pub fn router() -> Router<AppState> {
         .route("/feed.xml", get(feed_xml))
         .route("/sitemap.xml", get(sitemap))
         .route("/robots.txt", get(robots))
-        .route("/gate", get(gate).post(gate_post))
         .route("/report", get(report).post(report_post))
 }
 
 /// Visibility is about the PRIMARY vertical, not about the adult flag. A member
 /// with a SFW primary and an adult secondary belongs on the SFW leaderboard (and
-/// their SFW card says nothing about the other listing); a member whose primary
-/// is the adult vertical belongs nowhere near it.
-pub(crate) fn visible(m: &MemberStat, is_nsfw: bool) -> bool {
-    let adult = m.verticals.first().map(|v| v == "nsfw").unwrap_or(false);
-    if is_nsfw {
-        adult && m.trust_level >= 1
-    } else {
-        !adult
-    }
+/// Every profile is listed on the one surface. `nsfw` is a vertical like gaming, not a wall:
+/// the platform stores links and labels, never adult media, so the destination site is where age
+/// verification belongs. Kept as a function so the call sites still read as a rule and not a
+/// coincidence.
+pub(crate) fn visible(_m: &MemberStat) -> bool {
+    true
 }
 
 pub(crate) fn card(m: &MemberStat, base: &str, rank: usize, mode: StatMode, now: chrono::DateTime<Utc>) -> MemberCard {
@@ -63,7 +58,7 @@ fn layout_for(
     verticals: &[crate::models::VerticalRow],
     me: Option<&User>,
 ) -> Layout {
-    Layout::new(&ctx.base, ctx.is_nsfw, verticals, me)
+    Layout::new(&ctx.base, false, verticals, me)
 }
 
 // ------------------------------------------------------------------ home
@@ -81,7 +76,7 @@ pub async fn home(
     Query(q): Query<HomeQuery>,
 ) -> PageResult<HomeTemplate> {
     let now = Utc::now();
-    let verticals = store::verticals(&st.pool, ctx.is_nsfw).await?;
+    let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
     let mut other: Vec<SmallVertical> = Vec::new();
 
@@ -89,7 +84,7 @@ pub async fn home(
         let members = store::vertical_members(&st.pool, &v.slug).await?;
         let members: Vec<MemberStat> = members
             .into_iter()
-            .filter(|m| visible(m, ctx.is_nsfw))
+            .filter(|m| visible(m))
             .collect();
         if members.is_empty() {
             other.push(SmallVertical {
@@ -118,7 +113,7 @@ pub async fn home(
     // A vertical with an adult flag never appears on the SFW host, and the SFW
     // verticals never appear on the adult host: the two directories are separate
     // products that happen to share a binary.
-    if ctx.is_nsfw {
+    if false {
         cards.retain(|c| {
             verticals
                 .iter()
@@ -127,10 +122,10 @@ pub async fn home(
         other.retain(|o| verticals.iter().any(|v| v.slug == o.slug && v.nsfw));
     }
 
-    let all = store::all_members(&st.pool, ctx.is_nsfw).await?;
+    let all = store::all_members(&st.pool, true).await?;
     let all: Vec<MemberStat> = all
         .into_iter()
-        .filter(|m| visible(m, ctx.is_nsfw))
+        .filter(|m| visible(m))
         .collect();
     let trending: Vec<MemberCard> = ranking::rank_trending(all.clone(), now)
         .iter()
@@ -144,14 +139,14 @@ pub async fn home(
         .enumerate()
         .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::New, now))
         .collect();
-    let picks: Vec<MemberCard> = store::curated_any(&st.pool, ctx.is_nsfw, 6)
+    let picks: Vec<MemberCard> = store::curated_any(&st.pool, true, 6)
         .await?
         .iter()
         .enumerate()
         .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Top, now))
         .collect();
 
-    let (total_members, total_clicks) = store::totals(&st.pool, ctx.is_nsfw).await?;
+    let (total_members, total_clicks) = store::totals(&st.pool, true).await?;
     let quick = cards
         .iter()
         .take(3)
@@ -166,7 +161,7 @@ pub async fn home(
         new_members,
         picks,
         total_members,
-        total_clicks: if ctx.is_nsfw { 0 } else { total_clicks },
+        total_clicks,
         quick,
         q: q.q,
     })
@@ -193,14 +188,12 @@ pub async fn vertical(
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
-    if v.nsfw != ctx.is_nsfw {
-        return Err(PageError(AppError::NotFound));
-    }
-    let verticals = store::verticals(&st.pool, ctx.is_nsfw).await?;
+    // One surface: the adult vertical has a page like every other vertical.
+    let verticals = store::verticals(&st.pool, true).await?;
     let members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
         .await?
         .into_iter()
-        .filter(|m| visible(m, ctx.is_nsfw))
+        .filter(|m| visible(m))
         .collect();
 
     let tab = q
@@ -231,7 +224,7 @@ pub async fn vertical(
             let curated = store::curated(&st.pool, &v.slug).await?;
             curated
                 .into_iter()
-                .filter(|m| visible(m, ctx.is_nsfw))
+                .filter(|m| visible(m))
                 .collect()
         }
         _ => ranking::rank_top(filtered.clone()),
@@ -333,7 +326,7 @@ pub async fn profile(
     PageUser(user): PageUser,
     VisitorId(vid): VisitorId,
     Path(handle): Path<String>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
 ) -> PageResult<Response> {
     let now = Utc::now();
     let Ok(handle) = normalise_handle(&handle) else {
@@ -351,7 +344,7 @@ pub async fn profile(
         .iter()
         .find(|(_, role)| role == "primary")
         .map(|(s, _)| s.clone());
-    let primary_nsfw = match &primary {
+    let _primary_nsfw = match &primary {
         Some(slug) => store::vertical_by_slug(&st.pool, slug)
             .await?
             .map(|v| v.nsfw)
@@ -359,32 +352,10 @@ pub async fn profile(
         None => false,
     };
 
-    // Segregation, both directions and before anything renders.
-    if ctx.is_nsfw {
-        if !primary_nsfw {
-            return Err(PageError(AppError::NotFound));
-        }
-        if owner.trust_level < 1 {
-            return Err(PageError(AppError::NotFound));
-        }
-        if !age_ok(&headers) {
-            let verticals = store::verticals(&st.pool, true).await?;
-            return Ok(GateTemplate {
-                layout: layout_for(&ctx, &verticals, user.as_ref()),
-                next: format!("/@{handle}"),
-                sfw_url: st.cfg.public_base.clone(),
-            }
-            .into_response());
-        }
-    } else if primary_nsfw || owner.nsfw_enabled {
-        return Err(PageError(AppError::NotFound));
-    }
+    // No segregation: one surface serves every profile, adult verticals included. `primary_nsfw`
+    // and `owner.nsfw_enabled` are still read to label the page, not to hide it.
+    let ctx_vertical = primary.clone();
 
-    let ctx_vertical = if ctx.is_nsfw {
-        Some("nsfw".to_string())
-    } else {
-        primary.clone()
-    };
     let is_self = user.as_ref().map(|u| u.id) == Some(owner.id);
 
     // A view is a fact about the visitor's day, not about the request: the
@@ -404,7 +375,7 @@ pub async fn profile(
         &st.pool,
         owner.id,
         ctx_vertical.as_deref(),
-        ctx.is_nsfw,
+        true,
     )
     .await?;
     let link_cards: Vec<LinkCard> = links
@@ -421,7 +392,7 @@ pub async fn profile(
     // An adult vertical badge never renders on the SFW host.
     let badges: Vec<Badge> = pairs
         .iter()
-        .filter(|(slug, _)| ctx.is_nsfw || slug != "nsfw")
+        .filter(|_| true)
         .map(|(slug, role)| Badge {
             slug: slug.clone(),
             label: pretty_vertical(slug),
@@ -432,7 +403,7 @@ pub async fn profile(
         .collect();
 
     // Similar profiles: same formula as the spec, computed here from tag sets.
-    let all = store::all_members(&st.pool, ctx.is_nsfw).await?;
+    let all = store::all_members(&st.pool, true).await?;
     let owner_tags = store::tags_of(&st.pool, owner.id).await?;
     let viewer_tags = match &user {
         Some(u) if u.id != owner.id => store::tags_of(&st.pool, u.id).await?,
@@ -440,7 +411,7 @@ pub async fn profile(
     };
     let mut scored: Vec<(f64, &MemberStat)> = all
         .iter()
-        .filter(|m| m.id != owner.id && visible(m, ctx.is_nsfw))
+        .filter(|m| m.id != owner.id && visible(m))
         .map(|m| {
             (
                 ranking::similarity(&viewer_tags, &owner_tags, m, primary.as_deref(), now),
@@ -472,7 +443,7 @@ pub async fn profile(
         let members: Vec<MemberStat> = store::vertical_members(&st.pool, p)
             .await?
             .into_iter()
-            .filter(|m| visible(m, ctx.is_nsfw))
+            .filter(|m| visible(m))
             .collect();
         let order = ranking::ring(&members, &hub_tags, &[p.clone()], day);
         let (prev, next) = ranking::neighbours(&order, owner.id);
@@ -487,7 +458,7 @@ pub async fn profile(
     }
     let all_visible: Vec<MemberStat> = all
         .iter()
-        .filter(|m| visible(m, ctx.is_nsfw))
+        .filter(|m| visible(m))
         .cloned()
         .collect();
     let order = ranking::ring(&all_visible, &hub_tags, &[], day);
@@ -532,7 +503,7 @@ pub async fn profile(
     } else {
         first_line(&owner.bio, 160)
     };
-    let total_members = store::member_count(&st.pool, ctx.is_nsfw).await?;
+    let total_members = store::member_count(&st.pool, true).await?;
 
     let view = ProfileView {
         display_name: owner.display_name.clone(),
@@ -560,7 +531,7 @@ pub async fn profile(
         stat_7d: fmt_count(stat.visitors_7d),
         stat_joined: month_year(owner.created_at),
         is_self,
-        nsfw: ctx.is_nsfw,
+        nsfw: false,
         jsonld,
         canonical,
         meta_description,
@@ -575,7 +546,7 @@ pub async fn profile(
         total_members,
     };
 
-    let verticals = store::verticals(&st.pool, ctx.is_nsfw).await?;
+    let verticals = store::verticals(&st.pool, true).await?;
     Ok(ProfileTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         p: view,
@@ -616,9 +587,6 @@ fn icon_for_slug(slug: &str) -> &'static str {
     }
 }
 
-pub(crate) fn age_ok(headers: &HeaderMap) -> bool {
-    crate::auth::cookie_value(headers, AGE_COOKIE).as_deref() == Some("1")
-}
 
 // ------------------------------------------------------------------ search
 
@@ -635,14 +603,14 @@ pub async fn search(
     Query(q): Query<SearchQuery>,
 ) -> PageResult<SearchTemplate> {
     let now = Utc::now();
-    let verticals = store::verticals(&st.pool, ctx.is_nsfw).await?;
+    let verticals = store::verticals(&st.pool, true).await?;
     let query = q.q.trim().to_string();
     let (mut members, mut tags) = if query.is_empty() {
         (Vec::new(), Vec::new())
     } else {
-        store::search(&st.pool, &query, ctx.is_nsfw).await?
+        store::search(&st.pool, &query, true).await?
     };
-    if !ctx.is_nsfw {
+    if true {
         members.retain(|m| !m.nsfw_enabled);
     }
     let cards: Vec<MemberCard> = members
@@ -731,12 +699,12 @@ pub async fn embed(
 
 pub async fn feed_json(
     State(st): State<AppState>,
-    ctx: Ctx,
+    _ctx: Ctx,
 ) -> PageResult<Response> {
-    let members = store::all_members(&st.pool, ctx.is_nsfw).await?;
+    let members = store::all_members(&st.pool, true).await?;
     let members: Vec<MemberStat> = members
         .into_iter()
-        .filter(|m| visible(m, ctx.is_nsfw))
+        .filter(|m| visible(m))
         .collect();
     let items: Vec<serde_json::Value> = members
         .iter()
@@ -769,19 +737,19 @@ pub async fn feed_json(
 
 pub(crate) async fn vertical_feed(
     State(st): State<AppState>,
-    ctx: Ctx,
+    _ctx: Ctx,
     Path(slug): Path<String>,
 ) -> PageResult<Response> {
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
-    if v.nsfw && !ctx.is_nsfw {
+    if false { // one surface: every vertical renders on it
         return Err(PageError(AppError::NotFound));
     }
     let members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
         .await?
         .into_iter()
-        .filter(|m| visible(m, ctx.is_nsfw))
+        .filter(|m| visible(m))
         .collect();
     let items: Vec<serde_json::Value> = members
         .iter()
@@ -812,11 +780,11 @@ pub(crate) async fn vertical_feed(
         .into_response())
 }
 
-pub(crate) async fn feed_xml(State(st): State<AppState>, ctx: Ctx) -> PageResult<Response> {
-    let members = store::all_members(&st.pool, ctx.is_nsfw).await?;
+pub(crate) async fn feed_xml(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
+    let members = store::all_members(&st.pool, true).await?;
     let members: Vec<MemberStat> = members
         .into_iter()
-        .filter(|m| visible(m, ctx.is_nsfw))
+        .filter(|m| visible(m))
         .collect();
     let mut items = String::new();
     for m in members.iter().take(100) {
@@ -850,15 +818,15 @@ pub(crate) async fn feed_xml(State(st): State<AppState>, ctx: Ctx) -> PageResult
         .into_response())
 }
 
-pub(crate) async fn sitemap(State(st): State<AppState>, ctx: Ctx) -> PageResult<Response> {
-    // The adult host has no sitemap: it is noindex, and a sitemap here would be
-    // a list of everything we promised not to publish.
+pub(crate) async fn sitemap(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
+    // One sitemap for one directory: the adult vertical is a category in it, not a separate
+    // corpus to keep out of an index.
     let mut body = String::from(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <urlset xmlns="http://www.w3.org/1999/xhtml/sitemap/0.9">"#,
     );
     body = body.replace("http://www.w3.org/1999/xhtml/sitemap/0.9", "http://www.sitemaps.org/schemas/sitemap/0.9");
-    if !ctx.is_nsfw {
+    {
         let base = &st.cfg.public_base;
         body.push_str(&format!(
             "<url><loc>{base}/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>"
@@ -866,7 +834,7 @@ pub(crate) async fn sitemap(State(st): State<AppState>, ctx: Ctx) -> PageResult<
         body.push_str(&format!(
             "<url><loc>{base}/about</loc><priority>0.5</priority></url>"
         ));
-        for v in store::verticals(&st.pool, false).await? {
+        for v in store::verticals(&st.pool, true).await? {
             let members = store::vertical_members(&st.pool, &v.slug).await?;
             if members.is_empty() {
                 continue;
@@ -876,7 +844,7 @@ pub(crate) async fn sitemap(State(st): State<AppState>, ctx: Ctx) -> PageResult<
                 v.slug
             ));
         }
-        for (handle, updated) in store::sitemap_entries(&st.pool, false).await? {
+        for (handle, updated) in store::sitemap_entries(&st.pool, true).await? {
             body.push_str(&format!(
                 "<url><loc>{base}/@{}</loc><lastmod>{}</lastmod><priority>0.8</priority></url>",
                 crate::text::esc(&handle),
@@ -893,11 +861,11 @@ pub(crate) async fn sitemap(State(st): State<AppState>, ctx: Ctx) -> PageResult<
 }
 
 pub(crate) async fn robots(ctx: Ctx) -> Response {
-    let body = if ctx.is_nsfw {
+    let body = if false {
         "User-agent: *\nDisallow: /\n".to_string()
     } else {
         format!(
-            "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /l/\nDisallow: /api/\nDisallow: /gate\n\nSitemap: {}/sitemap.xml\n",
+            "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /l/\nDisallow: /api/\n\nSitemap: {}/sitemap.xml\n",
             ctx.base
         )
     };
@@ -908,56 +876,6 @@ pub(crate) async fn robots(ctx: Ctx) -> Response {
         .into_response()
 }
 
-// ------------------------------------------------------------------ gate
-
-#[derive(Deserialize)]
-pub struct GateQuery {
-    #[serde(default)]
-    pub next: Option<String>,
-}
-
-pub async fn gate(
-    State(st): State<AppState>,
-    ctx: Ctx,
-    Query(q): Query<GateQuery>,
-) -> PageResult<GateTemplate> {
-    // Only a local path is a legal destination: an open redirect on the age
-    // gate is how a phishing link borrows this domain.
-    let next = q
-        .next
-        .filter(|n| n.starts_with('/') && !n.starts_with("//"))
-        .unwrap_or_else(|| "/".to_string());
-    Ok(GateTemplate {
-        layout: Layout::new(&ctx.base, true, &[], None),
-        next,
-        sfw_url: st.cfg.public_base.clone(),
-    })
-}
-
-#[derive(Deserialize)]
-pub struct GateForm {
-    #[serde(default)]
-    pub next: String,
-    #[serde(default)]
-    pub ok: Option<String>,
-}
-
-pub async fn gate_post(ctx: Ctx, Form(form): Form<GateForm>) -> Response {
-    let next = if form.next.starts_with('/') && !form.next.starts_with("//") {
-        form.next
-    } else {
-        "/".to_string()
-    };
-    let secure = if ctx.base.starts_with("https") { "; Secure" } else { "" };
-    let cookie = HeaderValue::from_str(&format!(
-        "{AGE_COOKIE}=1; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax{secure}"
-    ))
-    .expect("cookie is ascii");
-    let mut res = Redirect::to(&next).into_response();
-    res.headers_mut().append(header::SET_COOKIE, cookie);
-    res
-}
-
 // ------------------------------------------------------------------ about + report
 
 pub async fn about(
@@ -965,7 +883,7 @@ pub async fn about(
     ctx: Ctx,
     PageUser(user): PageUser,
 ) -> PageResult<AboutTemplate> {
-    let verticals = store::verticals(&st.pool, false).await?;
+    let verticals = store::verticals(&st.pool, true).await?;
     Ok(AboutTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
     })
@@ -977,7 +895,7 @@ pub async fn report(
     PageUser(user): PageUser,
     Query(q): Query<ReportQuery>,
 ) -> PageResult<ReportTemplate> {
-    let verticals = store::verticals(&st.pool, ctx.is_nsfw).await?;
+    let verticals = store::verticals(&st.pool, true).await?;
     Ok(ReportTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         handle: q.u.clone().unwrap_or_default(),
@@ -1013,7 +931,7 @@ pub async fn report_post(
     PageUser(user): PageUser,
     Form(form): Form<ReportForm>,
 ) -> PageResult<ReportTemplate> {
-    let verticals = store::verticals(&st.pool, ctx.is_nsfw).await?;
+    let verticals = store::verticals(&st.pool, true).await?;
     let handle = normalise_handle(&form.handle).unwrap_or_default();
     let target = store::user_by_handle(&st.pool, &handle).await?;
     let Some(target) = target else {
@@ -1084,22 +1002,16 @@ mod tests {
     }
 
     #[test]
-    fn a_sfw_primary_member_belongs_on_the_sfw_host_even_with_an_adult_secondary() {
-        let m = member(&["dev", "nsfw"], 2);
-        assert!(visible(&m, false), "a SFW-primary member must rank on the SFW host");
-    }
-
-    #[test]
-    fn an_adult_primary_member_never_shows_on_the_sfw_host() {
-        let m = member(&["nsfw", "dev"], 3);
-        assert!(!visible(&m, false), "the primary vertical decides, not the secondary list");
-    }
-
-    #[test]
-    fn the_adult_directory_shows_only_adult_members_with_trust() {
-        assert!(visible(&member(&["nsfw"], 2), true));
-        assert!(!visible(&member(&["nsfw"], 0), true), "TL0 stays hidden");
-        assert!(!visible(&member(&["dev", "nsfw"], 2), true), "not an adult primary");
-        assert!(!visible(&member(&["dev"], 2), true), "never in the adult list");
+    fn every_profile_is_listed_on_the_one_surface() {
+        // Three cases that used to be told apart by a bool: a SFW primary with an adult
+        // secondary, an adult primary, and a TL0 adult account. All three are members of one
+        // directory now, which is the point of retiring the second surface.
+        assert!(visible(&member(&["dev", "nsfw"], 2)));
+        assert!(visible(&member(&["nsfw", "dev"], 3)));
+        assert!(
+            visible(&member(&["nsfw"], 0)),
+            "trust gates nothing: a TL0 adult profile is listed like any other"
+        );
+        assert!(visible(&member(&["gaming"], 1)));
     }
 }

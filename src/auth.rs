@@ -184,14 +184,13 @@ impl FromRequestParts<AppState> for PageUser {
     }
 }
 
-/// Which surface answered this request. Derived from the Host header, because
-/// segregation that depends on a template remembering to check a flag is
-/// segregation that will one day be forgotten.
+/// Request context. There used to be an `is_nsfw` here, derived from the Host header, because
+/// adult listings answered on a second hostname. That surface is retired: the platform stores
+/// links and labels, never adult media, so `nsfw` is a vertical and the destination site owns age
+/// verification. `base` is the one public origin.
 #[derive(Clone, Debug)]
 pub struct Ctx {
-    pub is_nsfw: bool,
     pub base: String,
-    pub nsfw_base: String,
     pub hub_handle: String,
 }
 
@@ -214,8 +213,6 @@ impl FromRequestParts<AppState> for Ctx {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("")
             .to_string();
-        let hostname = host.split(':').next().unwrap_or("").to_lowercase();
-        let is_nsfw = hostname == state.cfg.nsfw_host.to_lowercase() || hostname == "nsfw.localhost";
         let scheme = parts
             .headers
             .get("x-forwarded-proto")
@@ -231,9 +228,7 @@ impl FromRequestParts<AppState> for Ctx {
             format!("{scheme}://{host}")
         };
         Ok(Ctx {
-            is_nsfw,
-            base: if is_nsfw { state.cfg.nsfw_base() } else { base },
-            nsfw_base: state.cfg.nsfw_base(),
+            base,
             hub_handle: state.cfg.hub_handle.clone(),
         })
     }

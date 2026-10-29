@@ -59,7 +59,6 @@ if [ ! -f "\$f" ]; then
   cat > "\$f" <<EOF
 BIND_ADDR=127.0.0.1:$BACKEND_PORT
 PUBLIC_BASE=https://orbital.polarisocial.xyz
-NSFW_HOST=orbitalnsfw.polarisocial.xyz
 SECURE_COOKIES=1
 SESSION_SALT=\$SALT
 HUB_HANDLE=criticalnexus
@@ -104,13 +103,13 @@ REMOTE
 
 say "5/7 nginx site"
 ssh "$HOST" "sudo tee $NGINX_FILE >/dev/null" <<REMOTE
-# Orbital — SFW hub and the gated adult host share one backend; the app decides
-# which surface answers from the Host header, so both names proxy to the same
-# port and the wall is enforced in code, not in this file.
+# Orbital — one surface (DECISIONS D9). The app no longer reads the Host header:
+# every name reaches the same directory. The old adult hostname is kept only so
+# links already shared keep working, and it 301s to the canonical origin.
 server {
     listen $PUBLIC_PORT;
     listen [::]:$PUBLIC_PORT;
-    server_name orbital.polarisocial.xyz orbitalnsfw.polarisocial.xyz;
+    server_name orbital.polarisocial.xyz;
 
     client_max_body_size 2m;
     gzip on;
@@ -145,6 +144,15 @@ server {
         add_header Cache-Control "public, max-age=604800";
     }
 }
+
+# The retired adult surface. A 301, not a 404: people and bots already hold URLs
+# on this name, and D9 moved the content rather than deleting it.
+server {
+    listen $PUBLIC_PORT;
+    listen [::]:$PUBLIC_PORT;
+    server_name orbitalnsfw.polarisocial.xyz;
+    return 301 https://orbital.polarisocial.xyz\$request_uri;
+}
 REMOTE
 
 say "6/7 enable, migrate, seed, restart"
@@ -174,11 +182,11 @@ hdr=\$(curl -sI "http://127.0.0.1:$PUBLIC_PORT/" | head -1)
 echo "nginx /            \$hdr"
 echo -n "title:             "; curl -s "http://127.0.0.1:$PUBLIC_PORT/" | grep -o '<title>[^<]*' | head -1
 echo -n "dashboard shell:   "; curl -s "http://127.0.0.1:$PUBLIC_PORT/app/" | grep -c 'app-' || true
-echo -n "adult gate:        "; curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: orbitalnsfw.polarisocial.xyz' "http://127.0.0.1:$PUBLIC_PORT/"
+echo -n "adult 301:         "; curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: orbitalnsfw.polarisocial.xyz' "http://127.0.0.1:$PUBLIC_PORT/"
 echo -n "sfw profile:       "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@criticalnexus"
-echo -n "adult on sfw host: "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@steeltitan"
+echo -n "adult profile:     "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@steeltitan"
 REMOTE
 
 say "done"
 echo "public:  https://orbital.polarisocial.xyz"
-echo "adult:   https://orbitalnsfw.polarisocial.xyz (gated, noindex)"
+echo "adult:   https://orbitalnsfw.polarisocial.xyz (301 → orbital.polarisocial.xyz)"

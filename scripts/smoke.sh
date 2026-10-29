@@ -79,17 +79,21 @@ assert t["clicks"] >= 1, d
 body "$BASE/v/dev?tab=top" | grep -q "$H" && pass "member is on the vertical leaderboard" || fail "leaderboard" "not listed"
 body "$BASE/v/dev?tab=trending" | grep -q "$H" && pass "member is on trending" || fail "trending" "not listed"
 
-# ---- NSFW host
+# ---- one surface (DECISIONS D9): the adult vertical is an ordinary category
+c=$(code "$BASE/@steeltitan")
+[ "$c" = 200 ] && pass "adult profile renders on the one host" || fail "adult profile" "status $c"
+c=$(code "$BASE/v/nsfw")
+[ "$c" = 200 ] && pass "the nsfw vertical has a page" || fail "nsfw vertical" "status $c"
+c=$(code "$BASE/gate")
+[ "$c" = 404 ] && pass "the gate is retired" || fail "gate" "status $c"
 c=$(code -H "Host: $NSFW_HOST" "$BASE/@steeltitan")
-[ "$c" = 303 ] || [ "$c" = 302 ] || [ "$c" = 307 ] && pass "adult profile redirects to the gate" || fail "gate" "status $c"
-c=$(code -H "Host: $NSFW_HOST" "$BASE/")
-case "$c" in 302|303|307) pass "adult home requires the gate" ;; *) fail "adult home" "status $c" ;; esac
-c=$(code -H "Host: $NSFW_HOST" -H 'Cookie: orbital_age=1' "$BASE/")
-[ "$c" = 200 ] && pass "gate cookie opens the adult directory" || fail "adult directory" "status $c"
-body -H "Host: $NSFW_HOST" -H 'Cookie: orbital_age=1' "$BASE/sitemap.xml" | grep -q '<loc>' \
-  && fail "adult sitemap" "adult host publishes URLs" || pass "adult sitemap is empty"
-curl -sI -H "Host: $NSFW_HOST" "$BASE/" | grep -qi 'x-robots-tag:.*noindex' \
-  && pass "adult host is noindex" || fail "noindex" "header missing"
+[ "$c" = 200 ] && pass "the retired hostname does not behave differently" || fail "host split" "status $c"
+body "$BASE/sitemap.xml" | grep -q '/v/nsfw' \
+  && pass "the sitemap lists the adult vertical" || fail "sitemap" "nsfw vertical missing"
+curl -sI "$BASE/" | grep -qi 'x-robots-tag' \
+  && fail "robots" "a page still carries X-Robots-Tag" || pass "no X-Robots-Tag anywhere"
+body "$BASE/feed.json" | grep -qi 'adult' \
+  && pass "the feed carries the whole directory" || fail "feed" "adult vertical filtered out"
 
 # ---- dashboard + reports
 c=$(code "$BASE/app/")

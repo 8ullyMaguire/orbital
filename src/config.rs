@@ -4,10 +4,9 @@ use anyhow::{Context, Result};
 pub struct Config {
     pub database_url: String,
     pub bind_addr: String,
-    /// Absolute origin of the SFW hub, no trailing slash.
+    /// Absolute origin of the hub, no trailing slash. There is one origin: the adult vertical
+    /// used to answer on a second hostname, and DECISIONS D2 retired it.
     pub public_base: String,
-    /// Host name that selects the NSFW surface. Everything else is SFW.
-    pub nsfw_host: String,
     pub session_cookie: String,
     pub visitor_cookie: String,
     /// Secret mixed into the visitor id before hashing, so the stored
@@ -28,8 +27,6 @@ impl Config {
                 .unwrap_or_else(|_| "http://127.0.0.1:8090".into())
                 .trim_end_matches('/')
                 .to_string(),
-            nsfw_host: std::env::var("NSFW_HOST")
-                .unwrap_or_else(|_| "orbitalnsfw.polarisocial.xyz".into()),
             session_cookie: std::env::var("SESSION_COOKIE").unwrap_or_else(|_| "orbital_s".into()),
             visitor_cookie: std::env::var("VISITOR_COOKIE").unwrap_or_else(|_| "orbital_v".into()),
             salt: std::env::var("SESSION_SALT")
@@ -49,11 +46,7 @@ impl Config {
             database_url: String::new(),
             bind_addr: "127.0.0.1:0".into(),
             public_base: base.trim_end_matches('/').to_string(),
-            // Deliberately NOT prefixed with `nsfw.`: the header middleware used to
-        // decide the surface with `host.starts_with("nsfw.")`, and a test host
-        // that began with `nsfw.` made that mistake invisible.
-        nsfw_host: "orbitalnsfw.test".into(),
-            session_cookie: "orbital_s".into(),
+                session_cookie: "orbital_s".into(),
             visitor_cookie: "orbital_v".into(),
             salt: "test-salt".into(),
             secure_cookies: false,
@@ -62,11 +55,4 @@ impl Config {
         }
     }
 
-    pub fn nsfw_base(&self) -> String {
-        // Same scheme as the public origin, host swapped for the NSFW one.
-        match self.public_base.split_once("://") {
-            Some((scheme, _)) => format!("{scheme}://{}", self.nsfw_host),
-            None => format!("https://{}", self.nsfw_host),
-        }
-    }
 }

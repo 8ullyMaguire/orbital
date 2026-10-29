@@ -8,7 +8,7 @@ What is live, what is left, and the words to share it with.
 |---|---|---|
 | SFW directory | https://orbital.polarisocial.xyz | live, indexed, sitemap + feeds |
 | Dashboard | https://orbital.polarisocial.xyz/app/ | live, session auth |
-| Adult directory | https://orbitalnsfw.polarisocial.xyz | live, cookie age gate, `noindex`, empty sitemap |
+| Adult directory | https://orbitalnsfw.polarisocial.xyz | retired (D9): 301 to the main host; `nsfw` is an ordinary vertical |
 | Footer band | 9 SFW sites on thinkcentre | injected by nginx, see `scripts/footers-thinkcentre.sh` |
 
 The adult host is `orbitalnsfw.polarisocial.xyz` and not `nsfw.orbital.polarisocial.xyz`

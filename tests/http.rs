@@ -242,7 +242,11 @@ async fn trending_is_hidden_rather_than_padded_when_nobody_has_traffic(pool: PgP
 }
 
 #[sqlx::test]
-async fn adult_members_never_render_on_the_sfw_host(pool: PgPool) {
+async fn an_adult_vertical_is_an_ordinary_vertical(pool: PgPool) {
+    // The platform stores links and labels, never adult media, so there is no second surface and
+    // no gate: `nsfw` is a category like `gaming`, and the destination site owns age verification.
+    // This test used to assert the opposite (404 on the "SFW host", a gate redirect, an
+    // X-Robots-Tag), so it is the guard against the wall being rebuilt by accident.
     let app = app(pool).await;
     let reg = register(&app, "adult", "nsfw").await;
     assert_eq!(reg.status, StatusCode::OK, "{}", reg.body);
@@ -259,47 +263,41 @@ async fn adult_members_never_render_on_the_sfw_host(pool: PgPool) {
     .await;
     assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
 
-    let sfw = call(&app, get("/@adult")).await;
-    assert_eq!(sfw.status, StatusCode::NOT_FOUND, "adult profile visible on SFW host");
-
-    // A crawler obeys the header, not the meta tag, and it also governs
-    // non-HTML responses. This assertion is why the middleware reads the
-    // configured host instead of a `nsfw.` prefix.
-    let adult_root = call(
-        &app,
-        cookie(host(get("/"), "orbitalnsfw.test"), "orbital_age=1"),
-    )
-    .await;
-    assert_eq!(adult_root.status, StatusCode::OK);
-    let robots = adult_root.robots.unwrap_or_default();
+    // The profile renders, on the one host, with its links - a TL0 account included, because
+    // trust no longer decides who the directory admits.
+    let profile = call(&app, get("/@adult")).await;
+    assert_eq!(
+        profile.status,
+        StatusCode::OK,
+        "an adult profile must render like any other: {}",
+        profile.body
+    );
+    assert!(profile.body.contains("example.org/adult-link"), "its links render too");
     assert!(
-        robots.contains("noindex"),
-        "the adult surface must send X-Robots-Tag: noindex, got {robots:?}"
+        profile.robots.is_none(),
+        "no page carries X-Robots-Tag any more, got {:?}",
+        profile.robots
     );
 
-    // The adult host redirects an unacknowledged visitor to the gate, and the
-    // gate explains what it is before anything adult renders.
-    let gated = call(&app, host(get("/@adult"), "orbitalnsfw.test")).await;
-    assert!(
-        gated.status.is_redirection(),
-        "an unacknowledged adult request must go to the gate, got {}",
-        gated.status
+    // The vertical has a page, and it is listed in the index.
+    let vertical = call(&app, get("/v/nsfw")).await;
+    assert_eq!(vertical.status, StatusCode::OK, "{}", vertical.body);
+
+    // There is nothing to acknowledge, so the gate is gone rather than merely unlinked.
+    let gate = call(&app, host(get("/gate?next=%2F%40adult"), "orbital.test")).await;
+    assert_eq!(gate.status, StatusCode::NOT_FOUND, "the gate route is retired");
+
+    // A second hostname is not a second surface: the old adult hostname serves the same page.
+    let old_host = call(&app, host(get("/@adult"), "orbitalnsfw.test")).await;
+    assert_eq!(
+        old_host.status,
+        StatusCode::OK,
+        "the retired hostname must not behave differently"
     );
-    let gate_page = call(&app, host(get("/gate?next=%2F%40adult"), "orbitalnsfw.test")).await;
-    assert_eq!(gate_page.status, StatusCode::OK);
-    assert!(gate_page.body.contains("18"), "the gate must explain itself");
 
-    // A TL0 account is hidden from the adult directory entirely.
-    let after = call(
-        &app,
-        cookie(host(get("/@adult"), "orbitalnsfw.test"), "orbital_age=1"),
-    )
-    .await;
-    assert_eq!(after.status, StatusCode::NOT_FOUND, "TL0 must stay hidden");
-
-    // And the SFW sitemap never lists it.
+    // And the sitemap lists it, because the directory is one directory.
     let map = call(&app, get("/sitemap.xml")).await;
-    assert!(!map.body.contains("adult"), "{}", map.body);
+    assert!(map.body.contains("/@adult"), "{}", map.body);
 }
 
 #[sqlx::test]
@@ -367,18 +365,19 @@ async fn the_embed_widget_is_self_contained_and_links_back(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn a_secondary_adult_listing_is_invisible_from_the_sfw_host(pool: PgPool) {
+async fn every_vertical_is_listed_on_one_surface(pool: PgPool) {
+    // Two members that used to be told apart: one SFW-primary with an adult secondary, one
+    // adult-primary with a SFW secondary. Both belong to the same directory now, and the
+    // profile shows every vertical a member chose, because choosing one is not a secret.
     let app = app(pool.clone()).await;
 
-    // SFW primary, adult secondary: belongs on the SFW leaderboard, and the SFW
-    // card must not hint at the other listing.
     let sess = register(&app, "dual", "dev").await.cookie.unwrap();
     let patched = call(
         &app,
         json_req(
             "PATCH",
             "/api/me",
-            serde_json::json!({"secondary_verticals": ["nsfw"]}),
+            serde_json::json!({"primary_vertical": "dev", "secondary_verticals": ["nsfw"]}),
             Some(&sess),
         ),
     )
@@ -386,39 +385,20 @@ async fn a_secondary_adult_listing_is_invisible_from_the_sfw_host(pool: PgPool) 
     assert_eq!(patched.status, StatusCode::OK, "{}", patched.body);
 
     let board = call(&app, get("/v/dev")).await;
-    assert!(board.body.contains("dual"), "a SFW-primary member must still rank");
+    assert!(board.body.contains("dual"), "a dev-primary member ranks in dev");
 
     let card = call(&app, get("/@dual")).await;
-    assert!(!card.body.contains(">nsfw<"), "the SFW card leaked the adult listing");
-    assert!(!card.body.contains("Adult Creators"), "the SFW card named the adult vertical");
-
-    // Adult primary, SFW secondary: must not appear in the SFW vertical at all.
-    let s2 = register(&app, "shadow", "nsfw").await.cookie.unwrap();
-    let p2 = call(
-        &app,
-        json_req(
-            "PATCH",
-            "/api/me",
-            serde_json::json!({"secondary_verticals": ["dev"]}),
-            Some(&s2),
-        ),
-    )
-    .await;
-    assert_eq!(p2.status, StatusCode::OK, "{}", p2.body);
-
-    let board = call(&app, get("/v/dev")).await;
     assert!(
-        !board.body.contains("shadow"),
-        "an adult-primary member must never appear in a SFW leaderboard"
+        card.body.contains("/v/nsfw"),
+        "the profile states every vertical it holds, adult secondary included: {}",
+        card.body
     );
+
+    let _s2 = register(&app, "shadow", "nsfw").await.cookie.unwrap();
     let people = call(&app, get("/")).await;
-    assert!(!people.body.contains("shadow"), "nor on the front door");
-    // The search page echoes the query; what must be absent is the member's card.
+    assert!(people.body.contains("shadow"), "the front door lists every profile");
     let search = call(&app, get("/search?q=shadow")).await;
-    assert!(
-        !search.body.contains("href=\"/@shadow\""),
-        "nor in search results"
-    );
+    assert!(search.body.contains("shadow"), "and search finds them");
 }
 
 #[sqlx::test]

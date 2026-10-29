@@ -2,8 +2,9 @@
 
 A directory of makers, sorted by what people actually click.
 
-Live: **https://orbital.polarisocial.xyz** (SFW) · **https://orbitalnsfw.polarisocial.xyz**
-(age-gated adult host, `noindex`, never cross-linked from the SFW side)
+Live: **https://orbital.polarisocial.xyz** — one directory. `nsfw` is a vertical like `gaming`
+(DECISIONS D9): the platform stores links, never media, so the destination site owns age
+verification. `orbitalnsfw.polarisocial.xyz` 301s to the same path here, so shared links keep working.
 
 Every member gets a profile with their links and taste tags, one **primary
 vertical** (the leaderboard they live on) and up to two secondaries (ranked at
@@ -98,7 +99,6 @@ survives only until the next run.
 | `DATABASE_URL` | Postgres DSN |
 | `BIND_ADDR` | default `127.0.0.1:8090` |
 | `PUBLIC_BASE` | absolute SFW origin, e.g. `https://orbital.polarisocial.xyz` |
-| `NSFW_HOST` | hostname that selects the adult surface |
 | `SESSION_SALT` | mixed into the visitor hash |
 | `SECURE_COOKIES` | `1` in production |
 | `HUB_HANDLE` | the hub's own account |

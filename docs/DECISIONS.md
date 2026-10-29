@@ -17,7 +17,7 @@ possible — that is what D4's trust multiplier and the proposed anomaly detecti
 are still stored, and shown beside distinct visitors, because "12 clicks from 3 people" is a
 different signal from "12 clicks from 12 people" and both are worth seeing.
 
-## D2 — Two surfaces, one process
+## D2 — Two surfaces, one process *(superseded by D9)*
 
 **Context.** Adult profiles must not appear beside all-ages ones. CSS is not a wall: a crawler, a
 link preview or a reader without the stylesheet sees everything.
@@ -31,6 +31,12 @@ middleware decides before rendering, so a bug in a template cannot leak. The adu
 `orbitalnsfw.polarisocial.xyz` rather than `nsfw.orbital.polarisocial.xyz` because Cloudflare's
 Universal SSL covers one label; the two-level name fails the TLS handshake with no certificate and
 no useful error.
+
+**Why it was retired.** Read D9. In short: the directory stores a URL and a label, never media, so
+there was no adult content for a wall to hold back — only an adult *category*, which the destination
+site already gates. The wall cost a second hostname, a second cookie jar, a split sitemap, and one
+real bug (the `X-Robots-Tag` check matched a `nsfw.` prefix and never fired for the real host, so a
+crawler could index the surface the middleware believed it was hiding).
 
 ## D3 — Server-rendered public pages, SPA only where it earns its weight
 
@@ -102,7 +108,7 @@ level that D4's multiplier uses.
 Orbital holding an OAuth grant for anyone. The limitation is honest: only Bluesky is verifiable
 today, so a self-hosted identity is second class until the proposed domain-claim flow exists.
 
-## D8 — The SFW surface never links an adult property
+## D8 — The SFW surface never links an adult property *(narrowed by D9)*
 
 **Context.** The two accounts (`@criticalnexus`, `@steeltitan`) and the two hostnames exist to keep
 audiences apart. A single cross-link defeats both.
@@ -111,5 +117,46 @@ audiences apart. A single cross-link defeats both.
 carry no SFW footer. The check is mechanical: the SFW page's bytes are grepped for the adult
 hostnames, and the adult page's for the SFW ones.
 
+**Narrowed by D9.** With one surface, this is a *profile* convention for `@criticalnexus`, not a
+rule the platform enforces — a member may list whatever they choose, adult or not. The mechanical
+grep still applies to `@criticalnexus`'s page and to the footer script, because that account's whole
+value is being safe to open at work.
+
 **Consequences.** Some traffic is left on the table by design. A reader who wants both has to find
 them separately, which is the point.
+
+## D9 — One surface: `nsfw` is a vertical, not a wall
+
+**Context.** D2 put adult profiles behind a second hostname and an age gate. The premise was that
+adult listings must not sit beside all-ages ones. Two measurements undermined it, and one incident
+did:
+
+- The schema has no media column. A link is `url`, `label`, `icon`, `position`. The platform hosts
+  no adult content at all, so the gate protected a category name, not a corpus.
+- The gate was enforced in one place and *encoded* in five others (`visible()`, `verticals()`,
+  `all_members()`, the sitemap, the feeds) — five places for a rule to be forgotten, and one of them
+  already was: `X-Robots-Tag` compared against a `nsfw.` prefix, never matched
+  `orbitalnsfw.polarisocial.xyz`, and shipped.
+
+**Decision.** One hostname, one surface. `nsfw` is a row in `verticals` like `gaming`; any profile
+may hold it as a primary or a secondary and appears in the directory, the leaderboards, the search,
+the feeds and the sitemap on the same terms as everyone else. There is no age gate, no second
+cookie, no `X-Robots-Tag`, and no `Host`-dependent behaviour anywhere. Age verification belongs to
+the destination site, reachable only by an explicit click on a link.
+
+**Consequences, recorded honestly.**
+
+- The all-ages surface now contains the words its members choose, including adult-vertical labels.
+  Where D2 could claim "zero adult strings on this host", D9 cannot. That is the price of the
+  decision, not an oversight: the mitigation is a content policy (no imagery, no explicit labels),
+  not a hostname.
+- A reader who wants the adult side blocked can no longer block one hostname. That lever is gone;
+  blocking the directory also blocks the all-ages parts. This was the strongest argument for D2 and
+  it was overruled deliberately.
+- Search classification is now a domain-wide risk rather than a per-host one. Keeping labels
+  descriptive-but-not-explicit and never storing images is what keeps the domain out of adult
+  classification.
+- Reversal is one-way in practice: if thumbnails or uploads ever arrive, a wall has to be rebuilt
+  onto an already-classified domain rather than starting clean.
+- `orbitalnsfw.polarisocial.xyz` keeps answering with a 301 to the same path on the main host, so
+  links already shared are not orphaned.
