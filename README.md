@@ -160,6 +160,13 @@ GET /api/v1/links/health               links that failed 3+ checks, worst first
 GET /api/v1/ring/{slug}?from=handle    the webring walk, as JSON
 ```
 
+Read responses carry a weak `ETag` (send it back in `If-None-Match` for a 304) and
+`Access-Control-Allow-Origin: *`, and deliberately **no `Set-Cookie`**: a response that sets a cookie
+is uncacheable at nginx and at Cloudflare, which made the advertised `max-age=60` a lie and turned
+every scrape into an origin hit. nginx limits the API to 60 requests/minute per client (keyed on
+`CF-Connecting-IP`, since `$remote_addr` is a Cloudflare edge address for every visitor) with a
+`Retry-After` on 429.
+
 ## MCP server
 
 `mcp/orbital_mcp.py` exposes that API as seven MCP tools (`orbital_stats`, `orbital_verticals`,
@@ -179,6 +186,17 @@ hermes mcp add orbital \
 ```
 
 `ORBITAL_BASE` overrides the origin (default `https://orbital.polarisocial.xyz`).
+
+## Backups
+
+`orbital-backup.timer` dumps to `~/backups/orbital` nightly (14 kept, written to `.part` first).
+`orbital-restore-test.timer` runs on the 1st of the month: it creates a scratch database from the
+newest dump, counts users/links/verticals and the migration version, checks the live database is
+still intact, and drops the scratch. A dump nobody has restored is a file.
+
+```bash
+ssh thinkcentre 'systemctl --user start orbital-restore-test.service'
+```
 
 ## The adult vertical
 

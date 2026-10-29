@@ -219,3 +219,26 @@ credentials. Write access stays on the session-cookie API until member tokens ex
   against production without database access.
 - `api_tokens` still does not exist, so no MCP tool writes, and the honest tool list is seven reads
   rather than a write API wearing a read-only label.
+
+## D13 — The read API carries no identity
+
+**Context.** D12 published `/api/v1` with `Cache-Control: public, max-age=60`. The middleware that
+mints the visitor cookie did not know about it, so every API response carried
+`Set-Cookie: orbital_v=…`. Measured in production: `cf-cache-status: DYNAMIC` on a response that
+claimed a 60-second cache, and nginx refused to cache it for the same reason. The advertised cache
+lifetime was a lie, and every scrape became an origin hit.
+
+**Decision.** No `Set-Cookie` under `/api/v1/`. HTML pages still mint the visitor id, because view
+deduplication depends on it.
+
+**Consequences.**
+
+- The response is now cacheable by Cloudflare and by any intermediary that respects
+  `Cache-Control` — which is what makes a public read API survivable at all.
+- A conditional request reaches the app and gets a real 304, so the validator is worth something.
+- There is **no nginx `proxy_cache`** in front of the API, and that is deliberate: a cache in front
+  of an ETag answers 200 and never consults it, which turns a conditional request into a full one.
+  Cloudflare's edge absorbs the burst; the per-client rate limit (60/min, `CF-Connecting-IP`, 429
+  with `Retry-After`) absorbs the abuse.
+- View counts and referrer attribution never see API reads. That is correct — an API consumer is not
+  a visitor — but it means the numbers on a profile describe the site, not the API.
