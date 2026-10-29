@@ -556,3 +556,100 @@ async fn the_vertical_ring_is_walkable_by_url(pool: PgPool) {
     let missing = call(&app, get("/v/nope/next")).await;
     assert_eq!(missing.status, StatusCode::NOT_FOUND, "no such vertical is a 404");
 }
+
+#[sqlx::test]
+async fn the_public_api_shows_what_the_page_shows(pool: PgPool) {
+    // An API that answers more than the page is a leak with a version number on it. This asserts
+    // the parity that matters: the same member, the same links, the same health verdict the card
+    // on the profile carries.
+    let app = app(pool.clone()).await;
+    let sess = register(&app, "apiuser", "dev").await.cookie.unwrap();
+    let created = call(
+        &app,
+        json_req(
+            "POST",
+            "/api/links",
+            serde_json::json!({"url": "https://example.org/api-visible"}),
+            Some(&sess),
+        ),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let id = created.json()["link"]["id"].as_str().unwrap().to_string();
+
+    let stats = call(&app, get("/api/v1/stats")).await;
+    assert_eq!(stats.status, StatusCode::OK, "{}", stats.body);
+    assert!(stats.json()["members"].as_i64().unwrap() >= 1);
+    assert!(stats.json()["links"]["total"].as_i64().unwrap() >= 1);
+
+    let verticals = call(&app, get("/api/v1/verticals")).await;
+    assert!(verticals.body.contains("\"slug\":\"dev\"") || verticals.body.contains("\"slug\": \"dev\""));
+
+    let one = call(&app, get("/api/v1/members/apiuser")).await;
+    assert_eq!(one.status, StatusCode::OK, "{}", one.body);
+    let links = one.json()["links"].as_array().cloned().unwrap_or_default();
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0]["url"], "https://example.org/api-visible");
+    assert!(links[0]["failing"].is_boolean(), "health is part of the fact");
+
+    // The handle is accepted with or without the `@` a profile URL carries.
+    let at = call(&app, get("/api/v1/members/@apiuser")).await;
+    assert_eq!(at.status, StatusCode::OK);
+
+    // A hidden member is a 404 here exactly as it is on the site.
+    orbital::store::set_trust(&pool, user_id(&pool, "apiuser").await, 0, Some(true))
+        .await
+        .unwrap();
+    let hidden = call(&app, get("/api/v1/members/apiuser")).await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND, "{}", hidden.body);
+
+    let missing = call(&app, get("/api/v1/members/nobody")).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND, "{}", missing.body);
+}
+
+async fn user_id(pool: &PgPool, handle: &str) -> uuid::Uuid {
+    orbital::store::user_by_handle(pool, handle)
+        .await
+        .unwrap()
+        .expect("member exists")
+        .id
+}
+
+#[sqlx::test]
+async fn the_health_endpoint_names_the_worst_links(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let sess = register(&app, "rotter", "dev").await.cookie.unwrap();
+    let created = call(
+        &app,
+        json_req(
+            "POST",
+            "/api/links",
+            serde_json::json!({"url": "https://example.org/gone"}),
+            Some(&sess),
+        ),
+    )
+    .await;
+    let id = created.json()["link"]["id"].as_str().unwrap().to_string();
+    let link_id: uuid::Uuid = id.parse().unwrap();
+
+    // What the checker would record after three failed nights.
+    for _ in 0..3 {
+        orbital::store::record_link_health(&pool, link_id, Some(410), false)
+            .await
+            .unwrap();
+    }
+
+    let health = call(&app, get("/api/v1/links/health")).await;
+    assert_eq!(health.status, StatusCode::OK, "{}", health.body);
+    assert!(health.body.contains("https://example.org/gone"), "{}", health.body);
+    assert_eq!(health.json()["threshold"].as_i64().unwrap(), 3);
+
+    // And the ring endpoint answers the same walk the redirect performs.
+    let ring = call(&app, get("/api/v1/ring/dev")).await;
+    assert_eq!(ring.status, StatusCode::OK, "{}", ring.body);
+    assert_eq!(ring.json()["vertical"], "dev");
+    assert!(ring.json()["next"]["handle"].is_string());
+
+    let nope = call(&app, get("/api/v1/ring/no-such-vertical")).await;
+    assert_eq!(nope.status, StatusCode::NOT_FOUND);
+}

@@ -52,6 +52,7 @@ pub async fn build_router(state: AppState) -> Router {
     Router::new()
         .merge(routes::public::router())
         .merge(routes::api::router())
+        .merge(routes::apiv1::router())
         .merge(routes::track::router())
         .merge(routes::assets::router())
         .route("/healthz", axum::routing::get(healthz))
