@@ -22,6 +22,15 @@ use url::Url;
 use crate::store;
 
 const TIMEOUT: Duration = Duration::from_secs(8);
+
+/// Which HEAD answers must be re-asked with a GET before they count as a verdict.
+///
+/// 405/501 mean "no HEAD on this route". 400/403/404 are what HSTS-fronts and bot filters answer
+/// a HEAD they never handled. 0 is the transport itself (a timeout or a TLS refusal), which a GET
+/// may still survive. Everything else - a clean 200, a 5xx, a redirect - is taken at face value.
+fn needs_get_confirm(status: u16) -> bool {
+    status == 0 || status == 400 || status == 403 || status == 404 || status == 405 || status == 501
+}
 const MAX_REDIRECTS: usize = 4;
 /// Three consecutive failures before the profile says anything. Two is a flaky afternoon.
 pub const FAIL_THRESHOLD: i32 = 3;
@@ -113,18 +122,25 @@ pub async fn check_one(client: &reqwest::Client, raw: &str) -> Checked {
     for _ in 0..=MAX_REDIRECTS {
         let mut resp = match client.head(current.clone()).send().await {
             Ok(r) => r,
-            Err(e) => {
-                if e.is_timeout() {
-                    return Checked::Failed(0);
+            Err(_) => {
+                // A HEAD that never completed (some servers drop it) is not a dead link; ask once
+                // with a GET before believing the transport.
+                match client
+                    .get(current.clone())
+                    .header(reqwest::header::RANGE, "bytes=0-0")
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(_) => return Checked::Failed(0),
                 }
-                return Checked::Failed(0);
             }
         };
-        // 405/501 mean "no HEAD here", not "gone".
-        if matches!(
-            resp.status().as_u16(),
-            405 | 501 | 403 | 400,
-        ) {
+        // A failing HEAD proves nothing: bluesky.app answers `HEAD /profile/...` with 404 and
+        // `GET` with 200, so trusting HEAD would have marked two live profiles dead. Any status
+        // that would stop the walk is confirmed with a one-byte GET first, and only the GET's
+        // answer is believed.
+        if needs_get_confirm(resp.status().as_u16()) {
             if let Ok(r) = client
                 .get(current.clone())
                 .header(reqwest::header::RANGE, "bytes=0-0")
@@ -222,6 +238,17 @@ mod tests {
         }
         for ip in ["1.1.1.1", "93.184.216.34", "2a00:1450:4001:80b::200e"] {
             assert!(!is_private(ip.parse().unwrap()), "{ip} must be allowed");
+        }
+    }
+
+    #[test]
+    fn a_suspicious_head_is_always_confirmed() {
+        // Measured: bluesky.app returns 404 for HEAD and 200 for GET on the same profile URL.
+        for code in [0, 400, 403, 404, 405, 501] {
+            assert!(needs_get_confirm(code), "HEAD {code} must be re-asked");
+        }
+        for code in [200, 204, 301, 302, 500, 503] {
+            assert!(!needs_get_confirm(code), "HEAD {code} is a verdict");
         }
     }
 
