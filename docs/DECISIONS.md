@@ -160,3 +160,42 @@ the destination site, reachable only by an explicit click on a link.
   onto an already-classified domain rather than starting clean.
 - `orbitalnsfw.polarisocial.xyz` keeps answering with a 301 to the same path on the main host, so
   links already shared are not orphaned.
+
+## D10 — A link's health is recorded, and a failed HEAD is not evidence
+
+**Context.** The directory sells one thing: links that work. Nothing recorded whether a URL
+resolved, so a dead link looked exactly like a live one until a visitor clicked it and found out.
+
+**Decision.** `links` carries `last_status`, `last_checked` and `fail_count`. A daily checker walks
+the directory oldest-checked-first, asks each URL, and records what it saw. The profile shows a
+muted card with the reason at three consecutive failures; a success resets the count.
+
+**Consequences.** Three things were learned the hard way and are now rules:
+
+- **A failing HEAD proves nothing.** Measured in production on the first run: `bsky.app` answers
+  `HEAD /profile/<handle>` with 404 and `GET` with 200, so the checker marked two live profiles as
+  broken. Every status that would stop the walk (0, 400, 403, 404, 405, 501) is now confirmed with
+  a one-byte ranged `GET`, and only the GET's answer counts.
+- **A link checker is an SSRF gadget.** Member-supplied URLs point at whatever the member likes,
+  including `http://127.0.0.1:8041/healthz`. Loopback, private, link-local, carrier-NAT and
+  cloud-metadata addresses are refused, the guard is re-applied to every redirect hop (redirects
+  are followed by hand, not by the client), and a refusal is recorded as a *skip* that does not
+  raise `fail_count` — the member is not punished for our own caution.
+- **A counter, not a flag.** Sites go down for an hour. A boolean would have needed a moderator to
+  clear it; a counter clears itself.
+
+## D11 — Referrer host only
+
+**Context.** `source_hits` recorded which of our pages a click came from (`surface`) and nothing
+about where the visitor came from, so "did the Bluesky announcement or the Mastodon one work" was
+unanswerable.
+
+**Decision.** A click stores the *host* of the `Referer` header, lowercased, alphanumerics plus
+dots and hyphens, truncated at 100 characters, and nothing else. Our own hosts are dropped (an
+internal navigation is not an attribution), and the dashboard shows the result as
+`by_referrer`, where a missing referrer reads `direct`.
+
+**Consequences.** The useful question gets an answer and the dangerous one stays unanswerable by
+construction: we never learn the path a visitor was on, the post they clicked, or the query they
+searched. Many apps strip `Referer` entirely, so `direct` will be large and it means "unknown",
+not "typed the URL".

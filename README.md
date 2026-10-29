@@ -130,6 +130,22 @@ docs/DECISIONS.md  the choices that are expensive to reverse, and what was rejec
 docs/LAUNCH.md   deployment record, social posts, what is deliberately unlisted
 ```
 
+## Link health
+
+`orbital check-links --limit 500` walks every live link, oldest-checked first, and records the
+answer in `last_status` / `last_checked` / `fail_count`. The profile shows a muted card with the
+reason at three consecutive failures, and a success clears it. `deploy-thinkcentre.sh` installs
+`orbital-checklinks.timer` (daily, 04:20 with a 30-minute jitter).
+
+Private, loopback, link-local and cloud-metadata addresses are refused, including on redirect
+hops, because member-supplied URLs would otherwise point the checker at this host.
+
+## Referrer attribution
+
+A click records the host of its `Referer`, never the path, and never our own hosts.
+`GET /api/analytics` returns `by_referrer`, which is the only way to tell whether an announcement
+on one network did anything.
+
 ## The adult vertical
 
 Segregation is a property of the request, not of a template: `Host` decides the
