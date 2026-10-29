@@ -199,3 +199,23 @@ internal navigation is not an attribution), and the dashboard shows the result a
 construction: we never learn the path a visitor was on, the post they clicked, or the query they
 searched. Many apps strip `Referer` entirely, so `direct` will be large and it means "unknown",
 not "typed the URL".
+
+## D12 — A public read API, and an MCP server that is only a client of it
+
+**Context.** The rankings and the directory are worth building on only if someone else can read
+them, and the first consumer turned out to be an agent: Hermes, through MCP. Two ways to expose it —
+an MCP server that talks to Postgres directly, or one that talks to a public HTTP API.
+
+**Decision.** `/api/v1` is the surface: read-only, unauthenticated, 60-second cache, and the same
+facts the HTML pages show. The MCP server (`mcp/orbital_mcp.py`) is a thin client of it and holds no
+credentials. Write access stays on the session-cookie API until member tokens exist.
+
+**Consequences.**
+
+- One place decides what is public. An MCP tool cannot leak a hidden member, because the endpoint
+  it calls already 404s for one — and that is asserted, not assumed: removing the hidden check
+  turns the API test red.
+- The server runs anywhere the site is reachable, which is what let it run on this workstation
+  against production without database access.
+- `api_tokens` still does not exist, so no MCP tool writes, and the honest tool list is seven reads
+  rather than a write API wearing a read-only label.

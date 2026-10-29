@@ -146,6 +146,40 @@ A click records the host of its `Referer`, never the path, and never our own hos
 `GET /api/analytics` returns `by_referrer`, which is the only way to tell whether an announcement
 on one network did anything.
 
+## Public read API
+
+`/api/v1` is read-only, needs no account, and returns what the pages show — nothing more.
+
+```
+GET /api/v1/stats                      totals, plus link counts (total / failing / unchecked)
+GET /api/v1/verticals                  every category with its member count
+GET /api/v1/members?vertical=&q=&limit=&offset=
+GET /api/v1/members/{handle}           profile, tags, Bluesky claim (+ verified), links
+GET /api/v1/members/{handle}/links     links with last_status / last_checked / failing
+GET /api/v1/links/health               links that failed 3+ checks, worst first
+GET /api/v1/ring/{slug}?from=handle    the webring walk, as JSON
+```
+
+## MCP server
+
+`mcp/orbital_mcp.py` exposes that API as seven MCP tools (`orbital_stats`, `orbital_verticals`,
+`orbital_members`, `orbital_profile`, `orbital_links`, `orbital_broken_links`, `orbital_ring`).
+It speaks HTTP, not SQL, so it needs no database credentials and cannot drift from the app's line
+between public and private. Read-only by construction: writing needs member tokens, which do not
+exist yet.
+
+```bash
+# one-time, on the machine that will run it
+python3 -m venv ~/.hermes/profiles/coding/mcp-venvs/orbital
+~/.hermes/profiles/coding/mcp-venvs/orbital/bin/pip install "mcp>=2"
+
+hermes mcp add orbital \
+  --command ~/.hermes/profiles/coding/mcp-venvs/orbital/bin/python \
+  --args /absolute/path/to/mcp/orbital_mcp.py
+```
+
+`ORBITAL_BASE` overrides the origin (default `https://orbital.polarisocial.xyz`).
+
 ## The adult vertical
 
 Segregation is a property of the request, not of a template: `Host` decides the
