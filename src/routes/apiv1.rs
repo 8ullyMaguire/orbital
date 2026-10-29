@@ -8,8 +8,11 @@
 //!
 //! Write access stays on the session-cookie API under `/api/` until tokens exist (they do not yet).
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use axum::extract::{Path, Query, State};
-use axum::http::header;
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -34,14 +37,50 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/ring/{slug}", get(ring))
 }
 
-fn cached(value: Value) -> Response {
+/// Serialise once, then answer with a validator the client can use.
+///
+/// The ETag is weak (`W/`) on purpose: these responses are assembled from live queries, so two
+/// bodies that hash the same are *equivalent*, not byte-identical by construction. Weak is the
+/// honest tag, and it is what makes a poller's `If-None-Match` cost a 304 instead of the payload.
+///
+/// CORS is `*` because the API is public and read-only: the alternative is that nobody can build a
+/// browser client, including a widget on our own blog. It is on every response, including the 304,
+/// because a cached response without it is a response the browser discards.
+fn cached(headers: &HeaderMap, value: Value) -> Response {
+    let body = serde_json::to_vec(&value).unwrap_or_default();
+    let mut hasher = DefaultHasher::new();
+    body.hash(&mut hasher);
+    let etag = format!("W/\"{:016x}\"", hasher.finish());
+
+    let matched = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .map(|inm| {
+            inm.split(',')
+                .map(|t| t.trim().trim_start_matches("W/"))
+                .any(|t| t == etag.trim_start_matches("W/"))
+        })
+        .unwrap_or(false);
+
+    if matched {
+        return (
+            StatusCode::NOT_MODIFIED,
+            [
+                (header::ETAG, etag),
+                (header::CACHE_CONTROL, "public, max-age=60".to_string()),
+                (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string()),
+            ],
+        )
+            .into_response();
+    }
+
     (
         [
-            (header::CACHE_CONTROL, "public, max-age=60"),
-            (
-                header::CONTENT_TYPE,
-                "application/json; charset=utf-8",
-            ),
+            (header::CACHE_CONTROL, "public, max-age=60".to_string()),
+            (header::CONTENT_TYPE, "application/json; charset=utf-8".to_string()),
+            (header::ETAG, etag),
+            (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string()),
+            (header::ACCESS_CONTROL_EXPOSE_HEADERS, "etag, x-cache-status".to_string()),
         ],
         Json(value),
     )
@@ -49,12 +88,12 @@ fn cached(value: Value) -> Response {
 }
 
 /// The numbers on the front door, in one request.
-async fn stats(State(st): State<AppState>) -> PageResult<Response> {
+async fn stats(State(st): State<AppState>, headers: HeaderMap) -> PageResult<Response> {
     let members = store::all_members(&st.pool, true).await?;
     let verticals = store::verticals(&st.pool, true).await?;
     let clicks: i64 = members.iter().map(|m| m.clicks).sum();
     let visitors: i64 = members.iter().map(|m| m.visitors).sum();
-    Ok(cached(json!({
+    Ok(cached(&headers, json!({
         "members": members.len(),
         "verticals": verticals.len(),
         "clicks": clicks,
@@ -77,7 +116,7 @@ async fn link_counts(st: &AppState) -> PageResult<Value> {
     Ok(json!({ "total": row.0, "failing": row.1, "unchecked": row.2 }))
 }
 
-async fn verticals(State(st): State<AppState>) -> PageResult<Response> {
+async fn verticals(State(st): State<AppState>, headers: HeaderMap) -> PageResult<Response> {
     let all = store::verticals(&st.pool, true).await?;
     let mut out = Vec::new();
     for v in all {
@@ -90,7 +129,7 @@ async fn verticals(State(st): State<AppState>) -> PageResult<Response> {
             "url": format!("{}/v/{}", st.cfg.public_base, v.slug),
         }));
     }
-    Ok(cached(json!({ "verticals": out })))
+    Ok(cached(&headers, json!({ "verticals": out })))
 }
 
 #[derive(Deserialize)]
@@ -105,7 +144,11 @@ pub struct MembersQuery {
     pub offset: Option<i64>,
 }
 
-async fn members(State(st): State<AppState>, Query(q): Query<MembersQuery>) -> PageResult<Response> {
+async fn members(
+    State(st): State<AppState>,
+    Query(q): Query<MembersQuery>,
+    headers: HeaderMap,
+) -> PageResult<Response> {
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let offset = q.offset.unwrap_or(0).max(0);
 
@@ -125,7 +168,7 @@ async fn members(State(st): State<AppState>, Query(q): Query<MembersQuery>) -> P
         .take(limit as usize)
         .map(|m| member_json(m, &st.cfg.public_base))
         .collect();
-    Ok(cached(json!({
+    Ok(cached(&headers, json!({
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -136,6 +179,7 @@ async fn members(State(st): State<AppState>, Query(q): Query<MembersQuery>) -> P
 async fn member(
     State(st): State<AppState>,
     Path(handle): Path<String>,
+    headers: HeaderMap,
 ) -> PageResult<Response> {
     let handle = handle.trim_start_matches('@').to_ascii_lowercase();
     let Some(u) = store::user_by_handle(&st.pool, &handle).await? else {
@@ -148,7 +192,7 @@ async fn member(
         .await?
         .ok_or(PageError(AppError::NotFound))?;
     let tags = store::tags_of(&st.pool, u.id).await?;
-    Ok(cached(json!({
+    Ok(cached(&headers, json!({
         "member": member_json(&stat, &st.cfg.public_base),
         "bio": u.bio,
         "tags": tags,
@@ -166,6 +210,7 @@ async fn member(
 async fn member_links(
     State(st): State<AppState>,
     Path(handle): Path<String>,
+    headers: HeaderMap,
 ) -> PageResult<Response> {
     let handle = handle.trim_start_matches('@').to_ascii_lowercase();
     let Some(u) = store::user_by_handle(&st.pool, &handle).await? else {
@@ -174,7 +219,7 @@ async fn member_links(
     if u.hidden {
         return Err(PageError(AppError::NotFound));
     }
-    Ok(cached(json!({ "handle": handle, "links": link_rows(&st, u.id).await? })))
+    Ok(cached(&headers, json!({ "handle": handle, "links": link_rows(&st, u.id).await? })))
 }
 
 async fn link_rows(st: &AppState, user_id: uuid::Uuid) -> PageResult<Vec<Value>> {
@@ -199,7 +244,7 @@ async fn link_rows(st: &AppState, user_id: uuid::Uuid) -> PageResult<Vec<Value>>
 }
 
 /// The dead links, worst first. This is the endpoint a member's own monitoring would use.
-async fn link_health(State(st): State<AppState>) -> PageResult<Response> {
+async fn link_health(State(st): State<AppState>, headers: HeaderMap) -> PageResult<Response> {
     let rows: Vec<(String, String, String, Option<i32>, i32, Option<chrono::DateTime<chrono::Utc>>)> =
         sqlx::query_as(
             "SELECT u.handle, l.label, l.url, l.last_status, l.fail_count, l.last_checked
@@ -210,7 +255,7 @@ async fn link_health(State(st): State<AppState>) -> PageResult<Response> {
         )
         .fetch_all(&st.pool)
         .await?;
-    Ok(cached(json!({
+    Ok(cached(&headers, json!({
         "threshold": crate::health::FAIL_THRESHOLD,
         "counts": link_counts(&st).await?,
         "failing": rows.iter().map(|(handle, label, url, status, fails, checked)| json!({
@@ -236,6 +281,7 @@ async fn ring(
     State(st): State<AppState>,
     Path(slug): Path<String>,
     Query(q): Query<RingQuery>,
+    headers: HeaderMap,
 ) -> PageResult<Response> {
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
@@ -260,7 +306,7 @@ async fn ring(
         Some(i) => order[(i + 1) % order.len()],
         None => order[0],
     };
-    Ok(cached(json!({
+    Ok(cached(&headers, json!({
         "vertical": v.slug,
         "from": q.from,
         "next": { "handle": next.handle, "display_name": next.display_name },

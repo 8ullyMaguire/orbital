@@ -37,6 +37,8 @@ struct Res {
     /// Where a redirect points. A webring is a promise about where the next click goes, so the
     /// test has to read the header rather than the (empty) body.
     location: Option<String>,
+    etag: Option<String>,
+    cors: Option<String>,
 }
 
 impl Res {
@@ -60,6 +62,16 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         .get("location")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.to_string());
+    let etag = res
+        .headers()
+        .get("etag")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string());
+    let cors = res
+        .headers()
+        .get("access-control-allow-origin")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string());
     let robots = res
         .headers()
         .get("x-robots-tag")
@@ -72,6 +84,8 @@ async fn call(app: &Router, req: Request<Body>) -> Res {
         cookie,
         robots,
         location,
+        etag,
+        cors,
     }
 }
 
@@ -652,4 +666,57 @@ async fn the_health_endpoint_names_the_worst_links(pool: PgPool) {
 
     let nope = call(&app, get("/api/v1/ring/no-such-vertical")).await;
     assert_eq!(nope.status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn the_read_api_validates_and_speaks_cors(pool: PgPool) {
+    // Two properties a public, unauthenticated endpoint owes its callers: a validator so a poller
+    // costs a 304 instead of the payload, and a CORS header so a browser client can exist at all.
+    let app = app(pool).await;
+    // The ring answers 404 for an empty category, and a 404 correctly carries no validator - so
+    // the category needs a member before it can be used to prove the headers are universal.
+    register(&app, "etagger", "dev").await;
+
+    let first = call(&app, get("/api/v1/stats")).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.body);
+    let etag = first.etag.clone().expect("the API must send an ETag");
+    assert!(etag.starts_with("W/\""), "a weak validator, got {etag}");
+    assert_eq!(first.cors.as_deref(), Some("*"), "CORS on the body response");
+
+    let mut cond = get("/api/v1/stats");
+    cond.headers_mut()
+        .insert("if-none-match", etag.parse().unwrap());
+    let second = call(&app, cond).await;
+    assert_eq!(
+        second.status,
+        StatusCode::NOT_MODIFIED,
+        "If-None-Match must be honoured: {}",
+        second.body
+    );
+    assert_eq!(
+        second.cors.as_deref(),
+        Some("*"),
+        "a 304 without CORS is a response the browser throws away"
+    );
+
+    // A validator from another representation must not suppress the body.
+    let mut stale = get("/api/v1/stats");
+    stale
+        .headers_mut()
+        .insert("if-none-match", "W/\"0000000000000000\"".parse().unwrap());
+    let third = call(&app, stale).await;
+    assert_eq!(third.status, StatusCode::OK);
+    assert!(third.body.contains("members"), "{}", third.body);
+
+    // And every endpoint carries it, not just the one that was tested.
+    for path in [
+        "/api/v1/verticals",
+        "/api/v1/members",
+        "/api/v1/links/health",
+        "/api/v1/ring/dev",
+    ] {
+        let r = call(&app, get(path)).await;
+        assert!(r.etag.is_some(), "{path} has no ETag");
+        assert_eq!(r.cors.as_deref(), Some("*"), "{path} has no CORS header");
+    }
 }

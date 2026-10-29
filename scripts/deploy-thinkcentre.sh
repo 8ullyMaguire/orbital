@@ -137,10 +137,30 @@ echo "unit written; link checker timer enabled"
 REMOTE
 
 say "5/7 nginx site"
+# The cache directory has to exist before nginx parses proxy_cache_path, and nginx must own it.
+ssh "$HOST" "sudo mkdir -p /var/cache/nginx/orbital_api && sudo chown -R www-data:www-data /var/cache/nginx/orbital_api"
 ssh "$HOST" "sudo tee $NGINX_FILE >/dev/null" <<REMOTE
 # Orbital — one surface (DECISIONS D9). The app no longer reads the Host header:
 # every name reaches the same directory. The old adult hostname is kept only so
 # links already shared keep working, and it 301s to the canonical origin.
+
+# --- the public read API is public, which means it is a target -----------------
+# Cloudflare terminates TLS, so \$remote_addr is a Cloudflare edge address for every
+# visitor. Keying the limiter on it would put the whole internet in one bucket and
+# rate-limit the estate to a crawl, so the key is CF-Connecting-IP when present and
+# the socket address when the request did not come through the tunnel.
+map \$http_cf_connecting_ip \$orbital_client {
+    ""      \$binary_remote_addr;
+    default \$http_cf_connecting_ip;
+}
+limit_req_zone  \$orbital_client zone=orbital_api:10m rate=60r/m;
+limit_conn_zone \$orbital_client zone=orbital_api_conn:10m;
+
+# A five-second cache in front of the origin. The app already says max-age=60; the
+# point of this one is to absorb a burst without the app doing the work twice.
+proxy_cache_path /var/cache/nginx/orbital_api levels=1:2 keys_zone=orbital_api_cache:10m
+                 max_size=64m inactive=10m use_temp_path=off;
+
 server {
     listen $PUBLIC_PORT;
     listen [::]:$PUBLIC_PORT;
@@ -152,6 +172,38 @@ server {
     gzip_proxied any;
     gzip_min_length 512;
     gzip_types text/plain text/css application/javascript application/json application/xml image/svg+xml;
+
+    # A scrape of /api/v1 can be a lot of queries per second from one address; 40 at
+    # once is generous for a client and cheap for us.
+    limit_conn orbital_api_conn 40;
+
+    # The read API: limited, cached, and still carrying the estate security headers.
+    # NOTE: any add_header inside this location stops inheritance from the http
+    # block, so the snippet is repeated here on purpose.
+    location /api/v1/ {
+        limit_req zone=orbital_api burst=30 nodelay;
+        limit_req_status 429;
+
+        proxy_pass http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 30s;
+
+        proxy_cache orbital_api_cache;
+        proxy_cache_key "\$scheme\$host\$request_uri";
+        proxy_cache_valid 200 5s;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_background_update on;
+        proxy_cache_lock on;
+
+        include /etc/nginx/snippets/estate-security-headers.conf;
+        add_header X-Cache-Status \$upstream_cache_status always;
+        # 429 without a Retry-After is a client that cannot back off politely.
+        add_header Retry-After 2 always;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:$BACKEND_PORT;
