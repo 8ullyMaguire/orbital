@@ -11,7 +11,7 @@
 set -euo pipefail
 
 HOST="${HOST:-thinkcentre}"
-SITES="${SITES:-ascend blackrep blog gravity gravity-8015 gravity-prod2 kindling lorehaven piefed stash-box suki whitebois radio}"
+SITES="${SITES:-ascend blackrep blog gravity gravity-8015 gravity-prod2 kindling darkhold piefed stash-box suki whitebois radio}"
 MARK="orbital-footer"
 SNIPPET="/etc/nginx/snippets/orbital-footer.conf"
 REVERT=0
