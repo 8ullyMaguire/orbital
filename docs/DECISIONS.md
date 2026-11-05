@@ -379,3 +379,83 @@ serves; `/status` probes that list with a 60-second cache and shows code and lat
 - Probing is cached and non-blocking per host (a `JoinSet`), so a dead host costs one timeout on a
   minute-stale page, not the whole page.
 
+
+## D21 — The catalogue is the product: sites are first-class
+
+**Context.** Orbital modelled a member and their outbound links. That is a directory of *people*, and
+after a week it held 2 members, 24 links and 19 distinct domains — an empty room. The useful object
+for a reader is the *site*: a destination with a category, a health status, the people behind it, and
+neighbours that are similar. The owner asked for a catalogue of sites and resources (the shape ThePornDude
+has, but extensive and with a graph), including that site's inventory as a small proportion, and for a
+mind map of sites.
+
+**Decision.**
+
+1. `sites` is a table of its own; `links.site_id` is a nullable FK filled by canonical domain, so "who
+   links here" is a join and not a string comparison.
+2. **Proportion is a surface property.** Adult rows are a vertical, carry `noindex`, and are excluded
+   from the home page, the map and default search. Row count may be large while every browsable
+   surface keeps them a minority.
+3. **The adult catalogue stays on this origin** (D9 holds). A second hostname would reintroduce the
+   five enforcement points D9 deleted, and the family has since confirmed NSFW as an audience rather
+   than a hostname.
+4. **The home page leads with sites**; `/members` keeps the people view.
+5. **Metadata is fetched, copy is not copied.** Title, description, favicon, category and health for
+   every row; a hand-written line only for the top ~200. No descriptions, ratings or category
+   structure lifted from a review site.
+
+**Rejected alternatives.**
+
+- *Reuse `links` as the catalogue row.* It is per-member and cascades on member deletion; a site with
+  no member owner cannot exist, and deleting an account would delete the catalogue entry.
+- *A `creators` table parallel to `users`.* It forks tags, verticals, preferences, the ring, feeds and
+  the sitemap. Shell `users` rows (D22) reuse all seven.
+- *A separate adult hostname.* See (3).
+- *Cap the adult rows to stay a minority by count.* The owner wants that inventory; capping it trades
+  a real asset for a ratio that can be enforced on surfaces instead.
+
+**Consequences.**
+
+- Import becomes a product (resumable, provenance, per-row outcome), which is the estate's existing
+  pattern — the cross-move the family review already lists for orbital members.
+- The link checker stops being a courtesy and becomes the catalogue's quality gate: 5,200 rows at the
+  current 500/day limit is an eleven-day pass.
+- The domain's classification exposure changes: 5,200 adult listings on the SFW origin is a different
+  risk from one adult vertical. Surface exclusion and `noindex` reduce it; nothing eliminates it.
+- Extraction of a curated list is a known EU database-right risk, accepted knowingly and limited to
+  facts (name, domain, category label) rather than editorial content.
+
+## D22 — A claim is proved, not voted on
+
+**Context.** The owner's proposal was that creators claim their rows and that high-trust members verify
+them. The trust body is one person: `trust_level = 3` is the operator, and `vertical_proposals`,
+`vertical_votes` and `tag_endorsements` hold 0 rows between them. D4 already recorded the lesson — a
+quorum without a population is a form that never closes. A claim is also a weaker signal than a proof:
+the source of truth (the person's own page, handle or domain) is fetchable.
+
+**Decision.**
+
+1. Unclaimed people are **shell rows**: `users.password_hash` becomes nullable, `claimed_at` is added,
+   and a login guard refuses a null hash. Every existing join keeps working.
+2. A claim is **verified mechanically** — a token on the person's own page (fetched, never mailed),
+   the existing Bluesky `verify_token` flow, or a DNS TXT record.
+3. **A human witness exists only on contest**: a second claimant escalates to one TL2 witness plus a
+   24h dispute window. There is no three-TL3 vote for claims.
+4. Claim tokens are single-use, expire, and are capped per curator; a claim whose proof disappears
+   within 24h is reversed.
+5. Claim, dispute and decision are ledger entries (family `polaris-ledger`), not a bespoke table.
+
+**Rejected alternatives.**
+
+- *Three trusted members confirm each claim.* Unimplementable at one TL3, and slower than a proof that
+  can be fetched in one request.
+- *Email an invitation to the owner.* The estate has no SMTP transport (D7); the proof is pulled from
+  the destination, so nothing needs to be delivered.
+- *Require an account before claiming.* It adds a password step to the moment of highest intent; the
+  claim creates the account instead.
+
+**Consequences.**
+
+- The claim flow works at zero users, which is the only state available today.
+- The witness path is exercised only when two people want the same row — rare, and cheap to defer.
+- Trust levels keep their meaning for curation and endorsement without becoming an onboarding gate.

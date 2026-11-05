@@ -52,9 +52,13 @@ vertical, up to two secondaries, links. Trust level 0–3.
 Curated enum, own route, own leaderboard, own ring, own feed, own embed.
 Starter set: `gaming`, `podcasters`, `youtube`, `music`, `art`, `dev`, `writers`,
 `vtubers`, `indie-web`, `nsfw`. Membership roles: `primary`, `secondary`.
-A vertical with fewer than 5 members does not get a landing page — it appears in
-the "Other" row of the main directory and its members still rank if it is
-reached directly. `nsfw` is only served on the NSFW host.
+A vertical with fewer than 5 visible members does not get a landing page — it
+appears in the "Other" row of the main directory and its members still rank if it
+is reached directly. (Implementation note, 2026-11-05: the code hides *empty*
+verticals only; `min_members` is selected and never compared. Enforcing it at 5
+today would empty the home page, since every vertical has exactly one visible
+member — ROADMAP phase 1 makes the floor a configurable value and starts it at 1.)
+`nsfw` is served from the same origin as every other vertical (D9).
 
 ### Link
 `url`, `label`, `icon` (enum), `position`, optional `vertical_slug` scope.
@@ -80,6 +84,36 @@ with a reason. Resolving "ranking manipulation" zeroes the member's ranking
 contribution and resets trust to TL0.
 
 ---
+
+## 1b. Site (catalogue entry) — planned, D21
+
+A **site** is a published destination on the web, and it is the product's primary object. It is not a
+link: a *link* is one member's outbound pointer, and many links (from many members) may point at one
+site. A site exists whether or not anybody has claimed it.
+
+Fields: canonical `domain`, `url` (the entry point), `title` and `description` (fetched, never
+invented), `favicon`, one `category`, tags, health (`last_status`, `last_checked`, `fail_count`),
+`nsfw` (derived from the category, never set by hand), provenance (`origin`, `source`, `source_id`,
+`imported_at`), and zero or more `people`.
+
+Rules that are spec, not implementation:
+
+- **One site per canonical domain.** `www.`, a trailing slash and `http`/`https` do not make a second
+  site; the importer is idempotent on the domain.
+- **A site's copy is fetched or written by a person, never copied from another directory.** Title and
+  description come from the page itself, or from the hand-written top-200 set.
+- **`nsfw` sites are `noindex` and excluded from the home page, the map and default search.**
+  Proportion is a surface property (D21); the row count is not constrained by it.
+- **A dead site is still a site.** It keeps its page, says it is unreachable, and stays in the export.
+
+## 1c. Category — planned, D21
+
+A **category** is subject matter ("tube sites", "fanfiction archives", "Rust tools"); a **vertical** is
+who a member is ("dev", "writers"). They are separate axes and must not be conflated: a member can
+publish in three verticals, and each of their sites belongs to exactly one category.
+
+Categories are a curated enum with a `sort` order and an `nsfw` flag. Proposals follow the same quorum
+path as verticals (D17), which is why the enum starts small.
 
 ## 2. Rankings
 
@@ -275,6 +309,47 @@ created_at)`, `source_hits(user_id, session_hash, created_at)`,
 `users.display_name`, `tags.tag_slug` for search.
 
 ---
+
+## 5b. Catalogue tables — planned, schema v6 (D21, D22)
+
+Planned, not applied. Every field below is load-bearing for a phase in `ROADMAP.md`; nothing here is
+speculative.
+
+```
+categories(slug citext pk, label, description, sort int, nsfw bool)
+
+sites(id uuid pk, slug citext unique,
+      domain citext unique,              -- canonical: lower, no www, no trailing slash
+      url text, title text, description text, favicon text,
+      category_slug fk categories, nsfw bool,
+      origin text not null,              -- member | curator | import | claim
+      source text, source_id text, imported_at timestamptz,
+      first_seen timestamptz, last_checked timestamptz,
+      last_status int, fail_count int default 0, hidden bool default false)
+
+site_tags(site_id fk, tag_slug citext, pk(site_id, tag_slug))
+site_people(site_id fk, user_id fk, role text, origin text, claimed_at,
+            pk(site_id, user_id))
+site_socials(site_id fk, network citext, handle text, url text,
+             pk(site_id, network, handle))
+site_edges(a_site fk, b_site fk, kind text, score real, computed_at,
+           pk(a_site, b_site, kind))
+import_runs(id bigserial pk, source text, started_at, finished_at,
+            rows_seen int, rows_inserted int, rows_updated int, rows_failed int, note text)
+
+links.site_id uuid null references sites(id) on delete set null   -- backfilled by domain
+users.password_hash text null                                     -- shell rows (D22)
+users.claimed_at timestamptz null
+```
+
+Invariants the migration must enforce, not the caller:
+
+- `sites.nsfw` equals `categories.nsfw` for its category — derived by trigger or by generating it, so a
+  surface cannot disagree with the taxonomy about what is adult.
+- `domain` is normalised before insert and unique, which is what makes the importer idempotent.
+- A site is never deleted by a member leaving: `links.site_id` is `ON DELETE SET NULL` in the other
+  direction, and nothing cascades from `users` to `sites`.
+- `site_people` uses `users` rows, claimed or shell — there is no second identity table (D22).
 
 ## 6. Verification
 
