@@ -146,8 +146,9 @@ Each phase ships alone and is verified against the live host. Tags: **[DB] [BE] 
 11. **[BE] Report and quarantine queue**: reports on reviews, edits and entities; quarantine removes
     from search and ranking without deleting; operator can allowlist a domain or a user.
     *Gate:* a quarantined review is 404 to anonymous and 200 to its author and to a moderator.
-12. **[OPS] Nothing needs the operator weekly.** Every phase above must run unattended for a month:
-    no queue that only the operator can drain, no surface that goes stale without an author.
+12. **[OPS] Operator-absence drill**: run for 30 days with no operator action. Every queue must age
+    out or self-resolve, and no surface may go stale without an author.
+    *Gate:* after 30 days, the only items awaiting the operator are exceptions that name themselves.
 
 ### Phase 3 — the gravity well, measured
 
