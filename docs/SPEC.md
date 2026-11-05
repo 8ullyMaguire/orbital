@@ -65,8 +65,9 @@ member — ROADMAP phase 1 makes the floor a configurable value and starts it at
 Scope semantics:
 - `NULL` → shown everywhere the member is shown.
 - set → shown **only** while that member is viewed in that vertical's context.
-The NSFW card is the same mechanism: NSFW-scoped links never render on the SFW
-host, and the SFW page carries no indication that they exist.
+The NSFW card is the same mechanism: an adult-scoped link renders only for a viewer whose filter
+allows it (D25). The safe layer never shows it, and a safe-layer page carries no indication that it
+exists.
 
 ### SourceHit
 One row per outbound click: member, link, surface (`profile`, `vertical`,
@@ -85,35 +86,72 @@ contribution and resets trust to TL0.
 
 ---
 
-## 1b. Site (catalogue entry) — planned, D21
+## 1b. Entity — anything reviewable (D23)
 
-A **site** is a published destination on the web, and it is the product's primary object. It is not a
-link: a *link* is one member's outbound pointer, and many links (from many members) may point at one
-site. A site exists whether or not anybody has claimed it.
+The object is not a site. Anything that can be rated and reviewed is an **entity**: a person, a
+website, a film, a book, a record, a place, a product, a fanwork, a feed. One table, one page type,
+one review model, one ranking.
 
-Fields: canonical `domain`, `url` (the entry point), `title` and `description` (fetched, never
-invented), `favicon`, one `category`, tags, health (`last_status`, `last_checked`, `fail_count`),
-`nsfw` (derived from the category, never set by hand), provenance (`origin`, `source`, `source_id`,
-`imported_at`), and zero or more `people`.
+- `kind` — `person | site | work | place | product | other`: a display and filtering hint, not a
+  behaviour switch.
+- `canonical_key` — the identity. A normalised URL (`url:https://example.com`) for anything with a
+  home, or an external scheme (`imdb:tt0133093`, `tmdb:movie:603`, `isbn:9781526622426`,
+  `musicbrainz:release-group:…`, `atproto:did:plc:…`) for works and people. Unique, so two users
+  adding the same film get one page.
+- `same_as` edges — the merge path when two keys describe one thing (a site and its Wikidata entry).
+  Merging moves reviews, ratings and tags and leaves a redirect; nothing is deleted.
+- Metadata: `title`, `description` (fetched from the URL or written by a user — never by the operator,
+  D24), `image`, `category`, tags, `nsfw` (derived from the category and from flagged reviews), health
+  for anything with a URL.
+- Provenance: `origin` (`user | import | federation`), `source`, `source_id`, `imported_at`. An
+  imported row is a starting point, not an authority: any user may edit its metadata, and the edit
+  history is the record.
 
-Rules that are spec, not implementation:
+Rules that are spec:
 
-- **One site per canonical domain.** `www.`, a trailing slash and `http`/`https` do not make a second
-  site; the importer is idempotent on the domain.
-- **A site's copy is fetched or written by a person, never copied from another directory.** Title and
-  description come from the page itself, or from the hand-written top-200 set.
-- **`nsfw` sites are `noindex` and excluded from the home page, the map and default search.**
-  Proportion is a surface property (D21); the row count is not constrained by it.
-- **A dead site is still a site.** It keeps its page, says it is unreachable, and stays in the export.
+- **A review attaches to an entity by `canonical_key`, not by local id.** That is what lets a remote
+  instance review the same film without knowing our UUIDs (D26).
+- **Nothing is deleted for being unreachable.** A dead site keeps its page and says so.
+- **A person is an entity too**, so people are reviewable. Reviews of a person carry the same
+  report/queue path as everything else, and a person can claim their own entity.
 
-## 1c. Category — planned, D21
+## 1c. Category and tags
 
-A **category** is subject matter ("tube sites", "fanfiction archives", "Rust tools"); a **vertical** is
-who a member is ("dev", "writers"). They are separate axes and must not be conflated: a member can
-publish in three verticals, and each of their sites belongs to exactly one category.
+**Categories** are subject matter — a curated enum with `sort` and `nsfw`. **Verticals** are who a
+member is. They are separate axes and must not be conflated. Tags are free text, canonicalised and
+aliasable through `tag_aliases`, which the estate adopts as its thesaurus (family cross-move 52).
 
-Categories are a curated enum with a `sort` order and an `nsfw` flag. Proposals follow the same quorum
-path as verticals (D17), which is why the enum starts small.
+## 1d. Review and rating (D24)
+
+A **review** is a user's text plus an optional **1–5 rating**, on one entity, by one user; editable by
+its author, removable by its author or a moderator. Fields: `entity_id`, `user_id`, `rating`
+(nullable), `body` (markdown, length-capped), `language`, `nsfw`, `created_at`, `updated_at`,
+`ap_id` (once federated), `visibility`, `deleted_at`.
+
+- **Stars are for display and aggregation.** An entity's `rating_avg` and `rating_count` are derived
+  and recountable, never the only copy.
+- **Taste comes from pairwise ballots, not from stars.** A star is a claim about an object; a choice
+  between two objects is a statement about the chooser, and at a few dozen users the pairwise ballot
+  is the only signal that survives. Ballots feed one vector per user and one per instance.
+- **Review quality is itself reviewable**: `helpful` votes, and a review's own aggregate orders the
+  reviews under an entity. Every ordering explains itself (family cross-move 2).
+- **Metadata edits are user content too**: an edit is a small review-shaped act with a diff, a
+  reporter and a revert. The operator is never the author of record.
+
+## 1e. Taste gravity (D25)
+
+Every surface orders by a blend that includes a **taste term**: the viewer's vector (their ballots,
+stars, reviews, clicks) and the **instance's** vector (the operator's own, plus the aggregate of
+members), so a fresh visitor's first page looks like the instance rather than like a random draw.
+
+Constraints that keep it safe and explainable (family idea 101):
+
+- the taste term is **at most 25% of any score**, and is always separable in the `why` string;
+- a **novelty slot** on every surface, so gravity never becomes an echo;
+- **adult content is eligible on every gravity surface** — it is not a separate surface — but behind a
+  per-viewer opt-in: a first-time anonymous visitor gets the safe layer, and the choice is a cookie
+  (anonymous) or an account setting. The three layers (safe / opt-in / everything) are read by the
+  home page, search and `/lens` alike.
 
 ## 2. Rankings
 
@@ -175,7 +213,7 @@ reset trust. Every counter in the response is `BIGINT` cast in SQL.
 | `/feed.json`, `/feed.xml`, `/v/{slug}/feed.json` | JSON Feed 1.1 + RSS, per vertical too |
 | `/v/{slug}/embed?view=top|trending&count=5` | Server-rendered iframe widget with a Join CTA |
 | `/l/{link_id}` | Click recorder + 302 |
-| `/sitemap.xml`, `/robots.txt` | Discovery plumbing; NSFW host is `noindex` and disallowed |
+| `/sitemap.xml`, `/robots.txt` | Discovery plumbing; adult entities are excluded from both |
 | `/join`, `/login`, `/app/*` | Svelte dashboard (static assets embedded in the binary) |
 | `/lens` | the visitor's weights as an editable table; "this browser" or "your account" |
 | `/prefs/off`, `/prefs/on` | personalisation switch for one browser (cookie) |
@@ -183,9 +221,12 @@ reset trust. Every counter in the response is `BIGINT` cast in SQL.
 | `/status` | the estate: every hostname nginx serves, with HTTP code and latency |
 | `/og/{handle}.{png,svg}` | generated social card, from disk when rendered, on demand otherwise |
 
-NSFW host (`orbitalnsfw.polarisocial.xyz`): age gate sets a cookie on POST, then
-the same surface, restricted to `nsfw` members, `noindex, nofollow`, excluded
-from the global sitemap and the global feed. A TL0 member is hidden.
+**Adult content is a layer, not a host (D25).** A viewer's filter has three states — safe (default,
+anonymous), opted in, everything — carried by a cookie for anonymous visitors and by an account
+setting for members. Safe excludes every entity whose category or reviews mark it adult, on every
+surface: home, category, entity page, search, feeds, sitemap. Opted-in viewers get adult entities in
+ranking and search like anything else. There is no separate hostname; `orbitalnsfw.polarisocial.xyz`
+is a 301 (D9). A TL0 member is hidden from the global sitemap and feed as before.
 
 ---
 
@@ -310,55 +351,60 @@ created_at)`, `source_hits(user_id, session_hash, created_at)`,
 
 ---
 
-## 5b. Catalogue tables — planned, schema v6 (D21, D22)
-
-Planned, not applied. Every field below is load-bearing for a phase in `ROADMAP.md`; nothing here is
-speculative.
+## 5b. Entity, review and taste tables — planned, schema v6 (D23–D26)
 
 ```
+entities(id uuid pk, slug citext unique,
+         kind text not null,                  -- person|site|work|place|product|other
+         canonical_key text unique not null,  -- url:https://… | imdb:tt… | isbn:…
+         title text, description text, image text,
+         category_slug fk categories, nsfw bool default false,
+         origin text not null, source text, source_id text, imported_at timestamptz,
+         created_by uuid null references users(id),
+         first_seen timestamptz, last_checked timestamptz, last_status int,
+         fail_count int default 0, hidden bool default false, merged_into uuid null)
+
 categories(slug citext pk, label, description, sort int, nsfw bool)
+entity_tags(entity_id fk, tag_slug citext, pk(entity_id, tag_slug))
+entity_edges(a_entity fk, b_entity fk, relation text,   -- same_as|related|runs|mentions
+             score real, computed_at, pk(a_entity, b_entity, relation))
+entity_people(entity_id fk, user_id fk, role text, claimed_at, pk(entity_id, user_id))
 
-sites(id uuid pk, slug citext unique,
-      domain citext unique,              -- canonical: lower, no www, no trailing slash
-      url text, title text, description text, favicon text,
-      category_slug fk categories, nsfw bool,
-      origin text not null,              -- member | curator | import | claim
-      source text, source_id text, imported_at timestamptz,
-      first_seen timestamptz, last_checked timestamptz,
-      last_status int, fail_count int default 0, hidden bool default false)
+reviews(id uuid pk, entity_id fk, user_id fk, rating smallint, body text, language text,
+        nsfw bool, ap_id text unique, visibility text default 'public',
+        created_at, updated_at, deleted_at)
+review_votes(review_id fk, user_id fk, helpful bool, pk(review_id, user_id))
+entity_edits(id bigserial pk, entity_id fk, user_id fk, diff jsonb, note text,
+             created_at, reverted_at)
+entity_scores(entity_id pk fk, rating_avg real, rating_count int, ballot_count int, computed_at)
+ballots(id bigserial pk, user_id fk, a_entity fk, b_entity fk, winner char(1), created_at)
+import_runs(id bigserial pk, source text, started_at, finished_at, rows_seen int,
+            rows_inserted int, rows_updated int, rows_failed int, note text)
 
-site_tags(site_id fk, tag_slug citext, pk(site_id, tag_slug))
-site_people(site_id fk, user_id fk, role text, origin text, claimed_at,
-            pk(site_id, user_id))
-site_socials(site_id fk, network citext, handle text, url text,
-             pk(site_id, network, handle))
-site_edges(a_site fk, b_site fk, kind text, score real, computed_at,
-           pk(a_site, b_site, kind))
-import_runs(id bigserial pk, source text, started_at, finished_at,
-            rows_seen int, rows_inserted int, rows_updated int, rows_failed int, note text)
-
-links.site_id uuid null references sites(id) on delete set null   -- backfilled by domain
-users.password_hash text null                                     -- shell rows (D22)
+links.entity_id uuid null references entities(id) on delete set null
+users.password_hash text null        -- shell rows / federation-only actors (D22)
 users.claimed_at timestamptz null
 ```
 
 Invariants the migration must enforce, not the caller:
 
-- `sites.nsfw` equals `categories.nsfw` for its category — derived by trigger or by generating it, so a
-  surface cannot disagree with the taxonomy about what is adult.
-- `domain` is normalised before insert and unique, which is what makes the importer idempotent.
-- A site is never deleted by a member leaving: `links.site_id` is `ON DELETE SET NULL` in the other
-  direction, and nothing cascades from `users` to `sites`.
-- `site_people` uses `users` rows, claimed or shell — there is no second identity table (D22).
+- `canonical_key` is normalised at write time (lowercase host, strip `www.`, trailing slash and
+  fragment) and unique. It is the federation join key, so it cannot be a per-instance UUID.
+- `entities.nsfw` derives from its category **and** from any review flagged `nsfw`, so no surface has
+  to guess whether a page is adult.
+- `reviews.ap_id` is unique, so redelivery of the same federated activity is idempotent.
+- Nothing cascades from `users` to `entities`: a person leaving leaves the catalogue intact.
+- `merged_into` makes `same_as` non-destructive — a merged entity redirects and its reviews move in
+  the same transaction.
 
 ## 6. Verification
 
 - Unit: slug/handle normalisation, ranking maths (including the zero case),
   cosine similarity, ring determinism per day, embed view selection, host
-  scoping (SFW never returns an nsfw link), session hash stability.
+  scoping (the safe layer never returns an adult entity), session hash stability.
 - Integration (real Postgres): register → login → create links → render profile
-  → click → the click appears in analytics and moves the ranking; NSFW link
-  never appears on the SFW host; flag → resolve; trending empty hides the tab.
+  → click → the click appears in analytics and moves the ranking; an anonymous request never
+  receives an adult entity on any surface (D25); flag → resolve; trending empty hides the tab.
 - Platform (2026-10-29): a token adds a link without a cookie and a bad token is refused; a
   category is a weight while an invented one is not; a lens stops at 24; personalisation can be
   switched off and says so; three votes create a vertical and two do not; a merge moves members,
@@ -367,4 +413,36 @@ Invariants the migration must enforce, not the caller:
 - Mutation-checked: each of those rules was removed once and the named test went red.
 - Live on the host: every route 200 with the right body, a real click recorded
   end-to-end through nginx, sitemap/robots content, embed renders standalone,
-  NSFW gate refuses without the cookie, dashboard reachable and authenticates.
+  dashboard reachable and authenticates.
+
+## 6b. Federation (D26)
+
+Orbital federates as an ActivityPub **server**, not as a client of somebody else's. The estate already
+runs two ActivityPub implementations in two languages, so the first rule is: **do not write a third**.
+
+- **Stack.** Gravity's Rust/Axum layer is the reference — `crates/core/src/activitystreams.rs`,
+  `webfinger.rs`, `http_signature.rs`, `discovery.rs` and `crates/db/src/services/federation.rs`,
+  about 7,150 lines that already do discovery, signatures and delivery. Orbital depends on it as a
+  package, or it moves into `polaris-core` once a second crate needs it (family rule of two). PieFed
+  is the second data point and the second language, not the plan.
+- **Actors.** Per-user actors created on the first federation act
+  (`@handle@orbital.polarisocial.xyz`), plus one instance actor for the instance's own
+  recommendations. WebFinger resolves handles, HTTP Signatures sign every delivery, NodeInfo describes
+  the software.
+- **Objects.** An entity is an AP `Object` whose `id` is ours and whose `url` is the canonical key's
+  URL. A review is a custom `Review` object — `type: "Review"`, `inReplyToEntity`, `rating`,
+  `content`, `attributedTo` — **and a plain `Note` carrying `schema:reviewRating` and
+  `schema:itemReviewed` for peers that do not know the extension**. BookWyrm is the precedent:
+  custom types between peers that share them, downgrade to `Article`/`Note` for everyone else.
+- **Joining on identity.** An inbound `Create` of a review carries either our entity URI or a
+  canonical-key-shaped reference (a URL, an `imdb:`/`isbn:` scheme). We resolve by key, then by
+  `same_as`; a review for an unknown key **creates the entity from its own metadata**, which is how
+  the catalogue grows without an importer.
+- **Moderation, stated as a cost.** Inbound content from a domain never seen before is quarantined:
+  visible to its author and to moderators, absent from search and from rankings, until a threshold of
+  local `helpful` votes or one TL2 approval. Domain suspend, per-review report, and the family's
+  "quarantine invisible to search" rule (W6) are the same shape. The operator may allowlist domains
+  and never has to approve anything one by one.
+- **What a user gets.** A review written here appears on their followers' timelines elsewhere; a
+  review written on another instance appears on the entity page here, attributed, with a link home;
+  following a reviewer brings their reviews like any other feed.

@@ -380,7 +380,7 @@ serves; `/status` probes that list with a 60-second cache and shows code and lat
   minute-stale page, not the whole page.
 
 
-## D21 — The catalogue is the product: sites are first-class
+## D21 — The catalogue is the product: sites are first-class *(scope superseded by D23, D24, D25)*
 
 **Context.** Orbital modelled a member and their outbound links. That is a directory of *people*, and
 after a week it held 2 members, 24 links and 19 distinct domains — an empty room. The useful object
@@ -459,3 +459,128 @@ the source of truth (the person's own page, handle or domain) is fetchable.
 - The claim flow works at zero users, which is the only state available today.
 - The witness path is exercised only when two people want the same row — rare, and cheap to defer.
 - Trust levels keep their meaning for curation and endorsement without becoming an onboarding gate.
+
+## D23 — Anything is an entity, and one identity joins the fediverse
+
+**Context.** D21 made the *site* the first-class object. Within a day the requirement grew: users
+should rate and review anything — a person, a website, a film, a book, "and stuff" — and the family's
+federation goal needs one identity that another instance can name. A `sites` table plus a `works`
+table plus a `people` table would be three review models, three pages and three ranking paths.
+
+**Decision.** One `entities` table with a `kind` column and a **`canonical_key`**: a normalised URL
+(`url:https://example.com`) or an external scheme (`imdb:…`, `tmdb:…`, `isbn:…`, `musicbrainz:…`,
+`atproto:…`). `same_as` edges merge two keys that describe one thing, non-destructively
+(`merged_into` redirect, reviews moved in the same transaction). `kind` is a hint for display and
+filtering, never a behaviour switch.
+
+**Rejected alternatives.**
+
+- *Separate tables per kind.* Three review tables, three moderation paths, three ranking queries, and
+  a merge problem at every boundary.
+- *Internal UUIDs as the identity.* Then no other instance can address our objects and no import can
+  be idempotent. The key has to be derivable by a stranger.
+- *A pure URL identity.* Films, books and people have no canonical URL we control; `imdb:` and
+  `isbn:` are the stable handles that exist.
+
+**Consequences.** The catalogue can be seeded from several sources at once (ThePornDude for adult
+sites, OpenLibrary/IMDb for works, member submissions for everything else) with the same importer. It
+also means people are reviewable, which is a moderation surface that did not exist before and now has
+one report/queue path shared with everything else.
+
+## D24 — The operator writes nothing; users write everything
+
+**Context.** D21 planned a hand-written one-liner for the top ~200 sites. The owner's answer: no
+metadata written by the operator, ever — sovereignty is the ability to override, not the duty to
+author. The instance is meant to run itself (family P4: operator attention is the scarcest resource).
+
+**Decision.**
+
+1. Every piece of copy is *fetched* (title, description, image, favicon from the page) or *written by
+   a user* (reviews, metadata edits). The operator authors none of it.
+2. Metadata edits are user content: a diff, an author, a report path, a revert. Any user may edit;
+   trust gates how fast an edit applies (TL0–TL1 review queue, TL2+ applies immediately).
+3. Reviews carry 1–5 stars for display; **the taste vector is fed by pairwise ballots**, because at
+   this scale a comparison between two things is a statement about the chooser while a star is a
+   claim about the object.
+4. The operator's power is override: hide, revert, suspend a domain, pin a shelf. No obligation to
+   produce content, and no surface that goes stale when they stop.
+
+**Rejected alternatives.**
+
+- *Operator-curated editorial copy.* It does not scale, it makes the operator the bottleneck, and at
+  zero audience it is work for nobody. It is also the one thing that would make the catalogue a
+  review site with a single reviewer.
+- *Stars as the taste signal.* A five-point scale collapses to "everything is 4" as soon as people
+  like a site; a pairwise choice cannot be inflated the same way.
+
+**Consequences.** The empty state is now "no reviews yet" rather than "no copy", which is honest and
+which the ballot loop can fill without the operator. Legal exposure for user reviews (defamation,
+illegal content) becomes a real moderation surface, handled by the report queue and the quarantine
+rule in D26.
+
+## D25 — The gravity well includes adult; the filter is per viewer
+
+**Context.** D21 excluded adult rows from the home page, the map and default search to keep them a
+minority of what is shown. The owner's product rule is the opposite: the instance's taste gravity
+should pull everything — including adult — toward the operator's taste, because that is what makes
+the instance feel like a place rather than a catalogue. The owner's own priority list also says "safe
+by default, three-layer content filter".
+
+**Decision.** Adult entities are eligible on **every** gravity surface; there is no separate adult
+surface and no separate hostname (D9 holds). Eligibility is gated per viewer:
+
+- first-time anonymous: the **safe** layer, adult excluded;
+- opted in (a cookie for anonymous visitors, a setting for accounts): adult eligible in ranking,
+  search and shelves;
+- everything: adult plus the unfiltered long tail, for anyone who asks.
+
+The taste term stays capped at 25% and explainable, with a novelty slot, so "gravity" never means
+"only what the operator already likes".
+
+**Rejected alternatives.**
+
+- *Keep the surface exclusion (D21 §2).* It contradicts the product thesis: a gravity well with a
+  hole in it is not a gravity well.
+- *Adult visible to anonymous first-time visitors.* It contradicts "safe by default", breaks the
+  three-layer filter promise, and puts the domain's classification at the mercy of a shared browser.
+- *A second hostname for the adult side.* D9 deleted five enforcement points; the family has since
+  confirmed NSFW as an audience, not a hostname.
+
+**Consequences.** The domain's classification exposure is now a function of the filter, not of a
+surface rule — so the filter must be tested as a security boundary (an anonymous request must never
+receive an adult entity, in HTML, JSON, feed or sitemap). `/status`-style measurement of "adult rows
+in the top 20 for an anonymous visitor" is the probe that proves it.
+
+## D26 — Federation is gravity's ActivityPub stack, joined on canonical keys
+
+**Context.** The owner wants users to review anything from any instance. The estate already runs two
+ActivityPub implementations: gravity (Rust/Axum, ~7,150 lines of discovery, WebFinger, HTTP
+signatures and federation services) and PieFed (Python, vendored). Writing a third would be the exact
+duplication the family review exists to prevent.
+
+**Decision.**
+
+1. Orbital federates as an AP server using gravity's layer as a dependency (or as `polaris-core` once
+   a second crate needs it) — never a fresh implementation.
+2. **Per-user actors**, created on first federation act; plus one instance actor.
+3. A review is published as a custom `Review` object and, for peers that do not know the extension,
+   as a `Note` carrying `schema:reviewRating`/`schema:itemReviewed` (BookWyrm's downgrade pattern).
+4. **Inbound reviews join on `canonical_key`**, so another instance can review the same entity
+   without knowing our UUIDs; an unknown key creates the entity from the review's own metadata.
+5. Inbound content from an unseen domain is **quarantined** — invisible to search and ranking until a
+   local `helpful` threshold or one TL2 approval. The operator allowlists domains; no per-item
+   approval.
+
+**Rejected alternatives.**
+
+- *One instance actor for everything.* Cheapest, but reviews lose attribution and nobody can follow a
+  reviewer, which is the entire point of federating reviews.
+- *Read-only federation first, inbound later.* Attractive, but the inbound path is what proves the
+  canonical-key join; deferring it defers the only hard part.
+- *Federate only with other Orbital instances.* Then "review anything from any of their instances"
+  fails, and Mastodon followers cannot see a review at all.
+
+**Consequences.** Moderation debt is now permanent and is the honest cost of federation (family P4/P7):
+domain quarantine, report queue, and a blocklist are the price of inbound content. The reward is that
+the catalogue's identity layer is shared — a review written anywhere about `imdb:tt0133093` is the
+same object here, and the entity page becomes the local view of a global conversation.
