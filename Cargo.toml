@@ -6,6 +6,7 @@ description = "Orbital — themed verticals of people and their links"
 license = "MIT"
 
 [dependencies]
+commons-feed = { path = "../commons/crates/commons-feed" }
 axum = { version = "0.8", features = ["macros"] }
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }

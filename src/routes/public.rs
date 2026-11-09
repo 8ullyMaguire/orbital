@@ -12,6 +12,8 @@ use serde::Deserialize;
 use crate::auth::{Ctx, PageUser, VisitorId};
 use crate::error::{AppError, PageError, PageResult};
 use crate::html::{avatar, icon_svg, SITE_NAME};
+use commons_feed::{FeedEntry, FeedMeta};
+
 use crate::models::{MemberStat, User};
 use crate::ranking;
 use crate::render::*;
@@ -864,43 +866,55 @@ pub async fn embed(
 }
 
 // ------------------------------------------------------------------ feeds
+//
+// All three documents come from `commons-feed`'s one model: the member-to-item mapping is written once and RSS,
+// Atom and JSON Feed are renderers over it. Before this the same mapping existed three times and the XML escaped
+// each field by hand — the two bugs the crate was written to stop (an unescaped `&` making the document
+// unparseable while the server still returns 200, and markdown reaching a reader as asterisks).
 
-pub async fn feed_json(
-    State(st): State<AppState>,
-    _ctx: Ctx,
-) -> PageResult<Response> {
-    let members = store::all_members(&st.pool, true).await?;
-    let members: Vec<MemberStat> = members
-        .into_iter()
-        .filter(|m| visible(m))
-        .collect();
-    let items: Vec<serde_json::Value> = members
+fn feed_entries(base: &str, members: &[MemberStat]) -> Vec<FeedEntry> {
+    members
         .iter()
         .take(100)
         .map(|m| {
-            serde_json::json!({
-                "id": format!("{}/@{}", st.cfg.public_base, m.handle),
-                "url": format!("{}/@{}", st.cfg.public_base, m.handle),
-                "title": format!("{} (@{})", m.display_name, m.handle),
-                "content_text": m.bio,
-                "tags": m.tags,
-                "date_modified": m.last_active_at.to_rfc3339(),
-            })
+            let url = format!("{base}/@{}", m.handle);
+            FeedEntry {
+                id: url.clone(),
+                link: url,
+                title: format!("{} (@{})", m.display_name, m.handle),
+                summary: Some(m.bio.clone()),
+                author: Some(m.handle.clone()),
+                published: Some(m.last_active_at),
+                categories: m.tags.clone(),
+            }
         })
-        .collect();
-    let feed = serde_json::json!({
-        "version": "https://jsonfeed.org/version/1.1",
-        "title": format!("{SITE_NAME} — everybody"),
-        "home_page_url": format!("{}/", st.cfg.public_base),
-        "feed_url": format!("{}/feed.json", st.cfg.public_base),
-        "description": crate::render::TAGLINE,
-        "items": items,
-    });
-    Ok((
-        [(header::CONTENT_TYPE, "application/feed+json; charset=utf-8")],
-        serde_json::to_string_pretty(&feed).unwrap_or_else(|_| "{}".into()),
-    )
-        .into_response())
+        .collect()
+}
+
+fn site_meta(base: &str) -> FeedMeta {
+    FeedMeta {
+        title: format!("{SITE_NAME} — everybody"),
+        link: format!("{base}/"),
+        description: Some(TAGLINE.to_string()),
+        language: Some("en".to_string()),
+        self_url: Some(format!("{base}/feed.xml")),
+        id: Some(format!("{base}#everybody")),
+    }
+}
+
+fn feed_response(content_type: &'static str, body: String) -> Response {
+    ([(header::CONTENT_TYPE, content_type)], body).into_response()
+}
+
+pub async fn feed_json(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
+    let members = store::all_members(&st.pool, true).await?;
+    let members: Vec<MemberStat> = members.into_iter().filter(|m| visible(m)).collect();
+    let mut meta = site_meta(&st.cfg.public_base);
+    meta.self_url = Some(format!("{}/feed.json", st.cfg.public_base));
+    Ok(feed_response(
+        "application/feed+json; charset=utf-8",
+        commons_feed::json_feed(&meta, &feed_entries(&st.cfg.public_base, &members)),
+    ))
 }
 
 pub(crate) async fn vertical_feed(
@@ -916,71 +930,27 @@ pub(crate) async fn vertical_feed(
         .into_iter()
         .filter(|m| visible(m))
         .collect();
-    let items: Vec<serde_json::Value> = members
-        .iter()
-        .take(100)
-        .map(|m| {
-            serde_json::json!({
-                "id": format!("{}/@{}", st.cfg.public_base, m.handle),
-                "url": format!("{}/@{}", st.cfg.public_base, m.handle),
-                "title": format!("{} (@{})", m.display_name, m.handle),
-                "content_text": m.bio,
-                "tags": m.tags,
-                "date_modified": m.last_active_at.to_rfc3339(),
-            })
-        })
-        .collect();
-    let feed = serde_json::json!({
-        "version": "https://jsonfeed.org/version/1.1",
-        "title": format!("{SITE_NAME} — {}", v.label),
-        "home_page_url": format!("{}/v/{}", st.cfg.public_base, v.slug),
-        "feed_url": format!("{}/v/{}/feed.json", st.cfg.public_base, v.slug),
-        "description": v.description,
-        "items": items,
-    });
-    Ok((
-        [(header::CONTENT_TYPE, "application/feed+json; charset=utf-8")],
-        serde_json::to_string_pretty(&feed).unwrap_or_else(|_| "{}".into()),
-    )
-        .into_response())
+    let meta = FeedMeta {
+        title: format!("{SITE_NAME} — {}", v.label),
+        link: format!("{}/v/{}", st.cfg.public_base, v.slug),
+        description: Some(v.description.clone()),
+        language: Some("en".to_string()),
+        self_url: Some(format!("{}/v/{}/feed.json", st.cfg.public_base, v.slug)),
+        id: Some(format!("{}/v/{}", st.cfg.public_base, v.slug)),
+    };
+    Ok(feed_response(
+        "application/feed+json; charset=utf-8",
+        commons_feed::json_feed(&meta, &feed_entries(&st.cfg.public_base, &members)),
+    ))
 }
 
 pub(crate) async fn feed_xml(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
     let members = store::all_members(&st.pool, true).await?;
-    let members: Vec<MemberStat> = members
-        .into_iter()
-        .filter(|m| visible(m))
-        .collect();
-    let mut items = String::new();
-    for m in members.iter().take(100) {
-        let url = format!("{}/@{}", st.cfg.public_base, m.handle);
-        items.push_str(&format!(
-            "<item><title>{} (@{})</title><link>{}</link><guid>{}</guid><description>{}</description><pubDate>{}</pubDate></item>",
-            crate::text::esc(&m.display_name),
-            crate::text::esc(&m.handle),
-            crate::text::esc(&url),
-            crate::text::esc(&url),
-            crate::text::esc(&m.bio),
-            m.last_active_at.to_rfc2822()
-        ));
-    }
-    let xml = format!(
-        r#"<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0"><channel>
-<title>{SITE_NAME}</title>
-<link>{base}/</link>
-<description>{desc}</description>
-<language>en</language>
-{items}
-</channel></rss>"#,
-        base = st.cfg.public_base,
-        desc = crate::text::esc(crate::render::TAGLINE),
-    );
-    Ok((
-        [(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
-        xml,
-    )
-        .into_response())
+    let members: Vec<MemberStat> = members.into_iter().filter(|m| visible(m)).collect();
+    Ok(feed_response(
+        "application/rss+xml; charset=utf-8",
+        commons_feed::rss2(&site_meta(&st.cfg.public_base), &feed_entries(&st.cfg.public_base, &members)),
+    ))
 }
 
 pub(crate) async fn sitemap(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
@@ -1175,5 +1145,41 @@ mod tests {
             "trust gates nothing: a TL0 adult profile is listed like any other"
         );
         assert!(visible(&member(&["gaming"], 1)));
+    }
+
+    #[test]
+    fn a_title_that_would_break_the_xml_is_escaped_in_the_document() {
+        // The crate escapes; this test is that orbital's mapping actually goes through it. A display name with an
+        // ampersand and an angle bracket is ordinary ("Tom & Jerry", "<3"), and an unescaped one makes the whole
+        // feed unparseable while the server still answers 200.
+        let mut m = member(&["gaming"], 1);
+        m.handle = "tom".into();
+        m.display_name = "Tom & Jerry <fan>".into();
+        m.bio = "**bold** and <script>".into();
+        let entries = feed_entries("https://example.test", &[m]);
+        let body = commons_feed::rss2(&site_meta("https://example.test"), &entries);
+        assert!(body.contains("Tom &amp; Jerry &lt;fan&gt;"), "title escaped: {body}");
+        assert!(!body.contains("Tom & Jerry"), "the raw ampersand must not appear");
+        assert!(body.contains("https://example.test/@tom"), "the item link is the profile");
+    }
+
+    #[test]
+    fn rss_and_json_feed_describe_the_same_items() {
+        // One model, two renderers: a member in one document has to be the same member in the other, or a reader
+        // that switched format would see a different directory.
+        let ms: Vec<MemberStat> = (0..3)
+            .map(|i| {
+                let mut m = member(&["gaming"], 1);
+                m.handle = format!("h{i}");
+                m
+            })
+            .collect();
+        let entries = feed_entries("https://example.test", &ms);
+        let rss = commons_feed::rss2(&site_meta("https://example.test"), &entries);
+        let json = commons_feed::json_feed(&site_meta("https://example.test"), &entries);
+        for i in 0..3 {
+            assert!(rss.contains(&format!("/@h{i}")), "rss carries h{i}");
+            assert!(json.contains(&format!("/@h{i}")), "json carries h{i}");
+        }
     }
 }
