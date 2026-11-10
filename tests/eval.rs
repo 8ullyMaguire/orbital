@@ -24,6 +24,7 @@ fn member(handle: &str, age_days: i64, clicks: i64, tags: &[&str]) -> MemberStat
         verticals: Vec::new(),
         visitors: clicks,
         visitors_7d: clicks,
+        visitors_prev: 0,
         clicks,
         endorse: 0.0,
         attention: clicks as f64,
