@@ -59,6 +59,13 @@ enum Cmd {
         #[arg(long)]
         as_of: Option<String>,
     },
+    /// Print what the impression ceiling sees in the last 24 hours, and the tail the rotation will fill on
+    /// a date and the day after — from the date alone, so two hosts can compare notes.
+    Impressions {
+        /// The date to print the rotation for. Defaults to today.
+        #[arg(long)]
+        date: Option<String>,
+    },
     /// Apply reviewed tag aliases to existing rows.
     Retag {
         #[arg(long)]
@@ -186,6 +193,10 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(report.exit_code());
                 }
             }
+        }
+        Cmd::Impressions { date } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::impressions(&pool, &cfg, date).await?;
         }
         Cmd::Doctor => {
             let pool = db::connect(&cfg).await?;

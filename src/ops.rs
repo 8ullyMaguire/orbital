@@ -180,7 +180,27 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
     // 11. How many slots one member may hold, and how much of a shelf is the tail (D43).
     say(true, "exposure", cfg.exposure.sentence());
 
-    // 12. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    // 12. What the ceiling sees, and where the tail will point today (D45). Printed because a rule about
+    // exposure that nobody can read is a rule nobody can check.
+    let window = store::impressions_window(pool, "home", 24).await?;
+    let total: i64 = window.values().sum();
+    let capped = window
+        .iter()
+        .filter(|(_, n)| crate::ceiling::over_ceiling(**n, total, &cfg.ceiling))
+        .count();
+    say(
+        true,
+        "ceiling",
+        format!(
+            "{} — home has {} impression(s) in 24h from {} member(s), {} over their share",
+            cfg.ceiling.sentence(),
+            total,
+            window.len(),
+            capped
+        ),
+    );
+
+    // 13. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
     //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
     //    favours, which is not a sentence a page may carry.
     match crate::concentration::latest(pool).await {
@@ -519,4 +539,60 @@ fn which(bin: &str) -> Option<PathBuf> {
             .map(|p| p.join(bin))
             .find(|p| p.is_file())
     })
+}
+
+
+/// `orbital impressions [--date YYYY-MM-DD]`: what the ceiling sees right now, and the tail the rotation
+/// will fill on that date and the next — printed from the date alone, so two hosts can compare notes.
+pub async fn impressions(pool: &PgPool, cfg: &Config, date: Option<String>) -> Result<()> {
+    let day = match date {
+        Some(raw) => chrono::NaiveDate::parse_from_str(&raw, "%Y-%m-%d")
+            .with_context(|| format!("`{raw}` is not a date (YYYY-MM-DD)"))?,
+        None => chrono::Utc::now().date_naive(),
+    };
+
+    for surface in ["home"] {
+        let window = store::impressions_window(pool, surface, 24).await?;
+        let total: i64 = window.values().sum();
+        println!("{surface}: {total} impression(s) in the last 24h, {} member(s)", window.len());
+        let members = store::all_members(pool, true).await?;
+        for m in &members {
+            let mine = window.get(&m.id).copied().unwrap_or(0);
+            if mine == 0 {
+                continue;
+            }
+            let share = if total > 0 { mine as f64 / total as f64 } else { 0.0 };
+            println!(
+                "  @{:<20} {:>5} ({:.0}%){}",
+                m.handle,
+                mine,
+                share * 100.0,
+                if crate::ceiling::over_ceiling(mine, total, &cfg.ceiling) {
+                    "  CAPPED"
+                } else {
+                    ""
+                }
+            );
+        }
+
+        let ids: Vec<uuid::Uuid> = members.iter().map(|m| m.id).collect();
+        let order: Vec<usize> = (0..members.len()).collect();
+        for offset in 0..2 {
+            let d = day + chrono::Duration::days(offset);
+            let tail = crate::ceiling::rotate(
+                &order,
+                &order,
+                &ids,
+                crate::ceiling::day_key(d),
+                &cfg.ceiling,
+            );
+            let names: Vec<String> = tail
+                .iter()
+                .take(cfg.ceiling.tail_slots.max(1).min(tail.len()))
+                .map(|i| format!("@{}", members[*i].handle))
+                .collect();
+            println!("  tail for {d}: {}", if names.is_empty() { "(nobody yet)".to_string() } else { names.join(" ") });
+        }
+    }
+    Ok(())
 }
