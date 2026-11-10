@@ -108,6 +108,8 @@ code, it only reads, and it says PASS or FAIL per check rather than dumping a lo
 ./scripts/deploy-thinkcentre.sh     # build, install unit + nginx, migrate, seed, verify
 ./scripts/footers-thinkcentre.sh    # put the Orbital footer on every SFW site
 ./scripts/populate-accounts.py      # links + profile for the live accounts
+./scripts/file-ideas.py             # regenerate the Concord filing SQL from the vault brainstorm
+./scripts/concord-docs.py           # push this repo's docs to the Concord project page, byte-verified
 ```
 
 The deploy script owns the nginx site file and the systemd user units, so a hand edit survives only

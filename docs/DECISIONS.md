@@ -584,3 +584,144 @@ duplication the family review exists to prevent.
 domain quarantine, report queue, and a blocklist are the price of inbound content. The reward is that
 the catalogue's identity layer is shared — a review written anywhere about `imdb:tt0133093` is the
 same object here, and the entity page becomes the local view of a global conversation.
+
+## D27 — The prior is silent: applied, never named
+
+**Context.** D25 required the taste term to be "always separable in the `why` string", and the v3 plan
+carried a `why` line on every card plus an idea list (2026-11-10, 496 ideas) that proposed making the
+instance's taste *visible* — a taste vector on the page, a "curated by Orbital" badge, a manifesto, a
+public `/@orbital` profile, publishing the vector over ActivityPub, an instance-to-instance taste
+comparison, and a distinguishable style for the operator's own endorsements. The owner's instruction is
+the opposite and it is categorical: **nothing should expose admin taste or let users know about it; only
+docs.**
+
+**Decision.** The instance's taste is folded from its declared sources (§D30) and **applied to
+ordering**. It is disclosed nowhere else: no field in any JSON, no sentence in any page, no badge, no
+class name, no URL parameter, no meta tag, no feed, no sitemap, no error message, no visible label on
+the operator's own reviews or endorsements. `docs/` is the only place the policy is written down.
+Orbital declares the estate's `announce = "silent"` and **does not implement the `summary` mode** at
+all: a mode nobody can turn on cannot be turned on by mistake.
+
+**Rejected alternatives.**
+
+- *"Separable in `why`" (D25).* Superseded. Naming the term is the disclosure; a `why` string may cite
+  clicks, recency, the viewer's own tags, endorsements and link health — never the instance's lean.
+- *A summary mode ("a lean exists, 12% strong") behind an operator flag.* The estate allows it for
+  kindred (`KINDRED_ANNOUNCE_PRIOR`); orbital refuses it because it announces the existence of the
+  thing the owner asked to hide, and because a startup flag is one config edit away from a public page.
+- *A per-entity "how Orbital sees this" number.* It is the profile reconstructed at one row.
+- *Naming it in the HTML for debugging.* Differencing recovers the weights from two responses; a debug
+  attribute behind a flag is still an attribute.
+
+**Consequences.** The prior cannot be *measured* from the outside, so it must be measured from inside:
+step 20 of the roadmap is a test that serialises a ranked answer and the rendered HTML and fails if the
+prior's vocabulary, source names, weights or a `prior`/`taste` field appears. `/api/v1/taste` answers a
+caller's own lens only. A reader-facing dial (D30) narrows the reader's own preference and must never be
+wired into the prior — the same word, the opposite disclosure rule (estate §3C.5).
+
+## D28 — Contribution is open first; accounts and trust levels are off
+
+**Context.** Measured 2026-11-10: **0 logins since 2026-10-29**, 2 members (one is the operator), and 5
+of 1,465 visitors ever reached the personalisation warm-up. The v3 plan made reviews, long-form text and
+tag creation depend on trust levels, and required a login to write. Every one of those gates stands
+between a stranger and the first contribution to an empty catalogue — which is the actual problem.
+
+**Decision.** The site starts with `contribute = "open"`: an anonymous visitor adds an entity, writes a
+micro-review and casts a ballot with no account, identified by a signed visitor cookie that resolves to
+a `contributors` row with no password, email or handle. Trust levels stay in the substrate and are
+**unused**. Accounts buy portability and identity (a handle, history that follows you, claims), never
+the right to contribute. Each capability declares its gate (`open` / `login` / `trust(n)` / `grant`) in
+the config file (D29), so turning one on is a declaration, not a code change.
+
+Abuse is bounded without identity: per-cookie and per-IP rate limits, a first-N moderation queue that
+self-resolves in 72 hours, and a public modlog.
+
+**Rejected alternatives.**
+
+- *Login-gated writing (idea 414).* It is the friction being removed; the site has no audience to gate.
+- *TL-gated review length (idea 3) and tag creation (idea 308).* They gate exactly the first act.
+- *Invite codes (idea 443).* They assume an account is the unit of contribution.
+- *A moderation queue that needs a human per item.* With one operator and no users, a queue that does
+  not age out is a second backlog. It self-resolves unless somebody acts.
+
+**Consequences.** An open write path is an abuse surface, and that is now the site's main risk (§6.3 of
+the roadmap). The vulnerability is deliberate and has a stated exit: if the queue needs a human more
+than about once a week, step 23 (capability gates via `polaris-authz`) moves up.
+
+## D29 — Every policy is a declaration: one config file, per-surface gravity
+
+**Context.** The owner asked for a site as "modular and configurable as possible — each admin and each
+user configures it to their taste". Today the gravity weights are constants in `ranking.rs`, the shelf
+set is code, and the capability story is implicit. Constants are the reason a fork exists.
+
+**Decision.** One config file (`orbital.toml`) plus an env overlay holds every policy: the taste
+sources and their weights, each surface's gravity strength and ceiling, which shelves run, capability
+gates, write limits and the importer's pacing. Code holds mechanism; the file holds opinion. A
+per-surface declaration means home, `/v/{slug}`, `/e/{slug}` and the ring each carry their own number,
+and changing one changes only that surface. A reader's own dial (the estate's `polaris-gravity`) may
+narrow what the admin declared and never widen it, clamped **on read** so a lowered ceiling applies to
+values stored earlier.
+
+**Rejected alternatives.**
+
+- *Env variables for everything.* They cannot express nested per-surface policy, and they are invisible
+  in a diff.
+- *A settings UI as the primary surface.* The file is the source of truth and the UI edits the file; a UI
+  that writes a database the file does not know about recreates the two-truths problem.
+- *One global gravity number.* Contradicts the request and the surfaces genuinely differ: a home shelf
+  and a ring hop are not the same recommendation.
+
+**Consequences.** `orbital config check` becomes a shipped command with its own exit code, every key
+needs a validated default, and an invalid declaration must be refused at boot with the field named —
+otherwise "configurable" means "silently wrong". Configuration sprawl is a named risk (§6.6).
+
+## D30 — Gravity is folded per surface from declared sources
+
+**Context.** The v3 plan credited the instance's taste to "the operator's own signals plus the member
+aggregate", with the operator's contribution as one opaque vector. The owner asked for named sources and
+per-source weights: specific accounts first (`criticalnexus` 0.3, `steeltitan` 0.7), then users at or
+above a trust level, then high-affinity readers, then everyone weighted by affinity. The estate already
+ships this as `polaris-taste-source` — selectors (`Role`, `TrustLevel`, `Badge`, `Affinity` with an
+evidence floor, `Explicit`, `Everyone`), validated declarations, decay and a fold that reports one line
+per source.
+
+**Decision.** Orbital declares its sources in the config file and adopts the crate rather than
+reimplementing it. Starting declaration: `accounts = { criticalnexus = 0.3, steeltitan = 0.7 }` (both
+inactive until those accounts have signals), `trust = off` until D28's gates exist, `affinity` with an
+evidence floor, `everyone` weighted by affinity. A source with an empty corpus reports **absent**, never
+0. The prior stays silent (D27) whatever its sources.
+
+**Rejected alternatives.**
+
+- *Orbital's own `trust_mult` weighting.* It is one of the three divergent copies the estate measured.
+- *A single "operator vector".* It cannot express "these two people, 0.3 and 0.7", which is the request.
+- *Letting readers see which source moved a result.* That is D27's refusal with extra steps.
+
+**Consequences.** The declared weights are an editorial act that leaves no public trace, so the only
+evidence they work is an offline comparison (step 21) — and the eval must be able to say `NO VERDICT`.
+
+## D31 — Share before writing: adopt the family's arithmetic, delete ours
+
+**Context.** The family measured 13 of 17 products carrying zero shared dependencies, then shipped
+`commons-identify`, `polaris-affinity`, `polaris-taste-source`, `polaris-gravity`, `polaris-search-client`
+and the `polaris-export` format — all of which orbital would otherwise write again. Orbital is
+explicitly listed as a **donor** to `polaris-affinity` (`ranking.rs::cosine`, `tag_relevance`).
+
+**Decision.** A component the family already ships is adopted **by deletion**: the crate comes in, the
+local implementation goes, and the gate is that behaviour is byte-identical before and after (or that the
+gate refuses what the old path accepted). Orbital writes only what is genuinely its own: the catalogue's
+identity resolution adapter, the entity page grammar, the contribution rules and its own config
+declaration. Duplicated arithmetic in this repo is a defect, not a design choice.
+
+**Rejected alternatives.**
+
+- *Keep `ranking.rs` and cite its tests.* Tests are not portability; the family's three copies already
+  disagree on what "no evidence" means (`0.0` vs `None`), which is a wrong answer, not wasted lines.
+- *Write a local wrapper over a new crate "for now".* A wrapper that re-implements the arithmetic is the
+  duplicate with a different import.
+- *Adopt `polaris-candidates` now.* It is blocked on kindred's pool-recall measurement and orbital ranks a
+  few hundred rows; the family's own verdict is "adopt `polaris-affinity`, not this".
+
+**Consequences.** `git grep` for the deleted functions is part of the gate, and `cargo tree -i <crate>`
+is how the adoption is proved. Where orbital and the family disagree, the family wins unless it
+contradicts D9 (one surface) or D27 (the prior is silent).

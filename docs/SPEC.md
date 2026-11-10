@@ -138,16 +138,25 @@ its author, removable by its author or a moderator. Fields: `entity_id`, `user_i
 - **Metadata edits are user content too**: an edit is a small review-shaped act with a diff, a
   reporter and a revert. The operator is never the author of record.
 
-## 1e. Taste gravity (D25)
+## 1e. Taste gravity (D25, revised by D27 and D30)
 
 Every surface orders by a blend that includes a **taste term**: the viewer's vector (their ballots,
-stars, reviews, clicks) and the **instance's** vector (the operator's own, plus the aggregate of
-members), so a fresh visitor's first page looks like the instance rather than like a random draw.
+stars, reviews, clicks) and the **instance's** prior, so a fresh visitor's first page looks like the
+instance rather than like a random draw.
 
-Constraints that keep it safe and explainable (family idea 101):
+The prior is folded from **declared sources** (D30) — named accounts with their own weights, users at or
+above a trust level, readers with high affinity to the viewer, and everyone weighted by affinity — and it
+is **per surface**: home, a vertical, an entity page and the ring each declare their own strength and
+ceiling (D29).
 
-- the taste term is **at most 25% of any score**, and is always separable in the `why` string;
+Constraints that keep it safe:
+
+- the taste term is **at most 25% of any score** (a declared ceiling, not a constant in code);
 - a **novelty slot** on every surface, so gravity never becomes an echo;
+- **the prior is silent** (D27): applied to ordering and disclosed nowhere — no `why` string, field,
+  page, badge, class name, URL parameter, feed, sitemap or error message may reveal that it exists or
+  what it contains. A `why` line may cite clicks, recency, the viewer's own tags, endorsements and link
+  health, and nothing else. `docs/` is the only place the policy is written;
 - **adult content is eligible on every gravity surface** — it is not a separate surface — but behind a
   per-viewer opt-in: a first-time anonymous visitor gets the safe layer, and the choice is a cookie
   (anonymous) or an account setting. The three layers (safe / opt-in / everything) are read by the

@@ -1,271 +1,369 @@
 # Orbital — roadmap
 
-State at the time of writing: **schema v5**, 91 tests (43 unit, 41 HTTP, 7 store), `orbital doctor`
-green on the host, `scripts/smoke.sh` green, seven timers running. Last rewrite **2026-11-05**, the
-catalogue direction (D21, D22).
+State at the time of writing: **schema v5**, 94 tests (45 unit, 42 HTTP, 7 store), `orbital doctor`
+green on the host, seven timers running, 2 visible members, 24 links across 19 domains. Last rewrite
+**2026-11-10**, the depth-and-frictionless direction (v4).
 
-This file is the honest list. "Done" means deployed and verified against the live site, not merged.
+This file is the honest list **and the ledger**: every open step carries its own gate on the same
+line, and a step moves to §4 "Done" only once that gate has run against the live host. The count of
+open steps is the project's remaining work.
 
 ---
 
-## 0. Direction change — 2026-11-05 (v3)
+## 0. Direction — 2026-11-10 (v4)
 
-Orbital is **a taste-ranked catalogue of anything, written by its users, federated at the object
-level**. Not "a directory of members", and not "a directory of sites" either: an entity is a person, a
-website, a film, a book, a product, a fanwork. Members review entities, ballots between entities train
-the taste vector, and every surface pulls toward the instance's taste — including adult, behind a
-per-viewer opt-in.
+Orbital is **a taste-ranked catalogue of anything, written by the people who use it**, on a site that
+starts at zero friction and adds a gate only when abuse proves it needs one. The owner's 2026-11-10
+brief fixes five things that outrank any feature:
 
-Decisions, recorded as D23–D26 (D21 is superseded in scope, D9 still holds):
+1. **Depth, not breadth.** The platform is liked as it is; the work is making what exists *thick* —
+   more per entity, more per surface, better ordering, easier contribution. New products, native apps,
+   annual artefacts and "verification layer" positioning are refused (§4 "Deliberately not in this
+   plan"). The two exceptions are **ActivityPub** and **power-user surfaces** (CLI, TUI, scripts, API,
+   exports), because those are depth for the person already using the site.
+2. **Frictionless first contribution.** The site starts **open**: no account to add an entity, write a
+   micro-review or cast a ballot. Trust levels exist in the substrate and stay **off** until the site
+   has enough people to abuse it. Accounts, when they arrive, buy portability and identity — never the
+   right to contribute (D28).
+3. **Gravity is silent.** The instance's taste is **applied and never named**: no field, page,
+   sentence, badge, URL parameter, feed or API response may reveal that a prior exists, let alone what
+   it contains. Only `docs/` describes it. This supersedes D25's "separable in `why`" clause (D27).
+4. **Gravity is per-surface and multi-source.** Each surface declares its own strength, and the prior
+   is folded from **declared sources**: named accounts (starting `criticalnexus` 0.3, `steeltitan` 0.7),
+   users at or above a trust level, users with high affinity to the viewer, and everyone weighted by
+   affinity (D30). The arithmetic comes from `polaris-taste-source`, not from this repo.
+5. **Modular and configurable.** Every policy is a declaration in one config file — sources, weights,
+   caps, per-surface strength, which shelves run, which capabilities are gated. An admin shapes the
+   instance without editing code, and a reader's own dial narrows whatever the admin set, never widens.
 
-1. **Anything is an entity** with one identity: `canonical_key` = a normalised URL or an external
-   scheme (`imdb:`, `isbn:`, `musicbrainz:`, `atproto:`). `same_as` merges duplicates without deleting
-   anything.
-2. **The operator writes nothing.** Metadata is fetched or user-written; edits are user content with a
-   diff and a revert; the operator's power is override, not authorship.
-3. **Gravity applies to everything, adult included**, gated per viewer: anonymous first-time is safe,
-   opt-in unlocks adult in ranking and search, the taste term stays ≤25% with a novelty slot.
-4. **Federation is gravity's ActivityPub stack**, per-user actors, reviews joined on canonical keys,
-   inbound quarantined by default.
-5. **The mind map is dropped** (owner's call): it was a nice object and not a reason to visit.
+**Share before writing** is the sixth rule and it is a budget, not a virtue: the estate already runs
+the arithmetic this roadmap would otherwise write (§5, D31).
 
-What that does to the earlier plan: the `sites` table becomes `entities`; the TPD import becomes one
-source among several; the "top-200 hand-written one-liners" is gone; the adult surface exclusion is
-replaced by the per-viewer filter; phases reorder around reviews and ballots, with federation as the
-last phase rather than a parked idea.
+The 496-idea brainstorm behind this direction is filed in Concord (`concord.polarisocial.xyz`, project
+`orbital`): 447 open rows, 33 refused with their reasons, 16 already shipped. That page is the **list**;
+this file is the **order**.
 
 ## 1. The measurements that set the order
 
-| Measure | Value, 2026-11-05 |
+| Measure | Value, 2026-11-10 |
 |---|---|
 | Visible members | 2 (one is the operator) |
+| Verticals configured | 10; 7 hold nothing |
 | Links | 24, across **19 distinct domains**, 5 failing 3+ checks |
+| Outbound clicks recorded | 186 |
+| Visitor profiles | 126 stored (1,465 all-time, before the 180-day prune); **5** ever reached the warm-up |
 | Logins | **0 since 2026-10-29** (17 sessions, all that day) |
-| Profile views | 469 (356 of them the operator's own profile) |
 | Vertical navigations, all time | **5** — and 0 ring hits |
-| Visitor profiles | 1,465; **5** reached the personalisation warm-up |
-| ThePornDude inventory | **5,200** distinct site reviews (112,461 sitemap URLs, 27 languages) |
+| Tests | 94 (45 unit, 42 HTTP, 7 store), schema v5, deploy green 2026-11-10 |
+| Catalogue supply available | 5,200 adult site reviews (source sitemap: 112,461 URLs, 27 languages) |
+| Brainstorm filed | 496 ideas: 447 open, 33 refused, 16 already shipped |
 
-What that rules **out** for now: ranking and taste tuning, endorsement weights, monetisation, page-body
-i18n, digests, and any claim that browsing works. A ranker over two members is a decimal point on a
-coin flip.
+What that rules **out** for now: ranking *tuning*, endorsement weights, monetisation, page-body i18n,
+digests, and any claim that browsing works. A ranker over two members is a decimal point on a coin flip.
 
-What it rules **in**: inventory, a site page worth landing on, health as a quality gate, claims, and
-the one graph that is cheap with no audience — a site's own neighbourhood.
+What it rules **in**: inventory, an entity page worth landing on, contribution with no account, health
+as a quality gate, claims, and the one graph that is cheap with no audience — an entity's own
+neighbourhood.
 
 ## 2. What the outside critique got right, and the three places it was wrong
 
-Right, and taken: freeze the ranking (below); hide empty verticals (`min_members = 5` already exists
-on every row, is compared to nothing, and the code hides *empty* verticals only); make embedding the
-ring widget a condition of membership; recruit personally rather than waiting; post weekly from the
-transport that already works; save HN/Lobsters until there are 20+ real entries; stop translating page
-bodies.
+Still true, kept so it is not re-derived. Right, and taken: freeze the ranking; hide empty verticals
+(`min_members = 5` exists on every row and is compared to nothing); make embedding the ring widget a
+condition of membership; recruit personally rather than waiting; save HN/Lobsters until there are 20+
+real entries; stop translating page bodies.
 
-Wrong — written down so it is not re-derived:
+Wrong:
 
-- **"Seed 10 members from your 16 sites."** Those 16 sites are all mine. That cohort is one person.
-  The real supply is *sites* — verifiable, claimable, not invented — and other people's sites.
-- **"There is no self-serve onboarding."** There is: handle + password + primary vertical, live since
-  day one. What is missing is a reason to use it, which is a catalogue problem, not an auth problem.
-- **"Delete the sophistication."** The ranking code is written, tested and mutation-checked; freezing
-  it costs nothing and deleting it costs a rewrite. The cost was always the *tuning*, not the code.
-
-The critique's strongest point stands and is why this file changed: an empty directory is the
-conversion killer, and the answer is inventory — **real sites, never invented people**.
+- **"Seed 10 members from your 16 sites."** Those 16 sites are all mine. That cohort is one person. The
+  real supply is *entities* — verifiable, claimable, not invented.
+- **"There is no self-serve onboarding."** There is. What is missing is a reason to use it, which is a
+  catalogue problem, not an auth problem — and the answer is now to remove auth from the path entirely.
+- **"Delete the sophistication."** The ranking code is written, tested and mutation-checked. Freezing it
+  costs nothing, but it is about to be *replaced by crates the family already runs*, which is cheaper
+  than either keeping or deleting it.
 
 ## 3. What exists
 
 **The product.** Profiles, links, tags, one primary vertical and two secondaries; Top / Trending / New
 / Curated per vertical, webring, feeds, embeddable leaderboard, sitemap and robots. Server-rendered
-pages (askama), Svelte dashboard embedded in the binary. Click attribution through `/l/{id}` with
+pages (Askama), a Svelte dashboard embedded in the binary. Click attribution through `/l/{id}` with
 referrer host only and distinct-session counting. Link health with an SSRF guard including redirect
-hops. One surface (D9). Personalisation: a lens per member or anonymous visitor, passive accumulation
-with a five-page warm-up, `/lens`, an off switch, adoption at signup, 24-tag cap. Governance:
-proposals, three-vote quorum, merges that keep tags, TL2+ endorsements as a separate +0.2 term. API
-tokens and a write API; `rank-delta` from weekly snapshots. Fetched titles and favicons, generated
-social cards. `/status` — the estate as nginx actually serves it. English and Spanish chrome.
+hops. One surface (D9). Personalisation: a lens per visitor, passive accumulation with a five-page
+warm-up, `/lens`, an off switch, adoption at signup, 24-tag cap, and a tuner that arrives folded.
+Governance: proposals, three-vote quorum, merges that keep tags, TL2+ endorsements as a separate +0.2
+term. API tokens and a write API; `rank-delta` from weekly snapshots. Fetched titles and favicons,
+generated social cards, JSON-LD on profiles. `/status` — the estate as nginx actually serves it.
+English and Spanish chrome.
 
 **The operations.** `orbital doctor` (exit code = failures), `import`, `snapshot`, `retag`,
 `fetch-titles`, `og`, `prune`, `check-links`. Seven user timers (checklinks, backup, restore-test,
-prune, snapshot, metadata+cards, uptime). Nightly dumps to `.part` then rename, 14 kept, monthly
-restore test into a scratch database. nginx rate limits on the API and the unauthenticated write path,
-CORS on the read API, no `Set-Cookie` on API responses. CI on both forges against a Postgres service.
-A smoke test that hides its own fixture.
+prune, snapshot, metadata, uptime). Nightly dumps to `.part` then rename, 14 kept, monthly restore test
+into a scratch database. nginx rate limits on the API and the unauthenticated write path, CORS on the
+read API, no `Set-Cookie` on API responses. CI on both forges against a Postgres service. A smoke test
+that hides its own fixture.
 
-**Not cleaned up yet:** the smoke fixture's five `example.com` links still sit in production under a
-hidden user (`links` = 24, 19 distinct domains). Phase 0 deletes them.
+**Measured gaps this rewrite names.** `GET /api/v1/capabilities` answers **404** — the estate's W0
+contract requires it, so step 3 exists. The smoke fixture's five `example.com` links still sit in
+production under a hidden user (`links` = 24, 19 distinct domains) — step 11 deletes them. There are no
+entity pages at all, so 5,200 rows have nowhere to be read.
 
 ## 4. Next, in order
 
-Each phase ships alone and is verified against the live host. Tags: **[DB] [BE] [FE] [OPS]**.
+Each step ships alone, is verified against the live host, and carries its gate on the same line. Tags:
+**[DB] [BE] [FE] [OPS] [CFG]**. Order encodes dependency: the schema cannot follow the page that reads
+it, and the prior cannot be adopted before the surfaces that honour it exist.
 
-### Phase 0 — entity identity and the importer (no user-visible change)
+### Phase A — the entity substrate (shared components first)
 
-1. **[DB] Migration 0006**: `entities`, `categories`, `entity_tags`, `entity_edges`,
-   `entity_people`, `reviews`, `review_votes`, `entity_edits`, `entity_scores`, `ballots`,
-   `import_runs`; `links.entity_id`; nullable `users.password_hash` + `claimed_at`. SPEC §5b.
-   *Gate:* suite green; a duplicate `canonical_key` is refused; `canonical_key` normalisation has
-   table-driven tests (`www.`, trailing slash, fragment, uppercase host).
-2. **[BE] `canonical_key` resolution**: URL → key, and an external-scheme parser for `imdb:`,
-   `isbn:`, `tmdb:`, `musicbrainz:`, `atproto:`. One function, used by the importer, the review form
-   and the inbound federation path — the key is the join, so there must be exactly one implementation.
-   *Gate:* round-trip tests from 20 sample URLs and ids; two spellings of one URL produce one key.
-3. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an
-   `import_runs` receipt. The estate's import pattern (family cross-move 14) applied to a new corpus.
-   *Gate:* run twice — second run inserts 0 and updates 0; a killed run resumes where it stopped.
-4. **[OPS] First sources**: ThePornDude's 5,200 adult sites (facts only: name, domain, category), and
-   a non-adult seed from a public list (OpenLibrary for works, an awesome-list for dev resources) so
-   the catalogue is not 99% one category. **Health and metadata backfill with the existing checker and
-   `fetch-titles`; the 500/day limit must move with this task or one pass is an eleven-day backlog.**
-   *Gate:* every imported row has `last_checked`/`last_status`; the dead share is quoted per source.
-5. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
-   *Gate:* `links` drops by 5; the directory still renders.
+1. **[DB] Migration 0006**: `entities`, `categories`, `entity_tags`, `entity_edges`, `entity_people`,
+   `reviews`, `review_votes`, `entity_edits`, `entity_scores`, `ballots`, `import_runs`;
+   `links.entity_id`; nullable `users.password_hash` + `claimed_at`. SPEC §5b.
+   *Gate:* `cargo test` green; a duplicate `canonical_key` is refused (constraint error shown by a test);
+   normalisation is table-driven (`www.`, trailing slash, fragment, uppercase host).
+2. **[BE] Adopt `commons-identify`** for canonical keys (URL → key; `imdb:`, `isbn:`, `tmdb:`,
+   `musicbrainz:`, `atproto:`) and delete any local resolver — the key is the join, so there must be
+   exactly one implementation, and the estate already has it.
+   *Gate:* `cargo tree -i commons-identify` names orbital; round-trip tests over 20 sample ids; `git
+   grep -n "fn canonical_key" src/` finds only the adapter.
 
-### Phase 1 — read, review, rate
+### Phase B — contribution with no account
 
-6. **[FE] `/e/{slug}`**: an entity page — kind, title, description, image, category, tags, health,
-   people, similar entities, rating summary, and the reviews ordered by helpfulness.
-   *Gate:* a dead site says so; a film and a site render from the same template with no `if kind ==`.
-7. **[BE] Reviews**: create/edit/delete, 1–5 stars, markdown body, length cap, one review per user per
-   entity, edit history kept. *Gate:* a second review by the same user updates rather than duplicates;
-   a deleted review keeps its tombstone for federation.
-8. **[BE] Ballots**: "which of these two?" on any listing; one vote per pair per user; feeds
-   `preferences` and the entity score. *Gate:* a ballot with two identical entities is refused; a
-   user's vector changes after 10 ballots and the change is explainable.
-9. **[FE] Home from gravity**: three shelves (for you, new, rising) computed from the viewer's vector
-   with the instance vector as the fallback, each card carrying a `why` line. Adult rows appear only
-   for a viewer who opted in.
-   *Gate:* an anonymous request gets zero adult entities in HTML, JSON, feed and sitemap (the D25
-   security-boundary test).
+3. **[BE] Serve the capabilities document**: `GET /api/v1/capabilities` with `contribute = "open"`,
+   `accounts = "off"`, `federation = []`, `feeds = "commons-feed"`, `search = "polaris-search"` and the
+   declared routes (estate W0 contract; currently a 404).
+   *Gate:* `curl -s /api/v1/capabilities` returns the document, and the estate's
+   `check-capability-truth` finds **no served lie** for orbital (it currently flags `feeds` as
+   undeclared while `/feed.xml` answers 200).
+4. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row
+   with no password, no email, no handle; `capability: contribute = open` is what authorises a write.
+   *Gate:* two writes from one cookie jar land on one contributor row and a second jar on a second; a
+   request with no cookie is refused `400 contributor_required`, not 401.
+5. **[BE] Entity from a URL**: paste a URL, resolve its key through `commons-identify`, create or return
+   the entity with a fetched title and one tag.
+   *Gate:* three pastes create three entities; a fourth (`www.`/trailing-slash variant of the first)
+   returns the same entity id and creates no row.
+6. **[BE] Micro-review, no account**: one sentence plus 1–5, one per contributor per entity, editable
+   for 15 minutes, tombstoned after. A full review is the same object with a longer body.
+   *Gate:* a second submission by the same cookie updates rather than duplicates; a deleted review is
+   invisible to anonymous readers and still present for its author.
+7. **[BE] Ballot**: "which of these two?", one vote per pair per contributor, feeding the voter's vector
+   only.
+   *Gate:* 10 ballots from one cookie change that contributor's vector and no other visitor's ordering
+   (a second anonymous jar renders the order it rendered before).
+8. **[BE] Abuse bounds without accounts**: per-cookie and per-IP rate limits, a first-N moderation queue
+   for new contributors, and a 429 carrying `Retry-After`.
+   *Gate:* the 11th write inside a minute answers 429; a queued write is absent from anonymous HTML and
+   present for the operator; the queue self-resolves after 72h with no action.
 
-### Phase 2 — user-written metadata, operator-minimal
+### Phase C — inventory
 
-10. **[BE] Metadata edits**: any user edits title/description/category/tags; TL0–TL1 go to a queue,
-    TL2+ apply immediately; every edit is a diff with revert.
-    *Gate:* a TL0 edit is invisible until approved; a revert restores the previous text exactly.
-11. **[BE] Report and quarantine queue**: reports on reviews, edits and entities; quarantine removes
-    from search and ranking without deleting; operator can allowlist a domain or a user.
-    *Gate:* a quarantined review is 404 to anonymous and 200 to its author and to a moderator.
-12. **[OPS] Operator-absence drill**: run for 30 days with no operator action. Every queue must age
-    out or self-resolve, and no surface may go stale without an author.
-    *Gate:* after 30 days, the only items awaiting the operator are exceptions that name themselves.
+9. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an
+   `import_runs` receipt (the estate's darkhold/AO3 pattern).
+   *Gate:* run twice — the second run inserts 0 and updates 0; a run killed mid-way resumes where it
+   stopped and the receipt says so.
+10. **[OPS] First sources**: ThePornDude's 5,200 adult sites (facts only: name, domain, category) plus a
+    non-adult seed (OpenLibrary works, an awesome-list) so the catalogue is not 99% one category.
+    Health and metadata backfill with the existing checker and `fetch-titles`, with the 500/day limit
+    made proportional to the row count.
+    *Gate:* every imported row has `last_checked`/`last_status`; the dead share is quoted per source; one
+    full pass fits in a stated number of days.
+11. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
+    *Gate:* `links` drops by 5 (24 → 19) and `/` and `/v/dev` still render 200 with content.
 
-### Phase 3 — the gravity well, measured
+### Phase D — the entity page and reading depth
 
-13. **[BE] Instance taste vector**: the operator's own signals plus the member aggregate, contributed
-    at ≤25% of every score and always separable in `why`.
-    *Gate:* setting the operator's vector to zero changes orderings by less than the cap and the `why`
-    strings disappear rather than lie.
-14. **[BE] Offline eval** for the ranker before it ships (family cross-move 19, kindling's harness):
-    two settings over the same seed, overlap and nDCG compared, `NO VERDICT` below the sample floor.
-    *Gate:* a run that cannot beat the recency baseline says so.
-15. **[FE] Novelty slot** per surface, so a taste-heavy page still shows something it did not predict.
-    *Gate:* a fixture user who likes exactly one tag still sees at least one entity outside it.
+12. **[FE] `/e/{slug}`**: kind, title, description, image, category, tags, health, people, similar
+    entities, rating summary, and reviews ordered by helpfulness.
+    *Gate:* a dead site says so; a film and a site render from the same template with no `if kind ==`;
+    the page carries JSON-LD `Review`/`AggregateRating` and a canonical URL.
+13. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's
+    own filters.
+    *Gate:* a committed golden set runs and records `nDCG@10` + `recall@50` with `NO VERDICT` legal; a
+    zero-result query returns the labelled cross-site fallback.
+14. **[BE] Similar entities** via `polaris-affinity` (cosine over tag sets and reviewer overlap).
+    *Gate:* neighbours for 20 seed entities are stable across a rebuild and byte-identical before and
+    after the arithmetic is extracted.
+15. **[FE] Home from gravity**: three shelves (for you, new, rising), each card carrying a `why` line
+    built only from observable facts — clicks, recency, tags the *viewer* set, endorsements, health.
+    *Gate:* three shelves render for an anonymous visitor and for a tuned one, and the rendered home
+    contains no prior vocabulary (the step-20 test covers it).
 
-### Phase 4 — claims (who owns what)
+### Phase E — gravity, silent and per surface
 
-16. **[BE] Entity ownership**: a person claims their own entity (proof on their page, Bluesky token,
-    DNS TXT), a site owner claims their site. Merge-on-claim for duplicates.
-    *Gate:* a claim with no proof is refused; a claim whose proof disappears within 24h is reversed.
+16. **[BE] Adopt `polaris-affinity`** and delete `ranking.rs`'s arithmetic (donors: `cosine`,
+    `tag_relevance`, `relevance`).
+    *Gate:* top-10 byte-identical for 200 seeds before and after; `git grep -n "fn cosine\|fn
+    tag_relevance"` finds only the adapter module.
+17. **[BE] Adopt `polaris-taste-source`** with declared sources: `criticalnexus` 0.3, `steeltitan` 0.7
+    (starting values, config-owned), a trust-level selector (off until step 23), an affinity selector
+    with an evidence floor, and everyone-by-affinity.
+    *Gate:* an invalid declaration (weights that do not validate, unknown evidence kind) is refused at
+    boot with the field named; a source with an empty corpus is reported `absent`, never folded as 0.
+18. **[CFG] Adopt `polaris-gravity`** — the reader's dial — with orbital declaring a ceiling per surface.
+    *Gate:* a reader value narrows the instance value and can never widen it; lowering the ceiling clamps
+    an existing pinned value **on read**, proven with a stored value above the new ceiling.
+19. **[CFG] Per-surface gravity policy**: home, `/v/{slug}`, `/e/{slug}` and the ring each declare their
+    own weight and cap in the config file; no surface reads another's.
+    *Gate:* changing one surface's declared weight changes that surface's ordering and leaves the other
+    three byte-identical over the same dataset.
+20. **[BE] The silence gate**: no surface, endpoint, field, URL, feed, sitemap or error message names or
+    hints at the prior.
+    *Gate:* a test serialises a ranked answer and the rendered HTML and fails if any of the prior's
+    vocabulary, source names, weights or a `prior`/`taste` field appears; `/api/v1/taste` answers only
+    the caller's own lens and 401s otherwise.
+21. **[BE] Offline eval** for every ranker change: paired bootstrap over a committed golden set, decision
+    rule fixed before the data, `NO VERDICT` below the sample floor.
+    *Gate:* a run that cannot beat the recency baseline prints `NO VERDICT` and blocks the change; a run
+    that can prints the interval.
 
-### Phase 5 — federation
+### Phase F — modularity and configuration
 
-17. **[BE] Spike, timeboxed**: depend on gravity's AP layer (or lift it into `polaris-core`) and
-    publish one actor + WebFinger for the instance. *Gate:* `curl -H 'Accept: application/activity+json'`
-    on the actor returns a valid document; a real Mastodon instance resolves the handle.
-18. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review`, delivered
-    to followers, with the `Note`+schema.org fallback for peers that do not know the type.
-    *Gate:* a review appears in a Mastodon timeline with its rating visible, and the `ap_id` is the
-    same object on re-delivery.
-19. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
-    entity, unseen domain quarantined. *Gate:* a review from a second local instance lands on the
-    right entity page and stays out of search until approved.
-20. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
+22. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and their weights, per-surface
+    gravity, capability gates, which shelves run, limits, importer pacing. No policy in code.
+    *Gate:* two config files over one dataset produce two different orderings and two different shelf
+    sets; `orbital config check` exits non-zero on an unknown key or an invalid weight.
+23. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
+    `polaris-authz` once accounts exist; all four declared `open` today.
+    *Gate:* a capability declared `open` accepts an anonymous write; the same capability flipped to
+    `login` answers 401 to that request and 200 to an authenticated one, with no code change.
+24. **[FE] Admin settings page** that edits the config and cannot display the prior: sources, weights,
+    caps, shelves, limits — never the folded vector, never a per-entity contribution.
+    *Gate:* the page's HTML and its API contain no prior values (asserted), and saving a changed weight
+    changes the live ordering after restart.
+25. **[BE] User-written metadata edits** with diff and revert; TL0–TL1 queue, TL2+ apply immediately (the
+    queue is off while contribution is open).
+    *Gate:* an edit appears in the history with both texts; a revert restores the previous text exactly,
+    byte for byte.
+26. **[BE] Report and quarantine queue** with structured reasons, a 72-hour self-resolution and a public
+    modlog.
+    *Gate:* a quarantined review is 404 to anonymous and 200 to its author; an unreported queue item
+    self-resolves inside its window with the action logged.
+
+### Phase G — power-user surfaces
+
+27. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
+    `config check`, with one exit-code table (0 ok, 2 bad input, 3 refused, 4 not found, 5 unavailable).
+    *Gate:* each subcommand runs against the live host; the exit table is a test; `--help` is honest
+    about which subcommands need a token.
+28. **[FE] TUI** (`ratatui`): verticals → entities → review, keyboard-first.
+    *Gate:* a scripted session renders three screens to a snapshot and completes a review end to end.
+29. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
+    *Gate:* a bundle restores into a scratch database with matching per-table row counts; a corrupted
+    byte is caught by the checksum; a webhook delivery is logged with its response code.
+
+### Phase H — claims
+
+30. **[BE] Entity claims** (a person claims their own entity, a site owner their site) through
+    `polaris-ledger`: page proof, Bluesky token or DNS TXT, with merge-on-claim.
+    *Gate:* a claim with no proof is refused; a claim whose proof disappears within 24h is reversed and
+    the reversal is a ledger entry.
+
+### Phase I — federation
+
+31. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
+    `http_signature`) and publish one actor + WebFinger for the instance.
+    *Gate:* `curl -H 'Accept: application/activity+json'` on the actor returns a valid document; a real
+    Mastodon instance resolves the handle.
+32. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
+    followers, with the `Note`+schema.org fallback for peers that do not know the type.
+    *Gate:* a review appears in a Mastodon timeline with its rating visible, and the `ap_id` is the same
+    object on re-delivery.
+33. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
+    entity, unseen domain quarantined.
+    *Gate:* a review from a second local instance lands on the right entity page and stays out of search
+    until approved.
+34. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
     federation, staffed by the operator only as an exception path.
+    *Gate:* an unseen domain is quarantined by default; the monthly review page renders with real counts
+    and names what it cannot decide.
 
 ### Done
 
-Shipped tasks move here, newest last, with the commit and the one line of gate output that proved
-them. A task is not done because it merged; it is done because the gate ran against the live host.
-Nothing is in this list yet.
+Shipped steps move here, newest last, with the commit and the one line of gate output that proved them.
+A step is not done because it merged; it is done because its gate ran against the live host.
 
-- *(empty)*
+- *(empty — 34 steps open)*
 
 ### Deliberately not in this plan
 
+- **Disclosing gravity.** Refused as a rule, not per idea: no visible vector, no "curated by" badge, no
+  operator-styled endorsement, no instance or per-entity score, no taste manifesto, no federation of the
+  vector, no instance-to-instance comparison, no public instance profile. The Concord page carries the
+  17 refused ideas with their reasons (D27).
+- **Breadth.** No new product surface, no native app, no private-team instances, no printed or annual
+  artefacts, no review translation, no voice reviews, no third-party recommendation API, no
+  "verification layer" positioning. The Concord page carries the 12 refused breadth ideas.
+- **Accounts first.** Login-gated writing, TL-gated review length, TL-gated tag creation and invite codes
+  are refused *now* and reconsidered only when abuse data exists (D28).
+- **Multi-dimension ratings.** The estate's own verdict on `polaris-dimensions` refuses orbital: "a claim
+  is true/false — a 40/100 endorsement is nonsense".
 - **The mind map.** Dropped on the owner's call; the `entity_edges` data it would need is collected
   anyway, so it can return as a view without a migration.
 - **Seeded members, invented reviews, or operator-written copy.**
-- **Ranking/taste tuning beyond the eval gate** until one category holds 30 real reviews.
+- **A second comment tree, notification table, search index or ActivityPub stack.**
 
-## 5. Shared with the family — reuse, do not rebuild
+## 5. Shared with the family — adopt, do not rebuild
 
-| Need | Family component | State | What Orbital does |
+`~/secondbrain/10-Projects/polaris-estate-programme.md` is the programme index; its ranked queue and
+`polaris-estate-affinity-kernel` are the sources for this table. Rule of two: never extract on one
+caller, never fork a family component to save a day.
+
+| need | component | state | what orbital does |
 |---|---|---|---|
-| Accounts | `polaris-id` (W2) | live, 2 sites wired | local accounts today; adopt at W2, one realm per audience |
-| Pagination, contract | `polaris-core 0.2.0`, `x-audience`, `GET /api/v1/capabilities` | live | adopt the vocabulary; the read API already speaks ETag |
-| Taste / lens | `polaris-taste` (W3) | live — ballots, Glicko, weights, fingerprints | `preference_weights` is a local copy of the same substrate; do not extend it separately |
-| Search | `polaris-search` (W3) | live, 98,180 docs | entity search is a client, not a new index |
-| Similarity | kindred neighbour search (cross-move 7) | live | "similar entities" via `cosine()` today; migrate when a second surface needs it |
-| Import | darkhold/AO3 import (cross-move 14) | live | the catalogue importer copies the pattern: resumable, provenance, per-row outcome |
-| Link health | orbital's own (cross-move 13) | live | already the estate's; the catalogue makes it load-bearing |
-| Trust levels | orbital's TL → estate-wide (cross-move 3, idea 117) | orbital live | claims use TL2 witnesses; the family adopts the scale via `polaris-authz` |
-| Claims, disputes, moderation | `polaris-ledger` (W7) | specified | a claim is a ledger entry, not a new table — wait for the ledger rather than inventing one |
-| Export, preservation | `polaris-export` bundle (W5) | live | a catalogue that cannot be exported dies with the host |
-| Chrome, tokens, components | `@polaris/ui`, nginx topbar (W1) | live on 16 hosts | orbital takes the chrome; the map is a domain-specific component it may own |
-| Attention data | `estate-gates` pageviews per host (W10) | live | the only traffic denominator in the estate |
-| ActivityPub | gravity's AP layer (`activitystreams`, `webfinger`, `http_signature`, `discovery`, `federation.rs`, ~7,150 lines) | live | the stack orbital federates with; never a third implementation (D26) |
+| canonical keys | `commons-identify` | shipped 2026-11-05; darkhold adopted | **step 2**: adopt, delete any local resolver |
+| profile→score arithmetic | `polaris-affinity` | specified (M73-01..04); orbital is a **donor** | **step 16**: adopt; `ranking.rs`'s cosine/tag_relevance are deleted |
+| where taste comes from | `polaris-taste-source` | shipped 2026-11-09; darkhold adopted | **step 17**: declare sources (accounts, trust, affinity, everyone) |
+| the reader's dial | `polaris-gravity` | shipped 2026-11-09; darkhold adopted | **step 18**: adopt; the per-surface ceiling is orbital's declaration |
+| search | `polaris-search` + `polaris-search-client` | live, 104,630 documents | **step 13**: client, site-scoped, with a golden set |
+| eval harness | `polaris-eval` | live (darkhold sets) | **step 21**: same harness, orbital's golden set |
+| feeds | `commons-feed` | adopted 2026-11-09; live `/feed.xml` | keep; per-vertical feeds are a later row |
+| capabilities + cursors | `polaris-core` + the W0 contract | live on 20 hosts; orbital **404s** | **step 3** |
+| trust levels | `polaris-authz` | crate 0.1 shipped | **step 23**, when accounts arrive |
+| claims, moderation | `polaris-ledger` | crate 0.4 shipped | **steps 26 and 30** |
+| accounts / SSO | `polaris-id` | live; 2 sites wired | later — orbital starts `accounts = off` |
+| inbox / loops | `polaris-inbox`, `polaris-loops` | live | later; no XP before there are people |
+| export | `polaris-export` bundle format | live | **step 29** |
+| comments | `polaris-comments` | shipped; suki + whitebois | only if entity pages grow a comment tree |
+| media | `polaris-media` | live service | entity images, when imported |
+| candidate generation | `polaris-candidates` | proposed, blocked on kindred's pool recall | **not yet** — orbital ranks a few hundred rows |
+| chrome, tokens | `@polaris/ui`, nginx topbar | live on 16 hosts | adopted |
+| link health | orbital's own | live; the catalogue makes it load-bearing | keep, and scale it (step 10) |
+| ActivityPub | gravity's AP layer | live | the stack orbital federates with, never a third implementation (D26) |
 
-Rule of two still applies: do not extract a shared package on one caller, and do not fork a family
-component to save a day. Where orbital and the family disagree, the family decision wins unless it
-contradicts D9 (one surface) or D21 (proportion is a surface property).
+Where orbital and the family disagree, the family decision wins unless it contradicts D9 (one surface)
+or D27 (the prior is silent).
 
-## 6. Deliberately not done
+## 6. Known risks
 
-- **Inventing members, entities, reviews or metadata.** Real objects with fetched or user-written
-  metadata, or nothing.
-- **Operator-written copy.** No editorial author, at any scale (D24).
-- **The mind map.** Dropped; a view, not a phase.
-- **A separate adult surface or hostname.** D9 holds; the filter is per viewer (D25).
-- **Ranking and taste tuning** without the eval gate, and none at all until a category holds 30 real
-  reviews. Frozen, not deleted.
-- **Monetisation.** `docs/monetization.md` stays a design: at 962 pageviews/week an ad slot is worth
-  less than the footer promise it would break.
-- **Page-body i18n.** Chrome translated; bodies English until members need otherwise.
-- **Email, OAuth, custom domains** (D7). Claims are pulled, never mailed.
-- **A second comment tree, notification table, search index or ActivityPub stack.** The estate has one
-  of each.
-- **Copying another directory's editorial content or taxonomy.** Facts only, as before.
+1. **The prior leaks by differencing.** Two responses that differ by one candidate recover the profile.
+   The silence rule is a test per surface (step 20), not a naming convention — and a reader-facing dial
+   wired into the prior re-exposes it one legitimate feature at a time.
+2. **The adult filter is a security boundary.** 5,200 adult rows on the SFW origin, eligible for
+   opted-in viewers on every surface: a cookie, cache key, feed or sitemap that ignores the layer leaks
+   it. One test per surface, not one middleware rule.
+3. **An open write path is an abuse surface.** Rate limits plus an auto-resolving queue are the *whole*
+   defence until accounts exist; if the queue needs a human more than once a week, step 23 moves up.
+4. **The empty room.** 5,200 imported rows without reviews is the same emptiness one layer deeper; the
+   ballot and the micro-review are what fill it, and pageviews are the judge.
+5. **The link checker is the quality gate** — 5,200 rows at 500/day is an eleven-day pass, so the limit
+   moves with the importer (step 10) or the backlog is structural.
+6. **Configuration sprawl.** A config file that can express anything becomes a second program; every key
+   needs a validated default and `orbital config check` (step 22).
+7. **Entity identity will collide** (`imdb:` vs `tmdb:`, a site moving domains). `same_as` plus
+   `merged_into`, moved in one transaction and tested with a rollback — merge bugs are the ones that
+   lose reviews.
+8. **User reviews are user liability** the moment an anonymous visitor can publish one; the report
+   queue, quarantine and a takedown address are step 26, not an afterthought.
+9. **Federation is a permanent moderation cost**, and its domain allowlist is a blocklist in disguise
+   once it is long enough.
+10. **Cloudflare in front of everything**: every rate limit keys on `CF-Connecting-IP`.
 
-## 7. Known risks
+## 7. Where the truth is
 
-- **The adult filter is a security boundary now.** D25 makes adult eligibility a function of the
-  viewer, so a cookie, a cache key, a feed or a sitemap that ignores the layer leaks it. The probe is
-  explicit: an anonymous request must never receive an adult entity, on any surface, and that is a
-  test per surface rather than one middleware rule.
-- **The domain's classification exposure is permanent.** 5,200 adult entities on the SFW origin, with
-  adult eligible on every surface for opted-in viewers, is a standing risk to Cloudflare, the
-  registrar and search. It is reduced by the filter, not eliminated by it.
-- **Federation is a permanent moderation cost.** Quarantine by unseen domain means spam arrives with
-  every new instance; a domain allowlist is a blocklist in disguise once it is long enough. This is
-  the family's P4/P7 trade, accepted knowingly.
-- **Entity identity will collide.** `imdb:` and `tmdb:` disagree, a site moves domain, a person has
-  three. `same_as` plus `merged_into` is the answer, and merge bugs are the ones that lose reviews —
-  the merge must move rows in one transaction and be tested with a rollback.
-- **User reviews are user liability.** Defamation and illegal content are now the operator's problem
-  the moment a review is published; the report queue, quarantine and a takedown address are part of
-  Phase 2, not an afterthought.
-- **A catalogue of strangers is still an empty room.** 5,200 imported rows with no reviews is the
-  same empty state one layer deeper; the ballot loop and the review prompt on an entity page are what
-  fill it, and pageviews are still the judge.
-- **The link checker becomes the catalogue's quality gate**, and 5,200 rows at 500/day is an eleven-day
-  pass — the limit and concurrency move with the importer or the backlog is structural.
-- **Cloudflare in front of everything** (unchanged): every rate limit keys on `CF-Connecting-IP`.
-
-## 8. Where the truth is
-
-`docs/SPEC.md` (§1b entity, §1d reviews, §1e gravity, §5b tables, §6b federation), `docs/DECISIONS.md` (D21 catalogue superseded by D23–D26, D22 claims),
-`docs/monetization.md` (measured traffic), and the vault note
-`~/secondbrain/10-Projects/2026-10-29-orbital-directory-live.md`. When a route or command is added all
-of these move in the same pass, and every route a doc lists is proved with
-`curl -s -o /dev/null -w '%{http_code}'`.
+`docs/SPEC.md` (§1b entity, §1d reviews, §1e gravity, §5b tables, §6b federation), `docs/DECISIONS.md`
+(D9 one surface; D16–D20 tokens/quorum/endorsement; D21–D26 catalogue/claims/gravity/federation;
+**D27–D31** the 2026-11-10 direction), `docs/monetization.md` (measured traffic), the vault log
+`~/secondbrain/10-Projects/2026-10-29-orbital-directory-live.md`, and the Concord project page — 496
+rows in the brainstorm's own words. When a route or command is added, all of these move in the same
+pass, and every route a doc lists is proved by `curl -s -o /dev/null -w '%{http_code}'`: 200/401/405
+mean it exists, 404 means the doc drifted.
