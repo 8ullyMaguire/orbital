@@ -157,22 +157,115 @@ impl Report {
 
 /// Load the cases for a seed list. Missing seeds are counted, never replaced.
 pub async fn collect(pool: &PgPool, seeds: &[String]) -> Result<(Vec<Case>, usize)> {
-    unimplemented!("RED: load the cases a golden set names")
+    let mut cases = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut missing = 0usize;
+    for session in seeds {
+        if !seen.insert(session.clone()) {
+            continue;
+        }
+        // The rows this session produced. A seed with no row is counted, never replaced.
+        let hits: Vec<(Uuid, Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT user_id, vertical_context, viewer_hash FROM source_hits WHERE session_hash = $1",
+        )
+        .bind(session)
+        .fetch_all(pool)
+        .await?;
+        if hits.is_empty() {
+            missing += 1;
+            continue;
+        }
+
+        let clicked: Vec<Uuid> = hits
+            .iter()
+            .map(|(user, _, _)| *user)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
+        // The pool is the vertical the session was browsing; a session that browsed none is judged
+        // against the whole catalogue, because that is the page it was given.
+        let context = hits.iter().find_map(|(_, ctx, _)| ctx.clone());
+        let pool_members = match &context {
+            Some(slug) => crate::store::vertical_members(pool, slug).await?,
+            None => crate::store::all_members(pool, true).await?,
+        };
+        let members: Vec<MemberStat> = pool_members.into_iter().filter(|m| !m.hidden).collect();
+
+        // The lens the session carried. `viewer_hash` is the unsalted visitor id the preference table
+        // is keyed by; the caveat that this is the visitor's *current* profile is in the rule text.
+        let mut lens_rows: Vec<(String, f64)> = Vec::new();
+        for viewer in hits.iter().filter_map(|(_, _, viewer)| viewer.clone()) {
+            let rows: Vec<(String, f64)> = sqlx::query_as(
+                "SELECT tag_slug, weight::float8 FROM preference_weights
+                  WHERE owner_kind = 'visitor' AND owner_id = $1",
+            )
+            .bind(&viewer)
+            .fetch_all(pool)
+            .await?;
+            lens_rows.extend(rows);
+        }
+
+        cases.push(Case {
+            session: session.clone(),
+            members,
+            weights: lens_of(&lens_rows),
+            clicked,
+        });
+    }
+    Ok((cases, missing))
 }
 
 /// Score both arms over the cases and compare them.
 pub fn score(cases: &[Case], now: chrono::DateTime<chrono::Utc>) -> (Arm, Arm) {
-    unimplemented!("RED: score recency against the candidate")
+    let mut arm_a = Arm::new();
+    let mut arm_b = Arm::new();
+    for (index, case) in cases.iter().enumerate() {
+        let judged = judgements(case);
+        if judged.is_empty() || case.members.is_empty() {
+            // A case with nothing clicked is not a zero: it is not a case.
+            continue;
+        }
+        let recency = crate::ranking::rank_new(case.members.clone(), now, &[], 1.0);
+        let candidate = crate::ranking::rank_top(case.members.clone(), &case.weights, 1.0);
+        let a = ndcg_at(&handles(&recency), &judged, K);
+        let b = ndcg_at(&handles(&candidate), &judged, K);
+        if let (Some(a), Some(b)) = (a, b) {
+            arm_a.insert(index as i64, a);
+            arm_b.insert(index as i64, b);
+        }
+    }
+    (arm_a, arm_b)
 }
 
 /// Run the whole thing: load, score, compare, decide.
 pub async fn run(pool: &PgPool, golden: &Golden) -> Result<Report> {
-    unimplemented!("RED: run the comparison")
+    let (cases, missing) = collect(pool, &golden.seeds).await?;
+    let (arm_a, arm_b) = score(&cases, chrono::Utc::now());
+    let compared = paired::compare(&arm_a, &arm_b, golden.rule.min_cases.max(MIN_CASES));
+    Ok(Report {
+        cases: cases.len(),
+        missing,
+        paired: compared,
+    })
 }
 
 /// The seed list, emitted from real rows: every session that clicked a member card, newest first.
 pub async fn emit_seeds(pool: &PgPool, limit: i64) -> Result<Golden> {
-    unimplemented!("RED: emit seeds from what the database holds")
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT session_hash FROM source_hits
+          WHERE user_id IS NOT NULL
+          GROUP BY session_hash
+          ORDER BY max(created_at) DESC
+          LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(Golden {
+        seeds: rows.into_iter().map(|(session,)| session).collect(),
+        ..Golden::empty()
+    })
 }
 
 /// Turn one case into the two ranked lists and the judgements the metric reads.

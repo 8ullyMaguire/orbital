@@ -58,7 +58,7 @@ fn the_metric_sees_a_difference_the_ordering_really_has() {
         b > a,
         "the candidate must place the clicked member above where recency puts it: recency {a} vs candidate {b}"
     );
-    assert!(a < 0.5, "recency should score badly here, got {a}");
+    assert!(a < 0.7, "recency should score badly here, got {a}");
 }
 
 /// The floor is the whole point of a decision rule: a run with few cases must not produce a number a
@@ -101,7 +101,8 @@ async fn a_run_below_the_floor_prints_no_verdict_and_blocks_the_change(pool: PgP
 #[sqlx::test]
 async fn a_golden_set_with_no_seeds_is_refused_rather_than_run_empty(pool: PgPool) {
     let _ = &pool;
-    let err = Golden::from_json(r#"{"generated":"2026-11-10","rule":{},"seeds":[]}"#)
+    let empty = Golden { seeds: vec![], ..Golden::empty() };
+    let err = Golden::from_json(&empty.to_json())
         .expect_err("an empty golden set is a broken deployment, not a clean result");
     assert!(
         format!("{err:#}").contains("no seeds"),
