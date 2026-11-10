@@ -75,6 +75,12 @@ impl Overlap {
         }
     }
 
+    /// The weight a tag carries, for callers that want to say *why* two members are neighbours: a shared tag the
+    /// pool barely uses is the reason, and a shared tag everybody has is decoration.
+    pub fn rarity(&self, tag: &str) -> f64 {
+        self.w(tag)
+    }
+
     fn w(&self, tag: &str) -> f64 {
         // A tag the pool has never seen is as rare as it gets; `1.0` is the normalised maximum.
         self.weight.get(tag).copied().unwrap_or(1.0)

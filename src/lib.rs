@@ -12,6 +12,7 @@ pub mod models;
 pub mod og;
 pub mod ops;
 pub mod prefs;
+pub mod neighbours;
 pub mod overlap;
 pub mod ranking;
 pub mod render;
