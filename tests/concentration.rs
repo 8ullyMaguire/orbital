@@ -117,8 +117,22 @@ fn below_the_floor_there_is_no_verdict() {
         orbital::concentration::LONG_TAIL_FLOOR,
         lt.verdict()
     );
-    let big = vec![(100.0, 1000i64), (10.0, 400)];
+    // Enough impressions, but not enough members: with three the tail is one member and the share is arithmetic.
+    let thin = vec![(100.0, 1000i64), (50.0, 500), (10.0, 400)];
+    let lt = orbital::concentration::long_tail(&thin).expect("impressions");
+    assert!(lt.total >= orbital::concentration::LONG_TAIL_FLOOR);
+    assert!(
+        lt.verdict().starts_with("NO VERDICT"),
+        "{} members is not a pool: {}",
+        lt.pool_members,
+        lt.verdict()
+    );
+
+    // Both floors passed, and only then a share.
+    let mut big: Vec<(f64, i64)> = (0..12).map(|i| (100.0 - i as f64, 100)).collect();
+    big.push((1.0, 60));
     let lt = orbital::concentration::long_tail(&big).expect("impressions");
     assert!(lt.total >= orbital::concentration::LONG_TAIL_FLOOR);
-    assert!(lt.verdict().contains("long tail"), "over the floor it states the share: {}", lt.verdict());
+    assert!(lt.pool_members >= orbital::concentration::LONG_TAIL_MIN_MEMBERS);
+    assert!(lt.verdict().contains("long tail"), "over both floors it states the share: {}", lt.verdict());
 }

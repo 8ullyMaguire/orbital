@@ -170,6 +170,11 @@ pub async fn latest(pool: &PgPool) -> Result<Vec<Snapshot>> {
 /// reporting noise with a number attached.
 pub const LONG_TAIL_FLOOR: i64 = 200;
 
+/// And a floor on the *pool*, because impressions are not the only way to be too small: with two members the
+/// "long tail" is one member and its share of the surface is half by arithmetic, not by any property of the shelf.
+/// A share over a pool this thin measures the instrument, not the thing the instrument is pointed at.
+pub const LONG_TAIL_MIN_MEMBERS: usize = 8;
+
 /// What share of a window's impressions went to the members below the median exposure.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LongTail {
@@ -178,6 +183,8 @@ pub struct LongTail {
     pub tail_members: usize,
     pub share: f64,
     pub window_hours: i64,
+    /// Members in the pool (not only the ones with impressions): the second way a sample can be too small.
+    pub pool_members: usize,
 }
 
 impl LongTail {
@@ -187,6 +194,12 @@ impl LongTail {
             return format!(
                 "NO VERDICT — only {} impression(s) in {}h; the floor is {}",
                 self.total, self.window_hours, LONG_TAIL_FLOOR
+            );
+        }
+        if self.pool_members < LONG_TAIL_MIN_MEMBERS {
+            return format!(
+                "NO VERDICT — {} member(s) in the pool; a tail needs at least {} to mean anything",
+                self.pool_members, LONG_TAIL_MIN_MEMBERS
             );
         }
         format!(
@@ -218,5 +231,6 @@ pub fn long_tail(rows: &[(f64, i64)]) -> Option<LongTail> {
         tail_members: tail.len(),
         share: tail_impressions as f64 / total as f64,
         window_hours: 24,
+        pool_members: rows.len(),
     })
 }
