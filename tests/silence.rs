@@ -11,10 +11,12 @@ use orbital::silence::{leaks, silent, PRIOR_WORDS};
 fn the_gate_finds_each_word_of_the_vocabulary() {
     for word in PRIOR_WORDS {
         let body = format!(r#"<p>The page says {word} once.</p>"#);
-        assert_eq!(
-            leaks(&body, &[]),
-            vec![word.to_string()],
-            "the gate must find `{word}`"
+        // `contains`, not equality: one vocabulary word can sit inside another ("taste-source" holds
+        // "taste"), and reporting both is correct — the point is that neither passes.
+        assert!(
+            leaks(&body, &[]).contains(&word.to_string()),
+            "the gate must find `{word}`, found {:?}",
+            leaks(&body, &[])
         );
         let key = format!(r#"{{"{word}":null}}"#);
         assert!(!silent(&key, &[]), "a field named `{word}` is a disclosure");
@@ -22,6 +24,11 @@ fn the_gate_finds_each_word_of_the_vocabulary() {
 
     let shouting = "This list shows your GRAVITY profile.";
     assert_eq!(leaks(shouting, &[]), vec!["gravity".to_string()]);
+    assert_eq!(
+        leaks("built on taste-source", &[]),
+        vec!["taste".to_string(), "taste-source".to_string()],
+        "the phrase reports both the word it is and the word inside it"
+    );
 }
 
 /// Whole-word matching, because the alternative is a gate that fires on `priority` and gets switched off.
