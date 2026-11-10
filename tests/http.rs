@@ -2066,6 +2066,7 @@ async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
     let mut cfg = test_config();
     cfg.exposure = orbital::exposure::Config::off();
     let capped = app(pool.clone()).await;
+    let attention = cfg.attention;
     let uncapped = app_with(pool.clone(), cfg).await;
     for handle in ["leader", "second", "third"] {
         register(&capped, handle, "dev").await;
@@ -2105,7 +2106,7 @@ async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
         chrono::Utc::now(),
         &orbital::shelf::Declaration::default(),
         orbital::dial::Lens::full(),
-        cfg.attention,
+        attention,
         &orbital::exposure::Config::off(),
     );
     let rising = shelves.iter().find(|s| s.key == "rising").expect("rising");
