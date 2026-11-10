@@ -14,18 +14,20 @@
 //!
 //! The matcher is deliberately dumb: case-insensitive, whole-word, substring anywhere. A clever matcher
 //! would have an exemption list, and an exemption list is how a gate becomes decoration.
+//!
+//! The list is deliberately short and its words are not ordinary English: `exposure`, `impression` and
+//! `damped` were tried here and removed the same turn, because a member is allowed to write "long exposure
+//! photography" in a bio and a gate that fires on that gets switched off. A per-member *number* is caught
+//! structurally instead (`tests/http.rs`, `no_surface_publishes_a_per_member_score`), which is the thing that
+//! actually matters.
 
 /// The vocabulary the prior is implemented in. Every one of these is a word an implementation uses and a
 /// product must not say.
 /// `folded` is deliberately **not** here: it is ordinary interface language for a panel that is closed,
 /// and a vocabulary that fires on it would be switched off within a week. The gate keeps only the words
 /// that nothing but the prior's implementation would ever say in public.
-pub const PRIOR_WORDS: [&str; 11] = [
+pub const PRIOR_WORDS: [&str; 7] = [
     "gravity",
-    "damped",
-    "exposure",
-    "impression",
-    "percentile",
     "prior",
     "taste",
     "attuned",

@@ -2556,3 +2556,48 @@ async fn every_surface_still_answers_after_the_guardrail(pool: PgPool) {
     let sitemap = call(&app, get("/sitemap.xml")).await;
     assert!(sitemap.body.contains("/@reachable"), "the sitemap still lists the member");
 }
+
+/// THE GATE, the numbers: no surface publishes a per-member score. Prose cannot be grepped for this — a member
+/// may legitimately write "exposure" in a bio — so it is checked structurally: member cards carry no decimal
+/// number and no score-like attribute, and the JSON APIs carry no score-like key.
+#[sqlx::test]
+async fn no_surface_publishes_a_per_member_score(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "scored", "dev").await;
+    register(&app, "otherone", "dev").await;
+
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK);
+    let mut rest = home.body.as_str();
+    let mut cards = 0;
+    while let Some(at) = rest.find("class=\"mcard\"") {
+        let after = &rest[at..];
+        let next = after[1..].find("class=\"mcard").map(|i| i + 1).unwrap_or(after.len());
+        let card = &after[..next];
+        cards += 1;
+        assert!(
+            !card.contains("data-score")
+                && !card.contains("data-weight")
+                && !card.contains("data-attention")
+                && !card.contains("data-rank"),
+            "a card publishes its ranking inputs: {card}"
+        );
+        let decimals: Vec<&str> = card
+            .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .filter(|t| t.len() > 1 && t.starts_with(|c: char| c.is_ascii_digit()) && t.contains('.') && t.matches('.').count() == 1)
+            .collect();
+        assert!(decimals.is_empty(), "a card publishes a decimal number ({decimals:?}): {card}");
+        rest = &after[1..];
+    }
+    assert!(cards > 0, "there were cards to judge");
+
+    // The JSON the site serves: no key may be a ranking input.
+    for path in ["/api/v1/search?q=scored", "/api/v1/ring/dev", "/api/v1/stats"] {
+        let r = call(&app, get(path)).await;
+        assert_eq!(r.status, StatusCode::OK, "{path}");
+        let lower = r.body.to_lowercase();
+        for key in ["\"score\"", "\"weight\"", "\"attention\"", "\"relevance\"", "\"damped\"", "\"exposure\""] {
+            assert!(!lower.contains(key), "{path} publishes {key}: {}", r.body);
+        }
+    }
+}
