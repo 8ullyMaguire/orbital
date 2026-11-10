@@ -17,13 +17,15 @@
 
 /// The vocabulary the prior is implemented in. Every one of these is a word an implementation uses and a
 /// product must not say.
-pub const PRIOR_WORDS: [&str; 8] = [
+/// `folded` is deliberately **not** here: it is ordinary interface language for a panel that is closed,
+/// and a vocabulary that fires on it would be switched off within a week. The gate keeps only the words
+/// that nothing but the prior's implementation would ever say in public.
+pub const PRIOR_WORDS: [&str; 7] = [
     "gravity",
     "prior",
     "taste",
     "attuned",
     "affinity",
-    "folded",
     "taste-source",
     "instance lens",
 ];

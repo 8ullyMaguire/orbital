@@ -1634,13 +1634,14 @@ async fn the_instance_prior_has_no_public_surface(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(
-        res.status,
-        StatusCode::NOT_FOUND,
-        "a taste route would announce that a prior exists; got {} {}",
-        res.status,
-        res.body
-    );
+    // ROADMAP step 1 hands `/api/v1/taste` to the **caller's own** lens, and D40 records why that is not
+    // an announcement: it answers `tags` (the weights the reader set) and `dial` (the number they own),
+    // never a source, a weight of the instance's, or a field describing one. The guard this replaced —
+    // "the route must not exist at all" — is now this test plus `no_surface_names_the_prior`.
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let body = res.json();
+    let keys: Vec<&str> = body.as_object().map(|o| o.keys().map(|k| k.as_str()).collect()).unwrap_or_default();
+    assert_eq!(keys, vec!["dial", "tags"], "two fields, both the caller's: {}", res.body);
 
     let home = call(&app, Request::builder().uri("/").body(Body::empty()).unwrap()).await;
     assert_eq!(home.status, StatusCode::OK);
