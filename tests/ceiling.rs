@@ -48,7 +48,9 @@ fn two_consecutive_days_differ_in_the_tail_and_agree_on_the_top() {
 #[test]
 fn the_daily_hash_is_pinned_and_not_the_standard_librarys() {
     let id = Uuid::from_bytes([0u8; 16]);
-    assert_eq!(ceiling::hash64(0, &id), 0xcbf2_9ce4_8422_2325, "FNV-1a over a zero day and a nil id is its own offset basis");
+    // The golden value: FNV-1a over 24 zero bytes (eight for the day, sixteen for the id). Pinned because
+    // the promise is that the same date and the same member give the same slot, in any build.
+    assert_eq!(ceiling::hash64(0, &id), 9_354_609_568_656_401_157);
     assert_eq!(ceiling::hash64(0, &id), ceiling::hash64(0, &id));
     assert_ne!(ceiling::hash64(0, &id), ceiling::hash64(1, &id), "the day is an input");
     let mut other = [0u8; 16];
@@ -87,7 +89,7 @@ async fn member(pool: &PgPool, handle: &str) -> Uuid {
 /// waiting.
 #[sqlx::test]
 async fn the_ceiling_bites_for_a_day_and_lets_go_the_next(pool: PgPool) {
-    for handle in ["loud", "b", "c", "d", "e", "f"] {
+    for handle in ["loud", "bravo", "charlie", "delta", "echo", "foxtrot"] {
         member(&pool, handle).await;
     }
     let loud: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'loud'")
@@ -138,8 +140,8 @@ async fn the_ceiling_bites_for_a_day_and_lets_go_the_next(pool: PgPool) {
 /// Real rows get recorded by a real render, and the recording is a count per hour, not a row per card.
 #[sqlx::test]
 async fn a_render_records_what_it_showed_once_per_hour(pool: PgPool) {
-    let a = member(&pool, "a").await;
-    let b = member(&pool, "b").await;
+    let a = member(&pool, "alpha").await;
+    let b = member(&pool, "bravo").await;
     orbital::store::record_impressions(&pool, "home", &[a, b])
         .await
         .expect("recorded");
