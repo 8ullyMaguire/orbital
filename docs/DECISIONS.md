@@ -1518,3 +1518,50 @@ ships with its gate met by refusal and its shelf proven on fixtures, and the led
 One knock-on: `the_undiscovered_shelf_...` asserted a *named* member led that shelf, and moving `gems` ahead of it
 took that member. The test now asserts the property (only tail members, each with a why line) instead of a name —
 the second time the same lesson has been paid for, which is why it is written into D46 and repeated here.
+
+## D51 — Floors: the reader's preference is the last word, and it never becomes a filter
+
+**Context.** The roadmap asked for a tag or category that a reader *or* the instance can rank away: multiplicative,
+capped, and reported when it matches nothing. The estate crate already had the arithmetic (`polaris_candidates::floor`,
+0.50 per rule, 0.60 together, `Applied` reporting the match) and had been imported since the shelf work; nothing in
+Orbital called it.
+
+**Decision.**
+
+- **Adopt the crate's arithmetic and own only what it refuses to know**: what a name means (a tag, or `v:<slug>` for a
+  category), and what an unapplied floor reads like in a response.
+- **`?not=` on the address, nothing stored.** A floor is a view of a list, so a shared link shows the same ordering to
+  whoever opens it, and the site keeps no record of what anyone dislikes. The instance may also declare floors in
+  `FLOORS_FILE`, loaded at boot and refused by name if out of range.
+- **Every discovery list takes the floor**, not only Top: `rank_top_floored`, `rank_trending_floored`,
+  `rank_new_floored`. A preference about a list that only holds on one list is not a preference.
+- **The floor is applied last on every shelf**, after the budget, the MMR pass, the exposure caps and the cohort
+  promote. This is the decision that took a live measurement to find: the first version applied the floor inside the
+  ranker only, and on live a 0.5 floor changed nothing — the cohort rule promoted the floored member back to the top,
+  because the member being floored is usually the one with less exposure. A stated preference outranks an automatic
+  quota.
+- **Refusals are notes, not 400s**: a weight above the cap, or a name carrying a colon, renders the page with a line
+  naming the word that was not understood. A typo must not look like a preference that worked, and must not cost the
+  reader the page either.
+- **The vocabulary stays the reader's**: "ranked away", "matches nothing here". The words *floor*, *prior*, *gravity*
+  never reach a page (the silence gate walks the same surfaces).
+
+**Rejected alternatives.**
+
+- *A subtractive penalty.* It can send a score negative and inverts the order among the floored members, which is the
+  one ordering the reader is most likely to check.
+- *A hard filter / a "hidden" flag.* It makes a member unreachable by a click the reader did not know they made, and
+  it turns a preference into an editorial act — the operator authors nothing (D44).
+- *Storing the reader's floors in the database.* It needs an account to mean anything, and it records tastes. The
+  address is enough for the frictionless case this site is built for.
+- *Clamping an out-of-range weight.* A typo silently becomes 0.5, which is a ranking change nobody asked for. Refused
+  by name instead.
+- *Letting the cohort promote win.* Measured, not argued: with 2 members and real numbers, a 0.5 floor on the leader
+  moved nothing, because the promote lifted it back. The floor runs last.
+
+**Consequences.** **206 tests**; the gate has three mutations that bite: removing the floor from the ranker leaves the
+floored member first, making an unapplied floor silent removes the sentence, and dropping `FloorRule::checked` lets
+0.9 through. Live: `/` → `criticalnexus, steeltitan`; `/?not=rust:0.5` → `steeltitan, criticalnexus` with
+`ranked away: 1 profile lower (@criticalnexus)`; `/?not=typo_here` → `matches nothing here — check the spelling`;
+`/?not=rust:0.9` → `has weight 0.9; the cap is 0.5`; `orbital doctor` prints `PASS floors none declared
+(FLOORS_FILE absent)`; `/@criticalnexus`, `/v/dev` and the similar-members API all still 200.

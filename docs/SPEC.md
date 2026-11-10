@@ -430,6 +430,37 @@ and a window of surrounding text for the machinery's words.
 photography" in a bio), so it is checked structurally: no member card carries `data-score`/`data-weight`/
 `data-attention`/`data-rank` or a decimal number, and no `/api/v1/*` response carries a score-like key.
 
+### 2e-quater. Floors: a tag or a category ranked away (D51)
+
+A reader (or the instance) can rank a name *away* without hiding anything. The arithmetic is
+`polaris_candidates::floor`: **multiplicative**, at most 0.50 per rule and 0.60 for all of them together, so a floor
+is a position and never a filter.
+
+```
+grammar    ?not=rust,cli:0.4,v:music        (a bare name takes 0.25)
+instance   FLOORS_FILE {"floors":[{"name":"crypto","weight":0.4}]}   — loaded at boot, refused if out of range
+matching   a tag, case-insensitively; or v:<slug> against the member's verticals
+ordering   the floor multiplies the *finished* score in Top, Rising and New (every discovery list), and it is
+           re-applied last on every shelf, after the budget, the diversity pass, the exposure caps and the cohort
+           promote
+reporting  every declared name is named in the response, including the ones that matched nothing
+```
+
+Two rules follow from "never a filter": a floored member is still at its URL, in its category, in the sitemap and in
+the search index; and the caps mean a floor can never remove more than 60% of a member's standing.
+
+The page says it in the reader's own words, and only about their own preference:
+
+```
+ranked away: 1 profile lower (@criticalnexus)
+"typo_here" matches nothing here — check the spelling
+```
+
+The order in which the two rules meet is a decision, not an accident: the **cohort promote** inside the exposure caps
+exists to stop the famous crowding a page, and the member a reader ranks away is usually the one with less exposure —
+so the promote lifts it straight back. The floor is therefore applied *after* it. A stated preference outranks an
+automatic quota; the quota is a policy about the page, not a licence to overrule the reader.
+
 ### 2c-decies. The "hidden gems" shelf, and the long-tail share its gate reads (D50)
 
 The fourth shelf — after `For you`, `Rising`, `Undiscovered`… actually **third**, because it is the most specific
