@@ -356,10 +356,13 @@ mod tests {
     fn the_lens_term_scales_with_the_dial_and_zero_means_no_lens() {
         let mut tagged = member("tagged", 100, 200, 1, &["rust"]);
         tagged.clicks = 1;
+        tagged.attention = 1 as f64;
         let mut popular = member("popular", 1000, 200, 1, &["gardening"]);
         popular.clicks = 6;
+        popular.attention = 6 as f64;
         let mut loud = member("loud", 5000, 200, 1, &["music"]);
         loud.clicks = 10;
+        loud.attention = 10 as f64;
         let members = vec![popular.clone(), tagged.clone(), loud];
         let weights = vec![("rust".to_string(), 1.0)];
         let position = |order: &[MemberStat], handle: &str| {
@@ -395,12 +398,16 @@ mod tests {
     fn the_ring_step_also_honours_the_dial() {
         let mut anchor_member = member("anchor", 10, 100, 1, &["rust"]);
         anchor_member.clicks = 1;
+        anchor_member.attention = 1 as f64;
         let mut attuned = member("attuned", 10, 100, 1, &["rust"]);
         attuned.clicks = 1;
+        attuned.attention = 1 as f64;
         let mut neighbour = member("neighbour", 10, 100, 1, &["rust", "compilers"]);
         neighbour.clicks = 1;
+        neighbour.attention = 1 as f64;
         let mut stranger = member("stranger", 10, 100, 1, &["gardening"]);
         stranger.clicks = 1;
+        stranger.attention = 1 as f64;
         let members = vec![
             anchor_member.clone(),
             attuned.clone(),
@@ -566,8 +573,10 @@ mod tests {
         // which is the honest claim. A member with a tenth of the clicks is still tenth.
         let mut a = member("matching", 1, 40, 2, &["chiptune"]);
         a.clicks = 70;
+        a.attention = 70 as f64;
         let mut b = member("busier", 1, 40, 2, &["podcast"]);
         b.clicks = 100;
+        b.attention = 100 as f64;
         let weights = vec![("chiptune".to_string(), 1.0)];
 
         let plain = rank_top(vec![a.clone(), b.clone()], &[], 1.0, Config::raw());
@@ -579,8 +588,10 @@ mod tests {
         // ...and it cannot flip a wide one.
         let mut far = member("quiet", 1, 40, 2, &["chiptune"]);
         far.clicks = 1;
+        far.attention = 1 as f64;
         let mut loud = member("loud", 1, 40, 2, &["podcast"]);
         loud.clicks = 100;
+        loud.attention = 100 as f64;
         let tuned = rank_top(vec![far, loud], &weights, 1.0, Config::raw());
         assert_eq!(tuned[0].handle, "loud", "relevance is 40%, not a veto");
     }
@@ -590,10 +601,13 @@ mod tests {
         // visitors, then clicks, then the older account: `c` is older than `a`, both have 5 clicks.
         let mut a = member("a", 10, 1, 2, &["x"]);
         a.clicks = 5;
+        a.attention = 5 as f64;
         let mut b = member("b", 10, 5, 2, &["x"]);
         b.clicks = 90;
+        b.attention = 90 as f64;
         let mut c = member("c", 10, 9, 2, &["x"]);
         c.clicks = 5;
+        c.attention = 5 as f64;
         let order = rank_top(vec![a, b, c], &[], 1.0, Config::raw());
         assert_eq!(
             order.iter().map(|m| m.handle.as_str()).collect::<Vec<_>>(),
@@ -609,8 +623,10 @@ mod tests {
         // means they cannot flip much more than that.
         let mut plain = member("aaa", 1, 40, 2, &["chiptune"]);
         plain.clicks = 70;
+        plain.attention = 70 as f64;
         let mut liked = member("zzz", 1, 40, 2, &["chiptune"]);
         liked.clicks = 70;
+        liked.attention = 70 as f64;
         liked.endorse = 1.0;
         let weights = vec![("chiptune".to_string(), 1.0)];
         // Both hold the tag, so relevance is saturated for both: the endorsement is the only

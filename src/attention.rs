@@ -164,9 +164,10 @@ mod tests {
         let cfg = Config::default();
         let lead = cfg.lead_after(10.0);
         assert!((lead - 1.86).abs() < 0.02, "10x becomes {lead}, expected ≈1.86 at alpha 0.5");
-        // And the share the ranker reads says the same thing.
-        let busiest = cfg.share(10_000.0, 10_000.0);
-        let tenth = cfg.share(1_000.0, 10_000.0);
+        // And the share the ranker reads says the same thing. The pair is (10, max 10) against
+        // (1, max 10), which is the same arithmetic as a lead of ten with the same additive offset.
+        let busiest = cfg.share(10.0, 10.0);
+        let tenth = cfg.share(1.0, 10.0);
         assert!((busiest / tenth - lead).abs() < 0.05, "{} vs {}", busiest / tenth, lead);
     }
 
