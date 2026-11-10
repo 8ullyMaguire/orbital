@@ -487,6 +487,7 @@ mod tests {
             verticals: vec!["dev".into()],
             endorse: 0.0,
             attention: visitors_7d as f64,
+            recent: visitors_7d as f64,
         }
     }
 
