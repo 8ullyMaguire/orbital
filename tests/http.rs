@@ -1915,6 +1915,24 @@ async fn the_monument_tab_shows_the_lifetime_record(pool: PgPool) {
 
     let top = call(&app, get("/v/dev?tab=top")).await;
     assert_eq!(top.status, StatusCode::OK);
+    // What the store says, so a wrong page order is either a ranking bug or a page bug and never a guess.
+    let pool_members = orbital::store::vertical_members(&pool, "dev").await.expect("pool");
+    let proof: Vec<String> = pool_members
+        .iter()
+        .map(|m| format!("{} recent {:.1} clicks {}", m.handle, m.recent, m.clicks))
+        .collect();
+    let ranked: Vec<String> = orbital::ranking::rank_top(
+        pool_members,
+        &[],
+        1.0,
+        orbital::attention::Config::default(),
+        orbital::ranking::Window::Recent,
+    )
+    .into_iter()
+    .map(|m| m.handle)
+    .collect();
+    assert_eq!(ranked.first().map(|s| s.as_str()), Some("newcomer"), "{proof:?}");
+
     let at_vet = top.body.find("/@veteran").unwrap_or(0);
     let at_new = top.body.find("/@newcomer").unwrap_or(0);
     assert_eq!(
