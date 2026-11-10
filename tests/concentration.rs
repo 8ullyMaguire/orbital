@@ -9,25 +9,31 @@ use orbital::concentration::{self, TOP_K};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// One member holding 900 impressions while nineteen hold 10 each: real numbers, arithmetic with an answer
-/// anyone can check by hand (900/990 = 0.909; Gini ≈ 0.909 − 1/20).
+/// One member holding 900 impressions while nine hold 10 each: real numbers, arithmetic with an answer
+/// anyone can check by hand — 900/990 = 0.909 of the impressions, and
+/// 2·9·890 / (2·10²·99) = 0.809 of the coefficient.
 #[test]
 fn one_member_with_nine_tenths_of_impressions_reads_as_concentrated() {
     let mut v: Vec<f64> = vec![900.0];
-    v.extend(std::iter::repeat(10.0).take(19));
+    v.extend(std::iter::repeat(10.0).take(9));
 
     let g = concentration::gini(&v);
     let t = concentration::top_share(&v, TOP_K);
-    assert!(g > 0.8, "one member holding 90% of impressions is concentrated, got gini {g}");
+    assert!((g - 0.8091).abs() < 0.001, "the coefficient has a hand-computable value, got {g}");
     assert!((t - 0.9091).abs() < 0.001, "top-10 share should be 900/990, got {t}");
 }
 
 /// A pool where everybody was seen equally often has no concentration, whatever its size.
 #[test]
 fn a_flat_pool_reads_as_zero() {
-    let v = vec![7.0; 12];
-    assert!(concentration::gini(&v).abs() < 1e-9);
-    assert!((concentration::top_share(&v, TOP_K) - 1.0).abs() < 1e-9, "with 12 members fewer than top-10 is all of it");
+    let flat = vec![7.0; 12];
+    assert!(concentration::gini(&flat).abs() < 1e-9);
+    assert!(
+        (concentration::top_share(&flat, TOP_K) - 10.0 / 12.0).abs() < 1e-9,
+        "ten of twelve equal members hold ten twelfths"
+    );
+    let few = vec![7.0; 5];
+    assert!((concentration::top_share(&few, TOP_K) - 1.0).abs() < 1e-9, "a pool smaller than k is all of it");
 }
 
 /// An empty surface is not a concentration of zero — there is nothing to measure, and reporting 0.0 would
@@ -48,7 +54,9 @@ async fn two_weeks_produce_two_rows_and_the_week_is_idempotent(pool: PgPool) {
     .await
     .expect("a real member row");
     for _ in 0..4 {
-        sqlx::query("INSERT INTO source_hits (user_id, surface) VALUES ($1, 'home')")
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, surface, session_hash) VALUES ($1, 'home', 'week-test')",
+        )
             .bind(id.0)
             .execute(&pool)
             .await
