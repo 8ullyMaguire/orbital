@@ -14,13 +14,12 @@
   <p><b>Top</b> is cumulative distinct visitors, all time. A monument, no decay.</p>
   <p><b>Trending</b> is distinct visitors over the last seven days, normalised against the busiest member of that vertical, with a small logarithmic boost for new accounts and a trust multiplier (0.5× at trust level 0, up to 1.1× at 3). If nobody in a vertical has traffic this week, the tab is hidden rather than filled with whoever joined last.</p>
   <p><b>New</b> is chronological. Join early and you are visible immediately.</p>
-  <p><b>Curated</b> is hand-picked and manually ordered. It is the editorial layer, clearly separate from the measured one.</p>
 
   <h2>What counts as a visitor</h2>
   <p>Each outbound click records the vertical you were looking at, the slot you clicked, and a salted hash of a first-party cookie. No IP addresses, no user agents, no third-party scripts, no cross-site tracking. Distinct sessions are what the leaderboards count, so a hundred clicks from one browser count once. Raw click events are deleted after 180 days.</p>
 
   <h2>Trust levels</h2>
-  <p>New accounts are trust level 0 and are dampened in Trending. Level 1 is earned automatically after a few days with real links and real visitors. Levels 2 and 3 are granted by the curator. Adult listings require level 1.</p>
+  <p>New accounts are trust level 0 and are dampened in Trending. Level 1 is earned automatically after a few days with real links and real visitors. Levels 2 and 3 are granted by the instance, after links and visitors make the case. Adult listings require level 1.</p>
 
   <h2>The other half of the loop</h2>
   <p>Profiles link out with a source-tagged URL, and they link back to their Bluesky account when it is verified. The sidebar on a profile suggests people who share your tags. The footer walks the webring: previous and next within the vertical, previous and next across everybody.</p>

@@ -11,7 +11,7 @@
   {% else %}
   <h1 class="h-sm">Report a profile</h1>
   {% if !error.is_empty() %}<p class="errline">{{ error }}</p>{% endif %}
-  <p class="muted">Reports are looked at by the curator of the vertical the profile is in. Reasons that matter: ranking manipulation, impersonation, a link that goes somewhere other than it says, illegal content.</p>
+  <p class="muted">Reports are read by a moderator for the vertical the profile is in. Reasons that matter: ranking manipulation, impersonation, a link that goes somewhere other than it says, illegal content.</p>
   <form method="post" action="/report" class="form">
     <label>Profile handle
       <input name="handle" value="{{ handle }}" placeholder="handle" required>
