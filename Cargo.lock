@@ -1387,6 +1387,7 @@ dependencies = [
  "hex",
  "http-body-util",
  "polaris-candidates",
+ "polaris-gravity",
  "polaris-taste-source",
  "rand 0.8.8",
  "reqwest",
@@ -1501,6 +1502,10 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "polaris-candidates"
+version = "0.1.0"
+
+[[package]]
+name = "polaris-gravity"
 version = "0.1.0"
 
 [[package]]

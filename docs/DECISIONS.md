@@ -892,3 +892,41 @@ the process naming the field and the source rather than being clamped into servi
 line per source so an empty profile always has an explanation. The profile is not wired into ordering yet:
 that waits for the eval (roadmap step 2, `polaris-eval`) and the per-surface policy (step 4), so no ordering
 changed in this step — the suite's 105 tests include the old ordering assertions unchanged.
+
+## D36 — The dial is the reader's, the prior is not, and the two must not share a word
+
+**Context.** SPEC §1e has always said the taste term is capped per surface and that a reader may narrow it,
+and the estate extracted that rule as `polaris-gravity` (D31, `polaris-estate-programme` §3C.4). Orbital had
+no implementation and no storage. The trap is the one the estate already recorded for kindred: a reader-facing
+dial wired into an operator prior re-exposes, one legitimate feature at a time, exactly what D27 removed.
+
+**Decision.** Orbital adopts `polaris-gravity` as the **reader's** control over **their own** lens, and the
+instance's prior stays untouched by it.
+
+- Four declared ceilings, each equal to the share the code already applied (`home` 0.40, `vertical` 0.40,
+  `entity` 0.25, `ring` 0.60). A reader with no stored value gets `1.0` of that share, so this step changes
+  **no ordering**. Changing a ceiling is a ranking change and needs an eval (roadmap step 2, `polaris-eval`).
+- The stored number is a share of the ceiling; the ranker multiplies its own constant by `effective/ceiling`.
+  Normalising at the boundary is what makes "no choice" byte-identical to yesterday.
+- `visitor_profiles.gravity` is `double precision`. A first draft used `real`, and the test caught that 0.4
+  round-trips through float4 as 0.4000000059604645 — a stored choice that does not compare equal to itself.
+- The markup field is **`lens`**. The existing silence guard fails on any page containing the estate's word
+  for the pull, and it failed on the first run of this step — correctly: a form field name is served.
+
+**Rejected alternatives.**
+
+- *Expose the dial as "taste gravity" on the page.* It is the clearest name for us and the most revealing one
+  for a reader: it says the site has a gravity well before the reader has any reason to know.
+- *Store the dial in a cookie.* A client value can be forged upward, and the only defence is the clamp — the
+  same defence that already exists for free with a row. A row also survives a browser change.
+- *Let the dial apply to the instance prior's sources.* That is the dial becoming an announcement: a reader
+  who narrows the pull and sees the ordering change has learned the pull exists and roughly how much of it
+  was the operator's.
+- *Clamp an out-of-range request instead of refusing it.* A reader who asks for 100% meant 100%; serving the
+  ceiling answers a different question, silently. `polaris-gravity` refuses, and the refusal names the number
+  the surface allows.
+
+**Consequences.** The dial is observable end to end: a slider in the tuner, a row per visitor, a refusal that
+names the ceiling, and clamping proven live by lowering the ceiling between two requests and restoring it —
+the same row reads 25, then 10, then 25 again. Roadmap step 4 replaces these ceilings per surface with real
+numbers, and step 2 exists so those numbers are chosen against a measurement rather than a preference.

@@ -274,6 +274,34 @@ crate's own explanation. The profile is folded at boot and read on demand; it is
 `/api/v1/taste`, no field, and no sentence (D27). `orbital doctor` is its only home, and `docs/` is the only
 place it is described.
 
+## 2e. The reader's dial (`polaris-gravity`, D36)
+
+The instance's taste is not the only pull. A reader may say **how much of their own lens to apply** — and
+that control is theirs, visible, and named in their words.
+
+| surface | ceiling | what applies it |
+|---|---|---|
+| home | 0.40 | `rank_top` 0.4, `rank_trending`/`rank_new` 0.3, the `for_you` shelf |
+| vertical | 0.40 | the same rankers on `/v/{slug}` |
+| entity | 0.25 | declared; no lens term on the profile sidebar yet (SPEC §1e's quarter-cap) |
+| ring | 0.60 | `ring_next`'s relevance term |
+
+The ceilings are the shares the rankers **already** applied, which is why the default (a reader who never
+touched the dial) is byte-identical to the ordering the site served before the dial existed: a full lens is
+a multiplication by `1.0`. Three rules come from `polaris-gravity` and are not re-implemented:
+
+1. a reader value **narrows** the ceiling and never widens it — asking for more is refused, naming the
+   number the surface allows, not clamped;
+2. an operator `locked` ceiling refuses the write with its own reason;
+3. a stored value is **clamped on read**, so lowering a ceiling is retroactive and the page never claims
+   the reader chose the clamped number.
+
+Storage is `visitor_profiles.gravity` (`double precision`; `NULL` = no choice, `0.0` = no lens at all, and
+the two are different answers). The form field is `lens`, never the estate's private word for the pull: the
+markup a reader receives must not name the mechanism (D27), and the test that guards the home page fails on
+that word. A dial of 0 leaves a page ordered by clicks, velocity and recency — the reader cannot tell from
+it whether the instance has a taste at all.
+
 Context vertical: the vertical page being viewed, else the profile's primary.
 
 **Ring** — per vertical and global, ordered by taste-similarity to the hub owner
