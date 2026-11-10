@@ -74,8 +74,9 @@ fn raw_reproduces_the_old_order_over_two_hundred_seeds() {
             .iter()
             .map(|m| {
                 let clicks = m.clicks as f64 / max;
+                // `relevance` normalises by the summed weight, so one tag at weight 0.3 is a full 1.0.
                 let rel = if m.tags.iter().any(|t| t == "x") { 1.0 } else { 0.0 };
-                (0.6 * clicks + 0.4 * 1.0 * rel * 0.3, m.handle.clone())
+                (0.6 * clicks + 0.4 * 1.0 * rel, m.handle.clone())
             })
             .collect();
         old.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
