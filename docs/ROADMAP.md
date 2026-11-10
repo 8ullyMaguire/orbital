@@ -1,6 +1,6 @@
 # Orbital — roadmap
 
-State at the time of writing: **schema v9**, **210 tests**, `orbital doctor` green, seven timers, 2 visible
+State at the time of writing: **schema v9**, **211 tests**, `orbital doctor` green, seven timers, 2 visible
 members, 19 links across 16 domains, capabilities document served and gate-checked. Last rewrite **2026-11-10** (v5): the order below is the owner's — **stack first, then
 shared recommendations, then frictionless contribution, then federation**.
 
@@ -64,7 +64,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **210** (78 unit, 69 HTTP, 8 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
+| Tests | **211** (78 unit, 69 HTTP, 8 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema **v9**, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Concentration | weekly snapshots exist: profile **gini 0.39 / top-10 100 %** over 3 members, vertical **0.30 / 100 %** over 2 — N is far too small for a trend, recorded as such |
@@ -303,7 +303,7 @@ step is not done because it merged; it is done because its gate ran against the 
   a vertical with nobody in it is no longer offered by the front page or the nav (its page still answers 200).
   **Gate**: cleanup exact and idempotent — 2 members and 2 links removed in the test, second run `(0, 0)`, a real
   member's link left alone; front page shows `/v/dev` and not `/v/gaming`, has no "still growing" line, `/v/gaming` is
-  still 200; live `links` 24 → 19, `doctor` `PASS fixtures — none`. 210 tests. D53 records the parking itself.
+  still 200; live `links` 24 → 19, `doctor` `PASS fixtures — none`. 211 tests (`cargo test`, 16 binaries). D53 records the parking itself.
 - **2026-11-10** `bc94645`…`5fc8000` — **step 1, migration 0009 (the ledger's "0006")**: the entity substrate —
   `entities`, `categories`, `entity_tags`, `entity_edges`, `entity_people`, `reviews`, `review_votes`,
   `entity_edits`, `entity_scores`, `ballots`, `import_runs`; `links.entity_id`; nullable `users.password_hash` and a
