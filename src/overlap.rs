@@ -97,7 +97,10 @@ impl Overlap {
         if na <= 0.0 || nb <= 0.0 {
             return None;
         }
-        Some((dot / (na.sqrt() * nb.sqrt())).clamp(0.0, 1.0))
+        // Not clamped: the old formula was not, and a self-overlap of three tags is `1.0000000000000002` —
+        // one ulp above one, which no clamp should be allowed to hide while the claim is "the same arithmetic".
+        // The `[0,1]` bound belongs at the signal seam, where the estate's contract asks for it.
+        Some(dot / (na.sqrt() * nb.sqrt()))
     }
 
     /// The same, with the rankers' reading of absence: no opinion contributes nothing.
