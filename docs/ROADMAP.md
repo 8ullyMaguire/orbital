@@ -319,7 +319,7 @@ never cost reachability, and no damped score may exceed its raw score.
 Shipped steps move here, newest last, with the commit and the one line of gate output that proved them. A
 step is not done because it merged; it is done because its gate ran against the live host.
 
-- **2026-11-10** `53bf9c2`…`da085fb` — **step 1, attention weighting**: a click is worth what a declaration says. `raw` reads
+- **2026-11-10** `e37cfa1`…`da085fb` — **step 1, attention weighting**: a click is worth what a declaration says. `raw` reads
   the raw count (`clicks / max` — the arithmetic of every version before this one), `damped` reads the
   corrected column: one hit per session (a fan looking ten times is one person), each weighted `1 + ln p` by
   the slot it was seen in, log-normalised, then compressed by `alpha` (default 0.50). `ATTENTION_FILE`
