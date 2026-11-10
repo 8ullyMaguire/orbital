@@ -258,8 +258,11 @@ pub async fn vertical(
         .clone()
         .unwrap_or_else(|| "top".to_string())
         .to_lowercase();
+    // The whitelist is the tab list, and it has to name every tab the page renders — a tab missing here
+    // is a tab whose URL silently serves Top, which is how a "monument" link would quietly show the
+    // recent list while its own label claimed the record.
     let tab = match tab.as_str() {
-        "trending" | "new" | "curated" => tab,
+        "trending" | "new" | "curated" | "monument" => tab,
         _ => "top".to_string(),
     };
     let active_tag = q.tag.clone().unwrap_or_default();
