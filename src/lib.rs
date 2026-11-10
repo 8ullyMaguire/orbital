@@ -16,6 +16,7 @@ pub mod ranking;
 pub mod render;
 pub mod routes;
 pub mod seed;
+pub mod concentration;
 pub mod dial;
 pub mod eval;
 pub mod shelf;

@@ -135,6 +135,24 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         Err(e) => say(false, "taste profile", format!("{e}")),
     }
 
+    // 8. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
+    //    favours, which is not a sentence a page may carry.
+    match crate::concentration::latest(pool).await {
+        Ok(rows) if rows.is_empty() => say(
+            true,
+            "concentration",
+            "no snapshot yet; run `orbital snapshot` after the week's clicks".into(),
+        ),
+        Ok(rows) => {
+            for row in &rows {
+                println!("     {:<22} {}", "", row.sentence());
+            }
+            say(true, "concentration", format!("{} surface(s) measured", rows.len()));
+        }
+        Err(e) => say(false, "concentration", format!("{e}")),
+    }
+
     println!();
     println!("{failed} failure(s)");
     Ok(failed)
@@ -182,7 +200,7 @@ fn newest_file(dir: &Path, ext: &str) -> Option<(PathBuf, f64)> {
 ///
 /// "You moved 12 → 9" needs yesterday, and yesterday cannot be reconstructed later: clicks and
 /// visitors move underneath. A snapshot is cheap and unrepeatable.
-pub async fn snapshot(pool: &PgPool) -> Result<usize> {
+pub async fn snapshot(pool: &PgPool, as_of: chrono::DateTime<Utc>) -> Result<usize> {
     let verticals: Vec<(String,)> = sqlx::query_as("SELECT slug FROM verticals ORDER BY sort, slug")
         .fetch_all(pool)
         .await?;
@@ -206,6 +224,10 @@ pub async fn snapshot(pool: &PgPool) -> Result<usize> {
         }
     }
     println!("snapshotted {written} ranks across {} verticals", verticals.len());
+    // The same week's concentration, keyed by the ISO week so a re-run corrects the row.
+    for row in crate::concentration::record(pool, as_of).await? {
+        println!("  {}", row.sentence());
+    }
     Ok(written)
 }
 

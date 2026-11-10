@@ -53,7 +53,12 @@ enum Cmd {
         file: std::path::PathBuf,
     },
     /// Record today's rank for every member in every vertical.
-    Snapshot,
+    Snapshot {
+        /// The day to file the snapshot under. Defaults to today; a date in the past is how a series is
+        /// backfilled without editing rows by hand.
+        #[arg(long)]
+        as_of: Option<String>,
+    },
     /// Apply reviewed tag aliases to existing rows.
     Retag {
         #[arg(long)]
@@ -195,9 +200,17 @@ async fn main() -> anyhow::Result<()> {
             let pool = db::connect(&cfg).await?;
             orbital::ops::import_links(&pool, &handle, &file, dry_run).await?;
         }
-        Cmd::Snapshot => {
+        Cmd::Snapshot { as_of } => {
             let pool = db::connect(&cfg).await?;
-            orbital::ops::snapshot(&pool).await?;
+            let when = match as_of {
+                Some(day) => chrono::NaiveDate::parse_from_str(&day, "%Y-%m-%d")
+                    .map_err(|e| anyhow::anyhow!("--as-of {day}: {e}"))?
+                    .and_hms_opt(12, 0, 0)
+                    .map(|naive| chrono::DateTime::from_naive_utc_and_offset(naive, chrono::Utc))
+                    .ok_or_else(|| anyhow::anyhow!("--as-of {day}: not a valid day"))?,
+                None => chrono::Utc::now(),
+            };
+            orbital::ops::snapshot(&pool, when).await?;
         }
         Cmd::Retag { dry_run } => {
             let pool = db::connect(&cfg).await?;

@@ -1692,3 +1692,14 @@ async fn the_dial_is_stored_inside_the_ceiling_and_refused_above_it(pool: PgPool
         refused.body
     );
 }
+
+/// The concentration numbers are an operator's instrument, not a public statistic: a page that says how
+/// unevenly attention falls is a page about whose work the site favours. Nothing serves them (D34/D27).
+#[sqlx::test]
+async fn the_concentration_numbers_are_not_served(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    for path in ["/api/v1/concentration", "/api/v1/stats", "/stats"] {
+        let res = app.clone().oneshot(get(path)).await.expect("router responded");
+        assert_eq!(res.status(), StatusCode::NOT_FOUND, "{path} must not exist");
+    }
+}
