@@ -2568,12 +2568,19 @@ async fn no_surface_publishes_a_per_member_score(pool: PgPool) {
 
     let home = call(&app, get("/")).await;
     assert_eq!(home.status, StatusCode::OK);
-    let mut rest = home.body.as_str();
+    // Card blocks, delimited by the tag that opens each one — from the `<` before `class="mcard"` to the `<`
+    // before the next, so an attribute added ahead of the class is inside the block and gets judged.
+    let body = home.body.as_str();
+    let marks: Vec<usize> = body.match_indices("class=\"mcard\"").map(|(i, _)| i).collect();
+    assert!(!marks.is_empty(), "there were cards to judge");
     let mut cards = 0;
-    while let Some(at) = rest.find("class=\"mcard\"") {
-        let after = &rest[at..];
-        let next = after[1..].find("class=\"mcard").map(|i| i + 1).unwrap_or(after.len());
-        let card = &after[..next];
+    for (n, at) in marks.iter().enumerate() {
+        let start = body[..*at].rfind('<').unwrap_or(*at);
+        let end = marks
+            .get(n + 1)
+            .and_then(|next| body[..*next].rfind('<'))
+            .unwrap_or(body.len());
+        let card = &body[start..end];
         cards += 1;
         assert!(
             !card.contains("data-score")
@@ -2584,10 +2591,12 @@ async fn no_surface_publishes_a_per_member_score(pool: PgPool) {
         );
         let decimals: Vec<&str> = card
             .split(|c: char| !(c.is_ascii_digit() || c == '.'))
-            .filter(|t| t.len() > 1 && t.starts_with(|c: char| c.is_ascii_digit()) && t.contains('.') && t.matches('.').count() == 1)
+            .filter(|t| t.matches('.').count() == 1 && t.starts_with(|c: char| c.is_ascii_digit()) && t.ends_with(|c: char| c.is_ascii_digit()) && t.len() > 2)
             .collect();
-        assert!(decimals.is_empty(), "a card publishes a decimal number ({decimals:?}): {card}");
-        rest = &after[1..];
+        assert!(
+            decimals.is_empty(),
+            "a card publishes a decimal number ({decimals:?}): {card}"
+        );
     }
     assert!(cards > 0, "there were cards to judge");
 
