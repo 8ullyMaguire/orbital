@@ -91,6 +91,7 @@ pub fn build(
     lens: crate::dial::Lens,
     attention: crate::attention::Config,
     caps: &crate::exposure::Config,
+    ceiling: &crate::ceiling::Config,
 ) -> Vec<Shelf> {
     // `lens` is the reader's dial as a fraction of this surface's declared ceiling: 1.0 is the
     // ordering the site has always served, 0.0 is no lens at all.
@@ -147,6 +148,15 @@ pub fn build(
             polaris_candidates::jaccard(a, b)
         });
         let chosen = crate::exposure::enforce(&order, decl.per_shelf, &mut used, &exposure, caps);
+        // The last slots rotate daily (D45): the top of the shelf is the ranker's judgement and stays put,
+        // the tail is refilled from the same candidate order by a hash of (date, member).
+        let chosen = crate::ceiling::rotate(
+            &chosen,
+            &order,
+            &member_ids(members),
+            crate::ceiling::day_key(crate::ceiling::day_of(now)),
+            ceiling,
+        );
         shelves.push(Shelf {
             key: "for_you",
             title: "For you",
@@ -166,6 +176,15 @@ pub fn build(
                 polaris_candidates::jaccard(a, b)
             });
             let chosen = crate::exposure::enforce(&order, decl.per_shelf, &mut used, &exposure, caps);
+        // The last slots rotate daily (D45): the top of the shelf is the ranker's judgement and stays put,
+        // the tail is refilled from the same candidate order by a hash of (date, member).
+        let chosen = crate::ceiling::rotate(
+            &chosen,
+            &order,
+            &member_ids(members),
+            crate::ceiling::day_key(crate::ceiling::day_of(now)),
+            ceiling,
+        );
             why_lines(members, weights, now, chosen)
         },
     });
@@ -181,11 +200,26 @@ pub fn build(
                 polaris_candidates::jaccard(a, b)
             });
             let chosen = crate::exposure::enforce(&order, decl.per_shelf, &mut used, &exposure, caps);
+        // The last slots rotate daily (D45): the top of the shelf is the ranker's judgement and stays put,
+        // the tail is refilled from the same candidate order by a hash of (date, member).
+        let chosen = crate::ceiling::rotate(
+            &chosen,
+            &order,
+            &member_ids(members),
+            crate::ceiling::day_key(crate::ceiling::day_of(now)),
+            ceiling,
+        );
             why_lines(members, weights, now, chosen)
         },
     });
 
     shelves
+}
+
+/// The pool's ids, in pool order: the rotation hashes members, not slots, so the same member keeps the same
+/// daily draw whichever shelf it lands on.
+fn member_ids(members: &[MemberStat]) -> Vec<uuid::Uuid> {
+    members.iter().map(|m| m.id).collect()
 }
 
 /// A member's position in the pool, so a ranker's output can be turned back into indices.
@@ -324,7 +358,7 @@ mod tests {
             member("fresh", 2, 4, 2, &["dev"]),
             member("steady", 10, 12, 40, &["music"]),
         ];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::off());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::off(), &crate::ceiling::Config::off());
 
         let rising = shelves.iter().find(|s| s.key == "rising").unwrap();
         let expected_rising: Vec<String> = ranking::rank_trending(members.clone(), Utc::now(), &[], 1.0)
@@ -354,7 +388,7 @@ mod tests {
             member("odd", 1, 1, 30, &["music"]),
         ];
         let weights = vec![("rust".to_string(), 1.0)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default(), &crate::ceiling::Config::off());
         let for_you = shelves.iter().find(|s| s.key == "for_you").unwrap();
         let order = handles(&members, for_you);
         assert_eq!(order.first().map(String::as_str), Some("a"), "the top stays the top: {order:?}");
@@ -371,7 +405,7 @@ mod tests {
             member("fresh", 0, 0, 1, &["dev"]),
         ];
         let weights = vec![("rust".to_string(), 0.9)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default(), &crate::ceiling::Config::off());
         let forbidden = ["taste", "prior", "gravity", "curated", "editor", "operator", "orbit"];
         for shelf in &shelves {
             for item in &shelf.items {
@@ -415,7 +449,7 @@ mod probe {
             recent: clicks as f64,
         };
         let members = vec![mk("a", 76, 5), mk("b", 110, 5)];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::default(), &crate::exposure::Config::default());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::default(), &crate::exposure::Config::default(), &crate::ceiling::Config::off());
         for s in &shelves {
             let hs: Vec<&str> = s.items.iter().map(|r| members[r.index].handle.as_str()).collect();
             println!("{} -> {:?}", s.key, hs);

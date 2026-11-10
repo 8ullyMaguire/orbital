@@ -90,6 +90,8 @@ impl Layout {
 
 #[derive(Clone)]
 pub struct MemberCard {
+    /// The member's id, for the things a page does with what it showed (impressions, D45). Not rendered.
+    pub member_id: Option<uuid::Uuid>,
     pub url: String,
     pub handle: String,
     pub display_name: String,
@@ -180,6 +182,7 @@ pub fn member_card(
         ),
     };
     MemberCard {
+        member_id: Some(m.id),
         url,
         handle: m.handle.clone(),
         display_name: m.display_name.clone(),

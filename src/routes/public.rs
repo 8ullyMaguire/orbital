@@ -140,10 +140,22 @@ pub async fn home(
         });
     }
     let all = store::all_members(&st.pool, true).await?;
-    let all: Vec<MemberStat> = all
-        .into_iter()
-        .filter(|m| visible(m))
+    let mut all: Vec<MemberStat> = all.into_iter().filter(|m| visible(m)).collect();
+
+    // The ceiling (D45): a member holding more than its declared share of this surface's 24-hour
+    // impressions is not shown here until the window moves. Applied to the pool *before* composition so no
+    // ranker has to know about it — and skipped entirely if it would empty the page, because the rule is a
+    // way of sharing the surface, not of blanking it.
+    let window = store::impressions_window(&st.pool, "home", 24).await?;
+    let total: i64 = window.values().sum();
+    let under: Vec<MemberStat> = all
+        .iter()
+        .filter(|m| !crate::ceiling::over_ceiling(window.get(&m.id).copied().unwrap_or(0), total, &st.cfg.ceiling))
+        .cloned()
         .collect();
+    if !under.is_empty() && under.len() < all.len() {
+        all = under;
+    }
     // Three shelves, composed by the estate's candidate arithmetic (`src/shelf.rs`). The ordered two run
     // at lambda 1.0, so their order is still `rank_trending`/`rank_new`'s order exactly; `For you`
     // spends a little relevance on diversity, which is the only shelf whose order is new.
@@ -156,6 +168,7 @@ pub async fn home(
             lens,
             attn,
             &st.cfg.exposure,
+            &st.cfg.ceiling,
         )
             .into_iter()
             .map(|s| {
@@ -182,6 +195,16 @@ pub async fn home(
                 }
             })
             .collect();
+    // What this render put in front of someone, recorded once per member per hour. Recorded after the
+    // choice, never before: a page that counted itself before choosing would inflate its own ceiling.
+    let shown: Vec<uuid::Uuid> = shelves
+        .iter()
+        .flat_map(|s| s.cards.iter().filter_map(|c| c.member_id))
+        .collect();
+    if let Err(e) = store::record_impressions(&st.pool, "home", &shown).await {
+        tracing::warn!("impressions not recorded: {e}");
+    }
+
     let (total_members, total_clicks) = store::totals(&st.pool, true).await?;
     let quick = cards
         .iter()
@@ -277,6 +300,20 @@ pub async fn vertical(
             .collect()
     };
 
+    // The ceiling and the rotation, on this vertical's own surface (D45).
+    let surface = format!("v:{}", v.slug);
+    let window = store::impressions_window(&st.pool, &surface, 24).await?;
+    let surface_total: i64 = window.values().sum();
+    let mut filtered = filtered;
+    let keep: Vec<MemberStat> = filtered
+        .iter()
+        .filter(|m| !crate::ceiling::over_ceiling(window.get(&m.id).copied().unwrap_or(0), surface_total, &st.cfg.ceiling))
+        .cloned()
+        .collect();
+    if !keep.is_empty() && keep.len() < filtered.len() {
+        filtered = keep;
+    }
+
     let ranked: Vec<MemberStat> = match tab.as_str() {
         "trending" => ranking::rank_trending(filtered.clone(), now, &weights, lens.ordered),
         "new" => ranking::rank_new(filtered.clone(), now, &weights, lens.ordered),
@@ -291,6 +328,24 @@ pub async fn vertical(
         "monument" => StatMode::Monument,
         _ => StatMode::Top,
     };
+    // The tail rotates daily, and what the page showed is recorded after the choice.
+    let ranked: Vec<MemberStat> = {
+        let order: Vec<usize> = (0..ranked.len()).collect();
+        let ids: Vec<uuid::Uuid> = ranked.iter().map(|m| m.id).collect();
+        let shown = crate::ceiling::rotate(
+            &order,
+            &order,
+            &ids,
+            crate::ceiling::day_key(crate::ceiling::day_of(now)),
+            &st.cfg.ceiling,
+        );
+        shown.into_iter().map(|i| ranked[i].clone()).collect()
+    };
+    let shown_ids: Vec<uuid::Uuid> = ranked.iter().take(100).map(|m| m.id).collect();
+    if let Err(e) = store::record_impressions(&st.pool, &surface, &shown_ids).await {
+        tracing::warn!("impressions not recorded for {surface}: {e}");
+    }
+
     let rows: Vec<MemberCard> = ranked
         .iter()
         .take(100)
