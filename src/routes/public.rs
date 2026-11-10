@@ -104,7 +104,7 @@ pub async fn home(
         viewer_weights(&st, &vid, user.as_ref()).await
     };
     let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Home).await;
-    let attn = st.cfg.attention;
+    let attn = st.cfg.attention.clone();
     let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
     let mut other: Vec<SmallVertical> = Vec::new();
@@ -264,7 +264,7 @@ pub async fn vertical(
         viewer_weights(&st, &vid, user.as_ref()).await
     };
     let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Vertical).await;
-    let attn = st.cfg.attention;
+    let attn = st.cfg.attention.clone();
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
@@ -927,7 +927,7 @@ pub async fn embed(
         // An embed serves the same bytes to every page that includes it, so it ranks under the
         // declaration's own policy and never a reader's dial.
         _ => (
-            ranking::rank_top(members, &[], 1.0, st.cfg.attention, ranking::Window::Recent),
+            ranking::rank_top(members, &[], 1.0, st.cfg.attention.clone(), ranking::Window::Recent),
             StatMode::Top,
         ),
     };
