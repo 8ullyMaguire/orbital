@@ -1562,24 +1562,23 @@ async fn the_home_page_carries_three_shelves_and_says_why_each_card_is_there(poo
     // Before this change the page carried one "Trending this week" list and an untruncated "New" list:
     // `data-shelf` appeared zero times on the live home page (measured 2026-11-10).
     let app = app(pool.clone()).await;
-    // Nine members, because since D43 a page view shows each member once: three shelves of up to six
-    // slots cannot be filled from three people, and a fixture that pretended otherwise would be
-    // asserting the very duplication the cap removes.
-    for (handle, vertical) in [
-        ("alpha", "dev"), ("beta", "dev"), ("gamma", "music"),
-        ("delta", "dev"), ("epsilon", "music"), ("zeta", "dev"),
-        ("eta", "music"), ("theta", "dev"), ("iota", "music"),
-    ] {
+    // Fifteen members, because since D43 a page view shows each member once and three shelves of six need
+    // eighteen distinct people. A fixture of three would assert the very duplication the cap removes; a
+    // fixture of fifteen is the smallest pool where all three shelves can carry a card.
+    let roster = [
+        ("alpha", "dev"), ("beta", "dev"), ("gamma", "music"), ("delta", "dev"),
+        ("epsilon", "music"), ("zeta", "dev"), ("eta", "music"), ("theta", "dev"),
+        ("iota", "music"), ("kappa", "dev"), ("lambda", "music"), ("mu", "dev"),
+        ("nu", "music"), ("xi", "dev"), ("omicron", "music"),
+    ];
+    for (handle, vertical) in roster {
         register(&app, handle, vertical).await;
     }
     // `Rising` is `rank_trending`, which drops every member with zero visitors in the last seven days
     // (`trending_score` returns 0.0 when `max_7d` is 0). So the fixture has to produce the thing the
     // shelf is a claim about: real `source_hits` rows. A test that skipped this would be asserting an
     // empty shelf renders, which is not what the step says.
-    for (i, handle) in ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota"]
-        .iter()
-        .enumerate()
-    {
+    for (i, handle) in roster.iter().map(|(h, _)| h).enumerate() {
         sqlx::query(
             "INSERT INTO source_hits (user_id, session_hash, created_at)
              SELECT id, $2, now() - make_interval(hours => $3::int) FROM users WHERE handle = $1",
