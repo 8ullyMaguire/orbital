@@ -620,7 +620,7 @@ mod tests {
         muso.verticals = vec!["music".into()];
         let weights = vec![("v:music".to_string(), 1.0)];
 
-        assert_eq!(relevance(&dev, &weights, 1.0), 0.0);
+        assert_eq!(relevance(&dev, &weights), 0.0);
         assert_eq!(relevance(&muso, &weights), 1.0);
         let order = rank_top(vec![dev, muso], &weights, 1.0);
         assert_eq!(order[0].handle, "muso");
