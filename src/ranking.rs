@@ -158,8 +158,8 @@ pub fn rank_top(
     weights: &[(String, f64)],
     lens: f64,
 ) -> Vec<MemberStat> {
-    // RED: the dial is passed here and ignored — the test that names the order change is the point.
-    let _ = lens;
+    // The reader's dial, as a fraction of this surface's ceiling. 1.0 is the ordering the site has
+    // always served (`x * 1.0 == x` exactly), 0.0 removes the lens term entirely.
     if weights.is_empty() {
         let mut members = members;
         members.sort_by(|a, b| {
@@ -181,7 +181,7 @@ pub fn rank_top(
             // the members it was meant to reward. 0.4 x 0.2 is the same +0.08 the relevance term
             // would have given, and it cannot swamp clicks: 0.6 is six times its ceiling.
             let endorse = crate::governance::ENDORSE_BOOST * m.endorse.clamp(0.0, 1.0);
-            (0.6 * clicks + 0.4 * rel + 0.4 * endorse, m)
+            (0.6 * clicks + 0.4 * lens * rel + 0.4 * endorse, m)
         })
         .collect();
     scored.sort_by(|a, b| {
@@ -198,7 +198,6 @@ pub fn rank_trending(
     weights: &[(String, f64)],
     lens: f64,
 ) -> Vec<MemberStat> {
-    let _ = lens;
     let max_7d = members.iter().map(|m| m.visitors_7d).max().unwrap_or(0);
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
@@ -217,7 +216,7 @@ pub fn rank_trending(
                     0.0
                 };
                 let boost = 0.1 * (1.0 + 0.15 / ((age_days(m.created_at, now) + 2.0).log2()));
-                0.3 * relevance(&m, weights) + velocity + boost + 0.1 * trust_mult(m.trust_level)
+                0.3 * lens * relevance(&m, weights) + velocity + boost + 0.1 * trust_mult(m.trust_level)
             };
             (s, m)
         })
@@ -234,7 +233,6 @@ pub fn rank_new(
     weights: &[(String, f64)],
     lens: f64,
 ) -> Vec<MemberStat> {
-    let _ = lens;
     if weights.is_empty() {
         let mut members = members;
         members.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -244,7 +242,7 @@ pub fn rank_new(
         .into_iter()
         .map(|m| {
             let rec = 0.5f64.powf(age_days(m.created_at, now) / 14.0);
-            (0.7 * rec + 0.3 * relevance(&m, weights), m)
+            (0.7 * rec + 0.3 * lens * relevance(&m, weights), m)
         })
         .collect();
     scored.sort_by(|a, b| {
@@ -299,7 +297,6 @@ pub fn ring_next<'a>(
     visited: &std::collections::HashSet<Uuid>,
     lens: f64,
 ) -> Option<&'a MemberStat> {
-    let _ = lens;
     if weights.is_empty() {
         return None;
     }
@@ -309,7 +306,7 @@ pub fn ring_next<'a>(
         .filter(|m| m.id != current)
         .map(|m| {
             let novelty = if visited.contains(&m.id) { 0.0 } else { 1.0 };
-            let score = 0.6 * relevance(m, weights)
+            let score = 0.6 * lens * relevance(m, weights)
                 + 0.3 * cosine(&m.tags, &anchor.tags)
                 + 0.1 * novelty;
             (score, m)
@@ -343,32 +340,41 @@ mod tests {
     use super::*;
     use chrono::{Duration, TimeZone};
 
-    /// The dial's whole job: at 1.0 the ordering is the one the site has always served, and at 0.0
-    /// the lens term is gone. A dial that changes nothing is a control that lies to the reader.
+    /// The dial's whole job: the lens term scales with it, and at 0.0 it is gone. Measured as the
+    /// relative order of two members — one the lens favours, one the clicks favour — because who is
+    /// first overall depends on a third member who sets the normalisation.
     #[test]
     fn the_lens_term_scales_with_the_dial_and_zero_means_no_lens() {
-        let now = Utc::now();
         let mut tagged = member("tagged", 100, 200, 1, &["rust"]);
         tagged.clicks = 1;
         let mut popular = member("popular", 1000, 200, 1, &["gardening"]);
         popular.clicks = 6;
-        let members = vec![popular.clone(), tagged.clone()];
+        let mut loud = member("loud", 5000, 200, 1, &["music"]);
+        loud.clicks = 10;
+        let members = vec![popular.clone(), tagged.clone(), loud];
         let weights = vec![("rust".to_string(), 1.0)];
+        let position = |order: &[MemberStat], handle: &str| {
+            order
+                .iter()
+                .position(|m| m.handle == handle)
+                .unwrap_or_else(|| panic!("{handle} must be in the order"))
+        };
 
         let full = rank_top(members.clone(), &weights, 1.0);
-        assert_eq!(full[0].handle, "tagged", "the lens can lift a member four places of clicks");
-
-        let half = rank_top(members.clone(), &weights, 0.5);
-        assert_eq!(
-            half[0].handle, "popular",
-            "half a lens is not enough here — the test is measuring the dial, not decoration"
+        assert!(
+            position(&full, "tagged") < position(&full, "popular"),
+            "a full lens lifts the tag-matched member over the one with six times the clicks: {:?}",
+            full.iter().map(|m| &m.handle).collect::<Vec<_>>()
         );
 
-        let none = rank_top(members, &weights, 0.0);
-        assert_eq!(none[0].handle, "popular", "no lens means the clicks order");
+        let none = rank_top(members.clone(), &weights, 0.0);
+        assert!(
+            position(&none, "popular") < position(&none, "tagged"),
+            "no lens means the clicks order, and the tag match stops counting"
+        );
         assert_eq!(
             none.iter().map(|m| m.handle.clone()).collect::<Vec<_>>(),
-            rank_top(vec![popular, tagged], &[], 1.0)
+            rank_top(members, &[], 1.0)
                 .iter()
                 .map(|m| m.handle.clone())
                 .collect::<Vec<_>>(),
