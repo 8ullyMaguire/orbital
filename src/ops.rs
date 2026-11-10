@@ -158,7 +158,7 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
     // 10. Fame, in both windows it is measured in (D42): the leader `Top` would show today, and what the
     // monument keeps. Printed together because a declaration that says "90 days" beside a page that shows a
     // lifetime number is the exact mistake this step exists to prevent.
-    let everyone = store::all_members(&db, true).await?;
+    let everyone = store::all_members(pool, true).await?;
     if let Some(lead) = everyone
         .iter()
         .max_by(|a, b| a.recent.partial_cmp(&b.recent).unwrap_or(std::cmp::Ordering::Equal))
