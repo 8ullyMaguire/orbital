@@ -319,7 +319,7 @@ mod tests {
             member("fresh", 2, 4, 2, &["dev"]),
             member("steady", 10, 12, 40, &["music"]),
         ];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw());
 
         let rising = shelves.iter().find(|s| s.key == "rising").unwrap();
         let expected_rising: Vec<String> = ranking::rank_trending(members.clone(), Utc::now(), &[], 1.0)
@@ -349,7 +349,7 @@ mod tests {
             member("odd", 1, 1, 30, &["music"]),
         ];
         let weights = vec![("rust".to_string(), 1.0)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw());
         let for_you = shelves.iter().find(|s| s.key == "for_you").unwrap();
         let order = handles(&members, for_you);
         assert_eq!(order.first().map(String::as_str), Some("a"), "the top stays the top: {order:?}");
@@ -366,7 +366,7 @@ mod tests {
             member("fresh", 0, 0, 1, &["dev"]),
         ];
         let weights = vec![("rust".to_string(), 0.9)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw());
         let forbidden = ["taste", "prior", "gravity", "curated", "editor", "operator", "orbit"];
         for shelf in &shelves {
             for item in &shelf.items {

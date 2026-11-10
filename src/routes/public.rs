@@ -869,7 +869,12 @@ pub async fn embed(
         // No weights means no lens term at all, so the dial cannot change this page's order.
         "trending" => (ranking::rank_trending(members, now, &[], 1.0), StatMode::Trending),
         "new" => (ranking::rank_new(members, now, &[], 1.0), StatMode::New),
-        _ => (ranking::rank_top(members, &[], 1.0, attn), StatMode::Top),
+        // An embed serves the same bytes to every page that includes it, so it ranks under the
+        // declaration's own policy and never a reader's dial.
+        _ => (
+            ranking::rank_top(members, &[], 1.0, st.cfg.attention),
+            StatMode::Top,
+        ),
     };
     let cards: Vec<MemberCard> = ranked
         .iter()
@@ -1152,7 +1157,7 @@ mod tests {
             visitors_7d: 0,
             clicks: 0,
             endorse: 0.0,
-        attention: clicks as f64,
+            attention: 0.0,
             tags: Vec::new(),
             verticals: verticals.iter().map(|v| v.to_string()).collect(),
         }

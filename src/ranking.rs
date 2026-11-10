@@ -444,7 +444,7 @@ mod tests {
             tags: tags.iter().map(|s| s.to_string()).collect(),
             verticals: vec!["dev".into()],
             endorse: 0.0,
-        attention: clicks as f64,
+            attention: visitors_7d as f64,
         }
     }
 
