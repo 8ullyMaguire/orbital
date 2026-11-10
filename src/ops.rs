@@ -642,5 +642,21 @@ pub async fn impressions(
             println!("  tail for {d}: {}", if names.is_empty() { "(nobody yet)".to_string() } else { names.join(" ") });
         }
     }
+    // Floors (D51). Printed with the members they match, because "declared" and "declared and applied" are
+    // different facts and only the second one changes a page.
+    let all_members = crate::store::all_members(pool, true).await?;
+    let notes = cfg.floors.report(&all_members);
+    if notes.is_empty() {
+        say(true, "floors", "none declared (FLOORS_FILE absent)".to_string());
+    } else {
+        for n in &notes {
+            say(
+                n.matched > 0,
+                "floors",
+                format!("{} {} · {}", n.name, n.weight, n.sentence(&all_members)),
+            );
+        }
+    }
+
     Ok(())
 }
