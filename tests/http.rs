@@ -2178,16 +2178,20 @@ async fn a_curation_row_changes_no_page(pool: PgPool) {
     let vertical_after = call(&app, get("/v/dev")).await.body;
     assert_eq!(home_before, home_after, "a curation row must change nothing on /");
     if vertical_before != vertical_after {
-        let at = vertical_before
-            .chars()
-            .zip(vertical_after.chars())
-            .position(|(a, b)| a != b)
-            .unwrap_or_else(|| vertical_before.len().min(vertical_after.len()));
-        let lo = at.saturating_sub(220);
+        // A line diff, because a byte offset inside an HTML page names nothing a human can read.
+        let before: Vec<&str> = vertical_before.lines().collect();
+        let after: Vec<&str> = vertical_after.lines().collect();
+        let mut report = String::new();
+        for (i, (a, b)) in before.iter().zip(after.iter()).enumerate() {
+            if a != b {
+                report = format!("line {}:\n  before: {a}\n  after:  {b}", i + 1);
+                break;
+            }
+        }
         panic!(
-            "a curation row must change nothing on a vertical page; first difference at {at}:\n--- before\n{}\n--- after\n{}",
-            &vertical_before[lo..(at + 220).min(vertical_before.len())],
-            &vertical_after[lo..(at + 220).min(vertical_after.len())]
+            "a curation row must change nothing on a vertical page ({} vs {} lines): {report}",
+            before.len(),
+            after.len()
         );
     }
 
