@@ -4,6 +4,13 @@
 > tag-weighted ordering and the personalised ring. Everything else here still applies.
 
 A themed directory of people and their links. Each member gets one profile page
+
+> **Gravity, defined across the estate (2026-11-10).** Two fields blended on every ranked surface:
+> each member link carries an **instance field** (the folded taste of declared sources) and each reader
+> a **reader field** (their own taste, decaying). A surface ranks `(1 − g(u)) · local + g(u) · instance`
+> — Orbital's per-surface `weight` is `g` and its `ceiling` is `g_max`, with `g(u)` meant to rise as a
+> function of the reader's own signals, not their wall-clock tenure. Never disclosed; aggregate only;
+> no anonymous route may rank the directory by it. Definition: `10-Projects/gravity-model.md`.
 (links, bio, taste tags), one **primary vertical** and up to two **secondaries**,
 and appears on that vertical's ranked list. Verticals are micro-communities with
 their own leaderboard, their own ring, their own feed and their own embeddable
