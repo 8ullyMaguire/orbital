@@ -20,7 +20,7 @@
 /// `folded` is deliberately **not** here: it is ordinary interface language for a panel that is closed,
 /// and a vocabulary that fires on it would be switched off within a week. The gate keeps only the words
 /// that nothing but the prior's implementation would ever say in public.
-pub const PRIOR_WORDS: [&str; 7] = [
+pub const PRIOR_WORDS: [&str; 11] = [
     "gravity",
     "damped",
     "exposure",
