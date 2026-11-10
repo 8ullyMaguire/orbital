@@ -29,18 +29,20 @@ for path in / /about /v/dev "/v/dev?tab=trending" "/search?q=rust" /api/v1/membe
   fi
 done
 
-# The exemption, exactly one field and exactly one value.
+# The exemption, exactly one field and exactly one value. The document is pretty-printed by the estate
+# renderer, so the pattern tolerates whitespace — an exemption that only matches one formatting is an
+# exemption that silently stops being checked the day somebody runs the renderer.
 caps=$(curl -s -H "User-Agent: $UA" "$BASE/api/v1/capabilities")
-if printf '%s' "$caps" | grep -q '"taste":"off"'; then
-  stray=$(printf '%s' "$caps" | sed 's/"taste":"off"//g' | grep -oiE "\b($WORDS)\b" | sort -u | paste -sd, -)
-  if [ -n "$stray" ]; then
-    say "/api/v1/capabilities" "NAMES THE PRIOR BEYOND taste:off: $stray"
-    fail=1
-  else
-    say "/api/v1/capabilities" "silent but for taste:off"
-  fi
+declared=$(printf '%s' "$caps" | grep -ciE '"taste"[[:space:]]*:[[:space:]]*"off"')
+stray=$(printf '%s' "$caps" | sed -E 's/"taste"[[:space:]]*:[[:space:]]*"off"//g' \
+        | grep -oiE "\b($WORDS)\b" | sort -u | paste -sd, -)
+if [ -n "$stray" ]; then
+  say "/api/v1/capabilities" "NAMES THE PRIOR BEYOND taste:off: $stray"
+  fail=1
+elif [ "$declared" -eq 1 ]; then
+  say "/api/v1/capabilities" "silent but for taste:off"
 else
-  say "/api/v1/capabilities" "does not declare taste at all (fine, and nothing to exempt)"
+  say "/api/v1/capabilities" "no taste field declared (nothing to exempt)"
 fi
 
 # And the one route that may use the word must answer about the caller, never about the instance.
