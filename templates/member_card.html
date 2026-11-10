@@ -4,6 +4,7 @@
     <span class="mcard-t"><b>{{ m.display_name }}</b>{% if m.is_new %}<span class="tag-new">new</span>{% endif %}</span>
     <span class="mcard-h">@{{ m.handle }}{% if m.verified %} <span class="tick" title="Bluesky verified">✓</span>{% endif %}</span>
     {% if !m.tagline.is_empty() %}<span class="mcard-d">{{ m.tagline }}</span>{% endif %}
+    {% if !m.why.is_empty() %}<span class="mcard-w">{{ m.why }}</span>{% endif %}
   </span>
   <span class="mcard-s">{{ m.stat }}</span>
 </a>

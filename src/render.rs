@@ -237,14 +237,23 @@ pub struct HomeTemplate {
     pub layout: Layout,
     pub verticals: Vec<VerticalCard>,
     pub other: Vec<SmallVertical>,
-    pub trending: Vec<MemberCard>,
-    pub new_members: Vec<MemberCard>,
+    /// The three shelves `src/shelf.rs` composes. An empty pool yields no shelves, not empty headings.
+    pub shelves: Vec<ShelfView>,
     pub picks: Vec<MemberCard>,
     pub total_members: i64,
     pub total_clicks: i64,
     pub quick: Vec<(String, String)>,
     pub q: String,
     pub tuner: crate::prefs::TunerView,
+}
+
+/// One shelf as the template receives it: a heading, a subtitle that is a claim about the arithmetic,
+/// and cards whose `why` line cites only observable facts.
+pub struct ShelfView {
+    pub key: String,
+    pub title: String,
+    pub subtitle: String,
+    pub cards: Vec<MemberCard>,
 }
 
 // ------------------------------------------------------------------ lens

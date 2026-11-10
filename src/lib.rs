@@ -16,6 +16,7 @@ pub mod ranking;
 pub mod render;
 pub mod routes;
 pub mod seed;
+pub mod shelf;
 pub mod store;
 pub mod text;
 

@@ -142,18 +142,36 @@ pub async fn home(
         .into_iter()
         .filter(|m| visible(m))
         .collect();
-    let trending: Vec<MemberCard> = ranking::rank_trending(all.clone(), now, &weights)
-        .iter()
-        .take(6)
-        .enumerate()
-        .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Trending, now))
-        .collect();
-    let new_members: Vec<MemberCard> = ranking::rank_new(all.clone(), now, &weights)
-        .iter()
-        .take(6)
-        .enumerate()
-        .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::New, now))
-        .collect();
+    // Three shelves, composed by the estate's candidate arithmetic (`src/shelf.rs`). The ordered two run
+    // at lambda 1.0, so their order is still `rank_trending`/`rank_new`'s order exactly; `For you`
+    // spends a little relevance on diversity, which is the only shelf whose order is new.
+    let shelves: Vec<crate::render::ShelfView> =
+        crate::shelf::build(&all, &weights, now, &crate::shelf::Declaration::default())
+            .into_iter()
+            .map(|s| {
+                let mode = match s.key {
+                    "rising" => StatMode::Trending,
+                    "new" => StatMode::New,
+                    _ => StatMode::Top,
+                };
+                let cards = s
+                    .items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| {
+                        let mut c = card(&all[r.index], &ctx.base, i + 1, mode, now);
+                        c.why = r.why.clone();
+                        c
+                    })
+                    .collect();
+                crate::render::ShelfView {
+                    key: s.key.to_string(),
+                    title: s.title.to_string(),
+                    subtitle: s.subtitle.to_string(),
+                    cards,
+                }
+            })
+            .collect();
     let picks: Vec<MemberCard> = store::curated_any(&st.pool, true, 6)
         .await?
         .iter()
@@ -185,8 +203,7 @@ pub async fn home(
         tuner,
         verticals: cards,
         other,
-        trending,
-        new_members,
+        shelves,
         picks,
         total_members,
         total_clicks,

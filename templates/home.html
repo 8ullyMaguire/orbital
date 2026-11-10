@@ -54,27 +54,17 @@
   </div>
 </section>
 
-{% if trending.len() > 0 %}
-<section class="wrap section">
+{% for s in shelves %}{% if s.cards.len() > 0 %}
+<section class="wrap section" data-shelf="{{ s.key }}">
   <div class="section-h">
-    <h2>Trending this week</h2>
-    <p class="muted sm">Distinct visitors in the last seven days, damped for brand-new accounts.</p>
+    <h2>{{ s.title }}</h2>
+    <p class="muted sm">{{ s.subtitle }}</p>
   </div>
   <div class="mgrid">
-    {% for m in trending %}{% include "member_card.html" %}{% endfor %}
+    {% for m in s.cards %}{% include "member_card.html" %}{% endfor %}
   </div>
 </section>
-{% endif %}
-
-<section class="wrap section">
-  <div class="section-h">
-    <h2>New to the directory</h2>
-    <p class="muted sm">Everyone who joined recently, newest first. No threshold to clear.</p>
-  </div>
-  <div class="mgrid">
-    {% for m in new_members %}{% include "member_card.html" %}{% endfor %}
-  </div>
-</section>
+{% endif %}{% endfor %}
 
 {% if picks.len() > 0 %}
 <section class="wrap section">

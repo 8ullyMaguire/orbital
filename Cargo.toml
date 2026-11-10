@@ -7,6 +7,10 @@ license = "MIT"
 
 [dependencies]
 commons-feed = { path = "../commons/crates/commons-feed" }
+# The estate's candidate generation: named sources, validated budgets, capped blends, MMR and soft
+# floors. Extracted from kindred and already run by darkhold; orbital deletes its own home-page loop
+# rather than keeping a fourth implementation of the same arithmetic (DECISIONS D31).
+polaris-candidates = { path = "../../polaris-candidates" }
 axum = { version = "0.8", features = ["macros"] }
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }

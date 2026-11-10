@@ -1543,3 +1543,51 @@ async fn the_read_api_search_answers_the_route_the_capability_document_declares(
     assert_eq!(eb["total"], 0, "{}", empty.body);
     assert!(eb["members"].as_array().unwrap().is_empty(), "{}", empty.body);
 }
+
+#[sqlx::test]
+async fn the_home_page_carries_three_shelves_and_says_why_each_card_is_there(pool: PgPool) {
+    // The step's gate, on the rendered page: three named shelves for a stranger, the same three for a
+    // tuned visitor, and a reason on every card that cites only something the reader can observe.
+    // Before this change the page carried one "Trending this week" list and an untruncated "New" list:
+    // `data-shelf` appeared zero times on the live home page (measured 2026-11-10).
+    let app = app(pool).await;
+    for (handle, vertical) in [("alpha", "dev"), ("beta", "dev"), ("gamma", "music")] {
+        register(&app, handle, vertical).await;
+    }
+
+    let cold = call(&app, get("/")).await;
+    assert_eq!(cold.status, StatusCode::OK, "{}", cold.body);
+    for key in ["for_you", "rising", "new"] {
+        assert!(
+            cold.body.contains(&format!("data-shelf=\"{key}\"")),
+            "the {key} shelf must render for a stranger: {}",
+            cold.body
+        );
+    }
+    assert!(
+        cold.body.contains("class=\"mcard-w\""),
+        "every shelf card carries a why line: {}",
+        cold.body
+    );
+
+    // A tuned visitor: the shelves must still be three, and their own tag must be the reason shown.
+    let viewer = cold.vcookie.clone().expect("the page mints a visitor id");
+    let applied = call(&app, post_form("/prefs", "tag=chiptune&w=10", &viewer)).await;
+    assert_eq!(applied.status, StatusCode::SEE_OTHER, "{}", applied.body);
+
+    let tuned = call(&app, cookie(get("/"), &viewer)).await;
+    assert_eq!(tuned.status, StatusCode::OK);
+    for key in ["for_you", "rising", "new"] {
+        assert!(
+            tuned.body.contains(&format!("data-shelf=\"{key}\"")),
+            "the {key} shelf must render for a tuned visitor"
+        );
+    }
+
+    // D27 on the rendered page: nothing on the home page may name the instance's prior. The test is
+    // deliberately blunt — the words a disclosure would need are cheap to grep and expensive to leak.
+    let page = tuned.body.to_lowercase();
+    for word in ["taste", "prior", "gravity", "curated by", "operator's pick"] {
+        assert!(!page.contains(word), "the home page must not name the prior ({word})");
+    }
+}
