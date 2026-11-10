@@ -402,6 +402,9 @@ pub struct ProfileView {
     pub meta_description: String,
     pub rings: Vec<Ring>,
     pub similar: Vec<MemberCard>,
+    /// Why `similar` is empty, in one sentence, or empty when the list is there. Three different facts
+    /// (no tags / nothing shared / nobody else) must not render as the same empty box (D49).
+    pub similar_reason: String,
     pub first_name: String,
     pub total_members: i64,
 }

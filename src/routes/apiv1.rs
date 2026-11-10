@@ -33,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/members", get(members))
         .route("/api/v1/members/{handle}", get(member))
         .route("/api/v1/members/{handle}/links", get(member_links))
+        .route("/api/v1/members/{handle}/similar", get(member_similar))
         .route("/api/v1/links/health", get(link_health))
         .route("/api/v1/search", get(search))
         .route("/api/v1/ring/{slug}", get(ring))
@@ -315,6 +316,61 @@ async fn member(
         })),
         "links": link_rows(&st, u.id).await?,
     })))
+}
+
+/// "Members like this one", the same list the profile page's sidebar shows — from tag overlap, never from
+/// clicks. The overlap number itself is deliberately absent: the shared tags are the reason, and a coefficient
+/// the page does not print is a number a client would start tuning against (D49).
+async fn member_similar(
+    State(st): State<AppState>,
+    Path(handle): Path<String>,
+    headers: HeaderMap,
+) -> PageResult<Response> {
+    let Ok(handle) = crate::text::normalise_handle(&handle) else {
+        return Err(PageError(AppError::NotFound));
+    };
+    let Some(owner) = store::user_by_handle(&st.pool, &handle).await? else {
+        return Err(PageError(AppError::NotFound));
+    };
+    if owner.hidden {
+        return Err(PageError(AppError::NotFound));
+    }
+    let all = store::all_members(&st.pool, true).await?;
+    let Some(target) = all.iter().find(|m| m.id == owner.id).cloned() else {
+        // A member the pool query does not return (hidden between the two reads): an empty answer with a
+        // reason, not a 500 and not an invented list.
+        return Ok(cached(
+            &headers,
+            json!({
+                "handle": handle,
+                "reason": "not_in_pool",
+                "says": crate::neighbours::Reason::Alone.sentence(),
+                "similar": [],
+            }),
+        ));
+    };
+    let hood = crate::neighbours::similar(&all, &target, 20);
+    let similar: Vec<Value> = hood
+        .members
+        .iter()
+        .map(|n| {
+            json!({
+                "handle": n.handle,
+                "display_name": n.display_name,
+                "url": format!("/@{}", n.handle),
+                "shared_tags": n.shared_tags,
+            })
+        })
+        .collect();
+    Ok(cached(
+        &headers,
+        json!({
+            "handle": target.handle,
+            "reason": hood.reason.code(),
+            "says": hood.reason.sentence(),
+            "similar": similar,
+        }),
+    ))
 }
 
 async fn member_links(

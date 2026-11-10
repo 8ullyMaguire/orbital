@@ -34,6 +34,16 @@ pub enum Reason {
 }
 
 impl Reason {
+    /// A stable machine token, for the API. The sentence is for people; a client should switch on this.
+    pub fn code(self) -> &'static str {
+        match self {
+            Reason::Shared => "shared",
+            Reason::NoTags => "no_tags",
+            Reason::NothingShared => "nothing_shared",
+            Reason::Alone => "alone",
+        }
+    }
+
     /// The sentence a reader sees. Never a number, never a vocabulary word: what the page can say is why the list
     /// is not there, and that is all it says.
     pub fn sentence(self) -> &'static str {

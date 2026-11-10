@@ -573,38 +573,37 @@ pub async fn profile(
     };
     let weights = viewer_weights(&st, &vid, user.as_ref()).await;
     let hub_tags = store::hub_tags(&st.pool).await?;
-    let mut scored: Vec<(f64, &MemberStat)> = all
+    // The sidebar's promise, on the page: "shared tags, not paid placement". It is now the tag-overlap
+    // neighbourhood (D49) rather than a blend that also weighed hub tags and recency — a list that says it is
+    // about shared tags should be about shared tags. Pool-level rarity is live here (D48): a tag two people carry
+    // counts for more than one everybody carries, and this surface is new, so there is no previous order to
+    // regress behind an eval gate.
+    let owner_stat = all
         .iter()
-        .filter(|m| m.id != owner.id && visible(m))
+        .find(|m| m.id == owner.id)
+        .cloned()
+        .unwrap_or_else(|| stat.clone());
+    let hood = crate::neighbours::similar(&all, &owner_stat, 5);
+    let similar: Vec<MemberCard> = hood
+        .members
+        .iter()
+        .filter_map(|n| all.iter().find(|m| m.handle == n.handle))
         .map(|m| {
-            (
-                ranking::similarity(
-                    &viewer_tags,
-                    &owner_tags,
-                    &hub_tags,
-                    &weights,
-                    m,
-                    primary.as_deref(),
-                    now,
-                ),
-                m,
-            )
-        })
-        .collect();
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    let similar: Vec<MemberCard> = scored
-        .iter()
-        .filter(|(s, _)| *s > 0.05)
-        .take(5)
-        .map(|(_, m)| {
             let mut c = card(m, &ctx.base, 0, StatMode::Similar, now);
-            c.why = similarity_reason(m, &owner_tags, primary.as_deref());
-            // The sidebar's contribution to "how do people find you" rides on the link, or the
-            // click is indistinguishable from a direct visit.
+            let tags: Vec<String> = hood
+                .members
+                .iter()
+                .find(|n| n.handle == m.handle)
+                .map(|n| n.shared_tags.iter().take(3).cloned().collect())
+                .unwrap_or_default();
+            c.why = format!("shares {}", tags.join(", "));
+            // The sidebar's contribution to "how do people find you" rides on the link, or the click is
+            // indistinguishable from a direct visit.
             c.url = format!("{}?s=similar", c.url);
             c
         })
         .collect();
+    let similar_reason = if similar.is_empty() { hood.reason.sentence().to_string() } else { String::new() };
 
     // Rings: the primary vertical's ring, then the global one.
     let mut rings: Vec<Ring> = Vec::new();
@@ -712,6 +711,7 @@ pub async fn profile(
         meta_description,
         rings,
         similar,
+        similar_reason,
         first_name: owner
             .display_name
             .split_whitespace()

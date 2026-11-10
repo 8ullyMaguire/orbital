@@ -81,7 +81,12 @@
         {% endfor %}
       </ul>
     </div>
-    {% endif %}
+    {% else %}{% if !p.similar_reason.is_empty() %}
+    <div class="side-card">
+      <h3>People like {{ p.first_name }}</h3>
+      <p class="muted sm">{{ p.similar_reason }}</p>
+    </div>
+    {% endif %}{% endif %}
 
     <div class="side-card">
       <h3>In the directory</h3>
