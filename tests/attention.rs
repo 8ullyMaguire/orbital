@@ -79,7 +79,13 @@ fn raw_reproduces_the_old_order_over_two_hundred_seeds() {
                 (0.6 * clicks + 0.4 * 1.0 * rel, m.handle.clone())
             })
             .collect();
-        old.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // Ties break by handle, in the same place and the same order the ranker breaks them — otherwise
+        // this test measures string ordering rather than ranking.
+        old.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
+        });
         let old_order: Vec<String> = old.into_iter().map(|(_, h)| h).collect();
         if old_order.first() != Some(&format!("m{}", 0)) {
             interesting += 1;
