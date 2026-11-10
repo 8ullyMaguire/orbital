@@ -1199,3 +1199,42 @@ restores the previous page byte-for-byte.
 result, not smoothed over: the caps did not create the shortage, they stopped the page from hiding it. With
 the declaration off, `/` is `cmp`-identical to the pre-step capture. Live: each member appears exactly once
 where it appeared four times before.
+
+## D44 — The operator authors nothing, so curation is retired from every surface
+
+**Context.** `curation` was a table one person wrote, and it powered two public surfaces: a home rail headed
+"Curator's picks — hand-picked, manually ordered. The editorial layer, not the ranking", and a "Curated" tab
+on every vertical. Both are the operator authoring a list on a catalogue whose whole promise is that ranking
+comes from what readers actually click. The rail also announced the hand, which is the other half of the same
+invariant: the instance's taste may be applied and is never named.
+
+The exposure caps (D43) made the violation visible: the rail repeated the same two members the shelves had
+just been told to show once, so the page obeyed the rule three times and broke it once.
+
+**Decision.** Every reader of `curation` goes: the home rail, the vertical tab and its count, the "curated"
+branch of the vertical handler, the `store::curated` / `curated_any` functions, the admin write route
+`POST /api/admin/curation/{slug}` and its handler, and the seed that filled one row so a tab was not empty.
+`?tab=curated` now falls back to Top, so an old bookmark cannot resurrect the surface. The templates lose
+every mention, including the about-page paragraph that advertised an "editorial layer".
+
+The **table is kept** and nothing reads it: dropping a table is a migration with a rollback story, and the
+gate that matters — no public route reads it — is satisfied by removing the readers. The live database still
+holds two rows (dev and nsfw); the pages are byte-identical with and without them, which is the test.
+
+**Rejected alternatives.**
+
+- *Keep the tab, rename it "Featured".* Renaming a hand is not removing it, and "featured" is the same
+  promise with a softer word.
+- *Keep the rail for `trust_level >= 3`.* The operator is the only TL3, so the rule would exist to exempt its
+  author.
+- *Drop the table in the same change.* It would take the history with it and give the deploy a migration to
+  roll back for no user-visible gain. Readers first, storage later, and the roadmap keeps a row for it.
+- *Keep `set_curation` for tooling.* A writer with no reader is dead code with a permission check on it, which
+  is worse than absent: it implies the feature is still on.
+- *Leave the about-page sentence.* A surface may not advertise a feature it does not have; the sentence was
+  the last place the word "curated" survived after the code was gone.
+
+**Consequences.** The gate is a byte comparison: a curation row that changes any page fails the suite, proved
+by mutating the handler to give curated members a score bonus (the page order changes, the test fails). Live:
+two curation rows exist in the database, five public surfaces carry no hand-word, and `grep -i curated
+templates/` is empty.

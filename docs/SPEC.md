@@ -87,7 +87,7 @@ One row per profile render, deduped per (member, session, day) — the denominat
 of every conversion claim the dashboard makes.
 
 ### Flag
-Vertical-scoped when the flag came from a vertical page. Owner/curator resolves
+Vertical-scoped when the flag came from a vertical page. A moderator resolves
 with a reason. Resolving "ranking manipulation" zeroes the member's ranking
 contribution and resets trust to TL0.
 
@@ -188,7 +188,9 @@ list is a recency list wearing a costume).
 
 **New** — `created_at DESC`, all listed members, badge for <14 days.
 
-**Curated** — owner-pinned, manually ordered, per vertical.
+**Curated** — *retired* (D44). There is no owner-pinned list on any surface: the operator authors nothing, and
+a rail headed "hand-picked" announced the one thing the instance must never announce. The `curation` table
+survives until a migration can drop it without taking history with it, and nothing reads it.
 
 **Similar profiles** (sidebar):
 
@@ -504,7 +506,7 @@ reset trust. Every counter in the response is `BIGINT` cast in SQL.
 
 | Route | What |
 |---|---|
-| `/` | Verticals as cards (member count + top 3), search, new/trending/curated rails |
+| `/` | Verticals as cards (member count + top 3), search, and three composed shelves (D27/D43: no curated rail) |
 | `/v/{slug}` | Four tabs, tag filter, embed snippet, ring footer |
 | `/@handle` | Profile: links, tags, verticals, similar sidebar, ring footer, JSON-LD, report |
 | `/u/{handle}` | 301 → `/@handle` |
@@ -593,7 +595,7 @@ Sessions are server-side rows + `HttpOnly; SameSite=Lax; Secure` cookie.
 Passwords are Argon2id. Registration is handle + password + primary vertical.
 
 Trust: TL0 on signup. Nightly job promotes TL0→TL1 at ≥2 links, ≥2 days old, ≥5
-unique visitors. TL2 and TL3 are operator-granted (curator). Multipliers above.
+unique visitors. TL2 and TL3 are granted by the instance. Multipliers above.
 
 Bluesky claim: `/app` prints `orbital-verify:<token>`; the member pastes it into
 their Bluesky description; `POST /api/me/verify-bsky` fetches the public profile
@@ -627,7 +629,7 @@ profile_views(id bigserial pk, user_id fk, session_hash, vertical_context,
               view_date date, unique(user_id, session_hash, view_date))
 flags(id uuid pk, flagger_id fk null, target_user_id fk, vertical_slug null,
       reason, status text, created_at, resolved_at, resolver_id, note)
-curation(vertical_slug fk, user_id fk, position int, pk(vertical_slug,user_id))
+curation(vertical_slug fk, user_id fk, position int, pk(vertical_slug,user_id)) -- unused since D44, kept until a migration can drop it
 bot_posts(id bigserial, kind text, subject text, uri text, created_at)
 -- 0002..0005
 links(… title text, favicon text, metadata_at timestamptz)
