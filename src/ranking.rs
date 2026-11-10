@@ -225,6 +225,15 @@ pub fn rank_top(
     scored.into_iter().map(|(_, m)| m).collect()
 }
 
+/// Momentum (D46): this week against the member's own trailing three-week baseline, smoothed so a member
+/// with no history is not infinite and a member with a large flat audience is not zero. `+1` on both sides is
+/// the whole smoothing: a new member with two visitors scores 3.0, a member with a hundred every week scores
+/// 1.0, and neither number is rewritten to say so.
+pub fn momentum(m: &MemberStat) -> f64 {
+    let baseline = m.visitors_prev as f64 / 3.0;
+    (m.visitors_7d as f64 + 1.0) / (baseline + 1.0)
+}
+
 /// The monument: who has ever been read, by lifetime clicks, with no lens and no decay. D39 exempts the
 /// monument from the damping band because a monument is the point of a monument; the tab exists so that
 /// amortising fame costs a member position, never reachability. Ties break by handle so two members with

@@ -77,6 +77,11 @@ pub struct MemberStat {
     pub role: String,
     pub visitors: i64,
     pub visitors_7d: i64,
+    /// Distinct visitors in the three weeks *before* the last seven days: the member's own trailing baseline
+    /// (D46). Momentum is this week against that, so a small member who is growing can outrank a large one
+    /// who is flat — without either number being rewritten.
+    #[sqlx(default)]
+    pub visitors_prev: i64,
     pub clicks: i64,
     pub tags: Vec<String>,
     pub verticals: Vec<String>,

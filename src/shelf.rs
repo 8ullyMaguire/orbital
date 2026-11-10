@@ -30,6 +30,11 @@ use polaris_candidates::{compose, select, Budget, Source};
 use crate::models::MemberStat;
 use crate::ranking;
 
+/// The cut that makes a member "undiscovered" (D46): below this percentile of the pool's exposure. A
+/// constant rather than a declaration because it belongs to one surface; the day a second surface wants a
+/// different number is the day it moves into a config file.
+pub const UNDISCOVERED_PERCENTILE: f64 = 0.60;
+
 /// How many cards one shelf shows.
 pub const PER_SHELF: usize = 6;
 
@@ -189,7 +194,65 @@ pub fn build(
         },
     });
 
-    // `New`: one source, pure relevance — the New ranker's own order.
+    // `Undiscovered` (D46): only the members below the sixtieth percentile of exposure — the part of the
+    // catalogue a page is least likely to show — ranked by momentum, which is this week against their own
+    // trailing three-week average. A shelf of the already-visible would be a fourth copy of the first three;
+    // a shelf of the invisible, ordered by growth, is the only one that can surprise a regular reader.
+    //
+    // Empty is a legitimate answer: when every member sits at or above the cut (an all-flat pool, or one
+    // member on its own) the shelf is not pushed at all, and the template renders nothing rather than a
+    // padded list. The percentile is a constant here on purpose: it is one surface's threshold, and a second
+    // surface wanting a different number is the moment it becomes a declaration.
+    let cut = crate::exposure::percentile(&exposure, UNDISCOVERED_PERCENTILE);
+    let mut tail: Vec<usize> = (0..members.len()).filter(|i| exposure[*i] < cut).collect();
+    tail.sort_by(|a, b| {
+        ranking::momentum(&members[*b])
+            .partial_cmp(&ranking::momentum(&members[*a]))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                exposure[*a]
+                    .partial_cmp(&exposure[*b])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| members[*a].handle.cmp(&members[*b].handle))
+    });
+    if !tail.is_empty() {
+        let chosen = crate::exposure::enforce(&tail, decl.per_shelf, &mut used, &exposure, caps);
+        let chosen = crate::ceiling::rotate(
+            &chosen,
+            &tail,
+            &member_ids(members),
+            crate::ceiling::day_key(crate::ceiling::day_of(now)),
+            ceiling,
+        );
+        if !chosen.is_empty() {
+            let items = chosen
+                .into_iter()
+                .map(|index| {
+                    let m = &members[index];
+                    let base = (m.visitors_prev as f64 / 3.0).round() as i64;
+                    let why = if m.visitors_7d == 0 {
+                        "quiet this week".to_string()
+                    } else if base == 0 {
+                        format!("{} visitors this week, none the three before", m.visitors_7d)
+                    } else if m.visitors_7d > base {
+                        format!("{} visitors this week, up from {}", m.visitors_7d, base)
+                    } else {
+                        format!("{} visitors this week, level with {}", m.visitors_7d, base)
+                    };
+                    Ranked { index, why }
+                })
+                .collect();
+            shelves.push(Shelf {
+                key: "undiscovered",
+                title: "Undiscovered",
+                subtitle: "Below the sixtieth percentile of exposure, ranked by how fast they are growing.",
+                items,
+            });
+        }
+    }
+
+    // `New`: one source, pure relevance — the New ranker's own order.    // `New`: one source, pure relevance — the New ranker's own order.
     shelves.push(Shelf {
         key: "new",
         title: "New to the directory",
@@ -330,6 +393,7 @@ mod tests {
             role: "member".to_string(),
             visitors: clicks * 2,
             visitors_7d,
+            visitors_prev: 0,
             clicks,
             tags: tags.iter().map(|t| t.to_string()).collect(),
             verticals: vec!["dev".to_string()],
@@ -458,5 +522,115 @@ mod probe {
             uniq.dedup();
             assert_eq!(uniq.len(), hs.len(), "{} repeats a member: {:?}", s.key, hs);
         }
+    }
+}
+
+#[cfg(test)]
+mod undiscovered {
+    use super::*;
+    use chrono::Duration;
+
+    fn m(handle: &str, clicks: i64, recent: f64, week: i64, prev: i64) -> MemberStat {
+        MemberStat {
+            id: uuid::Uuid::new_v4(),
+            handle: handle.to_string(),
+            display_name: handle.to_string(),
+            bio: String::new(),
+            accent: String::new(),
+            avatar_url: None,
+            trust_level: 1,
+            bsky_handle: None,
+            nsfw_enabled: false,
+            created_at: Utc::now() - Duration::days(60),
+            last_active_at: Utc::now(),
+            role: "member".to_string(),
+            visitors: clicks,
+            visitors_7d: week,
+            visitors_prev: prev,
+            clicks,
+            tags: vec![],
+            verticals: vec!["dev".to_string()],
+            endorse: 0.0,
+            attention: recent,
+            recent,
+        }
+    }
+
+    fn shelf_of<'a>(shelves: &'a [Shelf], key: &str) -> Option<&'a Shelf> {
+        shelves.iter().find(|s| s.key == key)
+    }
+
+    /// THE GATE, first half: the shelf is the long tail, and momentum outranks mass — the famous member who
+    /// is flat is not on it at all, and the growing small member is ahead of the flat small one.
+    #[test]
+    fn the_undiscovered_shelf_is_the_tail_ranked_by_momentum() {
+        let members = vec![
+            // Three visible members with flat traffic: high exposure, momentum 1.0.
+            m("famous_flat", 900, 900.0, 300, 900),
+            m("famous_steady", 800, 700.0, 200, 600),
+            m("famous_quiet", 700, 600.0, 100, 300),
+            // Three barely-visible members: one growing hard, one flat, one silent.
+            m("small_growing", 3, 1.0, 9, 0),
+            m("small_flat", 2, 2.0, 3, 9),
+            m("small_silent", 1, 3.0, 0, 0),
+        ];
+        let shelves = build(
+            &members,
+            &[],
+            Utc::now(),
+            &Declaration::default(),
+            crate::dial::Lens::full(),
+            crate::attention::Config::raw(),
+            &crate::exposure::Config::off(),
+            &crate::ceiling::Config::off(),
+        );
+        let shelf = shelf_of(&shelves, "undiscovered").expect("a real long tail must render the shelf");
+        let order: Vec<String> = shelf.items.iter().map(|r| members[r.index].handle.clone()).collect();
+
+        for famous in ["famous_flat", "famous_steady", "famous_quiet"] {
+            assert!(!order.contains(&famous.to_string()), "{famous} is not undiscovered: {order:?}");
+        }
+        assert_eq!(
+            order.first().map(String::as_str),
+            Some("small_growing"),
+            "momentum outranks mass: {order:?}"
+        );
+        assert!(order.contains(&"small_flat".to_string()), "{order:?}");
+
+        let why = &shelf.items[0].why;
+        assert!(why.contains("9 visitors this week"), "the reason cites the measurement: {why}");
+    }
+
+    /// THE GATE, second half: an all-flat pool has no long tail, and the shelf is not rendered at all — no
+    /// empty heading, no padded list.
+    #[test]
+    fn an_all_flat_pool_renders_no_undiscovered_shelf() {
+        let members = vec![
+            m("alpha_one", 10, 10.0, 5, 15),
+            m("bravo_two", 10, 10.0, 5, 15),
+            m("charlie_three", 10, 10.0, 5, 15),
+        ];
+        let shelves = build(
+            &members,
+            &[],
+            Utc::now(),
+            &Declaration::default(),
+            crate::dial::Lens::full(),
+            crate::attention::Config::raw(),
+            &crate::exposure::Config::off(),
+            &crate::ceiling::Config::off(),
+        );
+        assert!(
+            shelf_of(&shelves, "undiscovered").map(|s| s.items.is_empty()).unwrap_or(true),
+            "every member is at the sixtieth percentile, so nobody is undiscovered"
+        );
+    }
+
+    #[test]
+    fn momentum_is_this_week_against_the_members_own_baseline() {
+        assert!((ranking::momentum(&m("new", 0, 0.0, 2, 0)) - 3.0).abs() < 1e-9, "two visitors, no history");
+        assert!((ranking::momentum(&m("flat", 0, 0.0, 100, 300)) - 1.0).abs() < 1e-9, "a hundred a week, flat");
+        assert!(ranking::momentum(&m("grow", 0, 0.0, 100, 30)) > 2.0, "growing from ten a week");
+        assert!(ranking::momentum(&m("fall", 0, 0.0, 10, 300)) < 0.5, "falling from a hundred a week");
     }
 }

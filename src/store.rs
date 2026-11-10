@@ -60,6 +60,12 @@ fn member_stats(ctx: &str) -> String {
          AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
          AND sh.created_at > now() - interval '7 days'
     )::bigint AS visitors_7d,
+    (SELECT count(DISTINCT sh.session_hash) FROM source_hits sh
+       WHERE sh.user_id = u.id
+         AND sh.created_at >= now() - interval '28 days'
+         AND sh.created_at <  now() - interval '7 days'
+         AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
+    )::bigint AS visitors_prev,
     (SELECT count(*) FROM source_hits sh
        WHERE sh.user_id = u.id
          AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
