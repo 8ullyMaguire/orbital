@@ -183,6 +183,14 @@ Each phase ships alone and is verified against the live host. Tags: **[DB] [BE] 
 20. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
     federation, staffed by the operator only as an exception path.
 
+### Done
+
+Shipped tasks move here, newest last, with the commit and the one line of gate output that proved
+them. A task is not done because it merged; it is done because the gate ran against the live host.
+Nothing is in this list yet.
+
+- *(empty)*
+
 ### Deliberately not in this plan
 
 - **The mind map.** Dropped on the owner's call; the `entity_edges` data it would need is collected
