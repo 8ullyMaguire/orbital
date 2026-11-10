@@ -2143,8 +2143,9 @@ async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
 #[sqlx::test]
 async fn a_curation_row_changes_no_page(pool: PgPool) {
     let app = app(pool.clone()).await;
-    for (handle, vertical) in [("alpha", "dev"), ("beta", "dev"), ("gamma", "music")] {
-        register(&app, handle, vertical).await;
+    // All three in one vertical: a curation row only has a page to change if the member is listed there.
+    for handle in ["alpha", "beta", "gamma"] {
+        register(&app, handle, "dev").await;
     }
     // Different amounts of attention, so the default order is decided: alpha, beta, gamma.
     for (handle, n) in [("alpha", 3), ("beta", 2), ("gamma", 1)] {
