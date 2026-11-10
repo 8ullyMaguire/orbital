@@ -65,7 +65,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **144** (59 unit, 51 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
+| Tests | **148** (65 unit, 54 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Concentration | weekly snapshots exist: profile **gini 0.39 / top-10 100 %** over 3 members, vertical **0.30 / 100 %** over 2 — N is far too small for a trend, recorded as such |
@@ -137,7 +137,7 @@ Adopt, don't write. Every step here ends with less code in this repo than it sta
 is always the same shape: the ordering is byte-identical before and after, and `git grep` cannot find the
 deleted function.
 
-### Phase B — the fame headwind (3 steps)
+### Phase B — the fame headwind (2 steps)
 
 Attention is the score, the score buys position, and position buys attention: the loop that makes every
 OnlyFans model "top 0.1%" and hides everyone else. The owner's rule (2026-11-10) is that the
@@ -157,10 +157,10 @@ Ideas:
 The guardrail every step here shares: **damped, never hidden** — attenuation may cost position and may
 never cost reachability, and no damped score may exceed its raw score.
 
-1. **[CFG] Exposure caps**: at most `k` slots per member per shelf (default 1), no member on two shelves in
-   one page view, and a declared long-tail cohort share (default 40% of slots below median exposure).
-   *Gate:* with one member 100× ahead they hold exactly 1 home slot; every shelf meets the cohort share; a
-   quota of 0 restores yesterday's page byte-for-byte.
+1. **[BE] Retire operator-authored curation**: the home "picks" rail and every "Curated" tab go, the
+   `curation` table stops being read by any public route, and no surface may be labelled with a hand.
+   *Gate:* `/` and every `/v/<slug>` render no card whose order came from `curation`; a test seeds a
+   curation row and shows it changes no page; `grep -r curated templates/` returns nothing.
 2. **[BE] Impression ceiling and tail rotation**: a rolling 24h share cap per surface, and the last `N`
    slots rotate daily by a hash of (date, member).
    *Gate:* a member above the ceiling is capped for that day and uncapped the next; two consecutive days
@@ -315,6 +315,20 @@ never cost reachability, and no damped score may exceed its raw score.
 Shipped steps move here, newest last, with the commit and the one line of gate output that proved them. A
 step is not done because it merged; it is done because its gate ran against the live host.
 
+- **2026-11-10** `7fe31c5`…`b76a764` — **step 1, exposure caps**: `EXPOSURE_FILE` declares `slots_per_member`
+  (1), `cohort_share` (0.40) and `below_percentile` (0.50); applied as a composition over the order a ranker
+  produced, shared across every rail of one page view.
+  **Gate**: with one member 100× ahead the page shows them once (mutation that turns the cap off: 3
+  appearances); a 20-member pool against three shelves of six meets 3-of-6 tail cards per shelf (mutation
+  that turns the share off: `0 card(s) below the median exposure (52.5), needs 3 of 6`); and with `0`/`0.0`
+  declared, `/` is **`cmp`-identical** to the capture taken before the step ran.
+  **Live**: `/@criticalnexus` went 4 cards → 1, `/@steeltitan` 4 → 1, `PASS exposure  1 slot per shelf, once
+  per page` — and the honest consequence, the two-member home page is now one shelf with two cards.
+  **Found and named**: the page's fourth rail ("Curator's picks") repeated the same members outside the
+  caps, which made the gate false for the page as a whole; it now obeys the same rule, and the rail's
+  operator authorship is the next step, because "the operator authors nothing" is an invariant and a rail
+  named after a hand is that violation wearing a label. **148 tests** (65 unit, 54 HTTP, 7 store, 5 taste,
+  4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame).
 - **2026-11-10** `8ea3066`…`d44cdfb` — **step 1, amortised fame**: `Top` reads a 90-day half-life; the monument tab
   keeps the lifetime record. Two columns in the same stats fragment — `recent` (attention × `0.5^(age/90)`) and
   `attention` (lifetime) — so a surface cannot read the wrong one by accident; the monument is lensless,
