@@ -1607,3 +1607,36 @@ async fn the_home_page_carries_three_shelves_and_says_why_each_card_is_there(poo
         assert!(!page.contains(word), "the home page must not name the prior ({word})");
     }
 }
+
+/// The prior is applied and never named (D27). This is the smallest honest version of that rule:
+/// there is no route that answers about it, and the page a stranger lands on does not contain the
+/// instance's source names or the word for what they build.
+#[sqlx::test]
+async fn the_instance_prior_has_no_public_surface(pool: PgPool) {
+    let app = app(pool).await;
+
+    let res = call(
+        &app,
+        Request::builder()
+            .uri("/api/v1/taste")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        res.status,
+        StatusCode::NOT_FOUND,
+        "a taste route would announce that a prior exists; got {} {}",
+        res.status,
+        res.body
+    );
+
+    let home = call(&app, Request::builder().uri("/").body(Body::empty()).unwrap()).await;
+    assert_eq!(home.status, StatusCode::OK);
+    for word in ["attuned", "steeltitan", "\"taste\"", "prior"] {
+        assert!(
+            !home.body.to_lowercase().contains(word),
+            "the home page must not mention `{word}`: the prior is operator-only"
+        );
+    }
+}

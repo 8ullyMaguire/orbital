@@ -122,6 +122,19 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         format!("{} profiles", visitors.0),
     );
 
+    // 7. The instance's taste, folded from the sources this instance declares (D30). This is the
+    //    report's only home: an absent source is a status, not a failure, because a new site declares
+    //    accounts before those accounts have left signals.
+    match crate::taste::load(pool, &cfg.taste.declaration).await {
+        Ok(folded) => {
+            for (what, detail) in folded.report_lines() {
+                say(true, &what, detail);
+            }
+            say(true, "taste profile", folded.summary());
+        }
+        Err(e) => say(false, "taste profile", format!("{e}")),
+    }
+
     println!();
     println!("{failed} failure(s)");
     Ok(failed)

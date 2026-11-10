@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 
+use crate::taste::TasteConfig;
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub database_url: String,
@@ -15,6 +17,9 @@ pub struct Config {
     pub secure_cookies: bool,
     pub bsky_pds: String,
     pub hub_handle: String,
+    /// The instance's declared taste sources (D30). Loaded here, at boot, because an invalid
+    /// declaration must stop the process before it serves a page — not on the first ranking call.
+    pub taste: TasteConfig,
 }
 
 impl Config {
@@ -36,6 +41,7 @@ impl Config {
                 .unwrap_or(false),
             bsky_pds: std::env::var("BSKY_PDS").unwrap_or_else(|_| "https://bsky.social".into()),
             hub_handle: std::env::var("HUB_HANDLE").unwrap_or_else(|_| "criticalnexus".into()),
+            taste: TasteConfig::from_env()?,
         })
     }
 
@@ -52,6 +58,7 @@ impl Config {
             secure_cookies: false,
             bsky_pds: "https://bsky.social".into(),
             hub_handle: "hubowner".into(),
+            taste: TasteConfig::for_test(),
         }
     }
 

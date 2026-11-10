@@ -73,7 +73,42 @@ impl TasteConfig {
     /// Parse and **validate** a declaration. Validation is the crate's, not ours: a weight of 30 is a
     /// typo, and silently serving 1.0 would hide it.
     pub fn from_json(raw: &str) -> Result<Self> {
-        unimplemented!("RED: parse and validate the declaration")
+        let spec: DeclSpec = serde_json::from_str(raw)
+            .context("field `sources`: the declaration is not JSON in the declared shape")?;
+
+        let mut sources = Vec::with_capacity(spec.sources.len());
+        for source in spec.sources {
+            let mut kinds = Vec::with_capacity(source.kinds.len());
+            for word in &source.kinds {
+                let kind = Kind::parse(word).ok_or_else(|| {
+                    let vocabulary: Vec<&str> = Kind::ALL.iter().map(|k| k.name()).collect();
+                    anyhow!(
+                        "field `kinds` of source `{}`: `{}` is not one of {}",
+                        source.name,
+                        word,
+                        vocabulary.join(", ")
+                    )
+                })?;
+                kinds.push(kind);
+            }
+            sources.push(Source {
+                name: source.name,
+                selector: source.selector.into_selector(),
+                weight: source.weight,
+                kinds,
+            });
+        }
+
+        let declaration = Declaration {
+            sources,
+            half_life_days: spec.half_life_days,
+            min_evidence: spec.min_evidence,
+        };
+        declaration.validate().map_err(|invalid| anyhow!(describe(&invalid)))?;
+        Ok(Self {
+            declaration,
+            origin: None,
+        })
     }
 }
 
@@ -129,7 +164,7 @@ pub async fn load(pool: &PgPool, declaration: &Declaration) -> Result<Taste> {
     // endorsement per `doctor` run is not a trade worth making for a lifetime annotation.
     let rows: Vec<(String, String, f64)> = sqlx::query_as(
         "SELECT u.handle, e.tag_slug,
-                EXTRACT(EPOCH FROM (now() - e.created_at)) / 86400.0
+                (EXTRACT(EPOCH FROM (now() - e.created_at)) / 86400.0)::float8
            FROM tag_endorsements e
            JOIN users u ON u.id = e.user_id",
     )
@@ -158,7 +193,19 @@ impl Taste {
     /// point: `absent` says the source exists and admitted nothing, which is a different answer from
     /// a source that contributed a weight of 0.0 to every subject.
     pub fn report_lines(&self) -> Vec<(String, String)> {
-        unimplemented!("RED: render the per-source report")
+        self.report
+            .iter()
+            .map(|source| {
+                let status = if source.contributed > 0 { "active" } else { "absent" };
+                let mut detail =
+                    format!("{status}: admitted {}, contributed {}", source.admitted, source.contributed);
+                if !source.note.is_empty() {
+                    detail.push_str(" — ");
+                    detail.push_str(&source.note);
+                }
+                (format!("taste/{}", source.name), detail)
+            })
+            .collect()
     }
 
     /// Subject → folded weight, for the rankers that consume the prior. Absent subjects are absent,
@@ -243,6 +290,25 @@ enum SelectorSpec {
     Affinity { at_least: f64, min_evidence: u32 },
     Explicit { ids: Vec<String> },
     Everyone,
+}
+
+impl SelectorSpec {
+    fn into_selector(self) -> Selector {
+        match self {
+            SelectorSpec::Role { role } => Selector::Role { role },
+            SelectorSpec::TrustLevel { at_least } => Selector::TrustLevel { at_least },
+            SelectorSpec::Badge { badge } => Selector::Badge { badge },
+            SelectorSpec::Affinity {
+                at_least,
+                min_evidence,
+            } => Selector::Affinity {
+                at_least,
+                min_evidence,
+            },
+            SelectorSpec::Explicit { ids } => Selector::Explicit { ids },
+            SelectorSpec::Everyone => Selector::Everyone,
+        }
+    }
 }
 
 fn default_half_life() -> f64 {
