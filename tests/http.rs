@@ -2541,11 +2541,18 @@ async fn every_surface_still_answers_after_the_guardrail(pool: PgPool) {
         ("/v/dev".to_string(), "vertical"),
         ("/search?q=reachable".to_string(), "search hit"),
         ("/sitemap.xml".to_string(), "sitemap"),
-        ("/ring/dev".to_string(), "ring"),
+        ("/api/v1/ring/dev".to_string(), "ring (JSON)"),
     ] {
         let r = call(&app, get(&path)).await;
         assert_eq!(r.status, StatusCode::OK, "{label} ({path}) must still answer: {}", r.status);
     }
+    // The ring's HTML form is a redirect by design: it walks from one member to the next.
+    let walk = call(&app, get("/v/dev/next")).await;
+    assert!(
+        walk.status.is_redirection() || walk.status == StatusCode::OK || walk.status == StatusCode::NOT_FOUND,
+        "the ring walk must answer (a single-member vertical has nowhere to go): {}",
+        walk.status
+    );
     let sitemap = call(&app, get("/sitemap.xml")).await;
     assert!(sitemap.body.contains("/@reachable"), "the sitemap still lists the member");
 }
