@@ -1550,9 +1550,25 @@ async fn the_home_page_carries_three_shelves_and_says_why_each_card_is_there(poo
     // tuned visitor, and a reason on every card that cites only something the reader can observe.
     // Before this change the page carried one "Trending this week" list and an untruncated "New" list:
     // `data-shelf` appeared zero times on the live home page (measured 2026-11-10).
-    let app = app(pool).await;
+    let app = app(pool.clone()).await;
     for (handle, vertical) in [("alpha", "dev"), ("beta", "dev"), ("gamma", "music")] {
         register(&app, handle, vertical).await;
+    }
+    // `Rising` is `rank_trending`, which drops every member with zero visitors in the last seven days
+    // (`trending_score` returns 0.0 when `max_7d` is 0). So the fixture has to produce the thing the
+    // shelf is a claim about: real `source_hits` rows. A test that skipped this would be asserting an
+    // empty shelf renders, which is not what the step says.
+    for (i, handle) in ["alpha", "beta", "gamma"].iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash, created_at)
+             SELECT id, $2, now() - make_interval(hours => $3::int) FROM users WHERE handle = $1",
+        )
+        .bind(*handle)
+        .bind(format!("sess-{i}"))
+        .bind(i as i32)
+        .execute(&pool)
+        .await
+        .expect("a source hit is what makes a member rise");
     }
 
     let cold = call(&app, get("/")).await;
