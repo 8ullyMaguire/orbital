@@ -307,6 +307,34 @@ candidate, so a positive verdict bounds how much *worse* the candidate is than r
 somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
 block so it travels with the numbers.
 
+### 2c-quater. Exposure caps (D43)
+
+A page view has three fairness rules, all declared in `EXPOSURE_FILE`:
+
+| field | default | what it does |
+|---|---|---|
+| `slots_per_member` | `1` | at most this many slots per shelf — and at any non-zero value, **a member appears on one shelf only** in a page view |
+| `cohort_share` | `0.40` | at least this share of each shelf's slots belongs to members below the exposure percentile |
+| `below_percentile` | `0.50` | which members count as the long tail (the median by default) |
+
+Exposure is the same 90-day weighted attention `Top` ranks by (D42) — the rule needs no second instrument.
+
+The caps are a **composition**: they take the order a ranker or MMR already produced and choose which slots
+it may fill. They never filter the pool and never touch a score, which is why the top of a shelf is still the
+ranker's judgement: the cohort quota replaces from the *end*, never the first slot.
+
+`slots_per_member: 0` plus `cohort_share: 0` is the escape hatch — with both off the module returns the
+ranker's own prefix and the page is byte-for-byte the page that shipped before the caps existed. That is
+measured on the live host, not asserted: with the declaration off, `/` compared `cmp`-identical to the
+capture taken before this step.
+
+Consequences worth stating plainly:
+
+* a pool smaller than the page shows **fewer shelves**, not repeats — on a two-member site the home page is
+  one shelf with two cards, which is what a directory that size honestly has;
+* the page view includes every rail on the page, so the "picks" rail obeys the same rule (and with the
+  caps off, it obeys nothing, so the escape hatch is total).
+
 ### 2c-ter. Two windows of fame (D42)
 
 Fame is one measurement read through two windows, computed in the same stats fragment so a surface cannot
