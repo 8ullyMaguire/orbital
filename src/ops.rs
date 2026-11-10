@@ -200,7 +200,26 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         ),
     );
 
-    // 13. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    // 13. Who the undiscovered shelf would consider (D46): the cut, and how many members sit below it. On a
+    // site smaller than its own page the answer is "everybody is already on it", and the shelf is absent —
+    // printed here so the absence is a measurement rather than a mystery.
+    let everyone = store::all_members(pool, true).await?;
+    let exposure: Vec<f64> = everyone.iter().map(|m| m.recent).collect();
+    let cut = crate::exposure::percentile(&exposure, crate::shelf::UNDISCOVERED_PERCENTILE);
+    let below = exposure.iter().filter(|e| **e < cut).count();
+    say(
+        true,
+        "undiscovered",
+        format!(
+            "cut {:.1} of exposure ({:.0}th percentile), {} of {} member(s) below it",
+            cut,
+            crate::shelf::UNDISCOVERED_PERCENTILE * 100.0,
+            below,
+            everyone.len()
+        ),
+    );
+
+    // 14. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
     //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
     //    favours, which is not a sentence a page may carry.
     match crate::concentration::latest(pool).await {
