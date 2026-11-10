@@ -1653,14 +1653,14 @@ async fn the_dial_is_stored_inside_the_ceiling_and_refused_above_it(pool: PgPool
             .method("POST")
             .uri("/prefs")
             .header("content-type", "application/x-www-form-urlencoded")
-            .body(Body::from("gravity=25"))
+            .body(Body::from("lens=25"))
             .unwrap(),
     )
     .await;
     assert_eq!(ok.status, StatusCode::SEE_OTHER, "a legal dial is a redirect, not a page");
     let cookie = ok.vcookie.clone();
 
-    let mut req = Request::builder().uri("/prefs?dial=1");
+    let mut req = Request::builder().uri("/");
     if let Some(c) = &cookie {
         req = req.header("cookie", c);
     }
@@ -1677,7 +1677,7 @@ async fn the_dial_is_stored_inside_the_ceiling_and_refused_above_it(pool: PgPool
             .method("POST")
             .uri("/prefs")
             .header("content-type", "application/x-www-form-urlencoded")
-            .body(Body::from("gravity=41"))
+            .body(Body::from("lens=41"))
             .unwrap(),
     )
     .await;

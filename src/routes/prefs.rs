@@ -49,7 +49,7 @@ pub async fn apply(
     let mut weights: Vec<f64> = Vec::new();
     let mut new_tag = String::new();
     let mut new_w = String::new();
-    let mut gravity: Option<String> = None;
+    let mut lens_field: Option<String> = None;
 
     for (k, v) in &form {
         match k.as_str() {
@@ -57,7 +57,7 @@ pub async fn apply(
             "w" => weights.push(v.parse().unwrap_or(0.0)),
             "new_tag" => new_tag = v.clone(),
             "new_w" => new_w = v.clone(),
-            "gravity" => gravity = Some(v.clone()),
+            "lens" => lens_field = Some(v.clone()),
             _ => {}
         }
     }
@@ -81,7 +81,7 @@ pub async fn apply(
     // The reader's dial. It rides in the same form as the sliders because it is the same decision:
     // how much of my own taste should reorder these lists. Refused with the number the surface allows
     // — never clamped, because a reader who typed 100 meant 100 and serving 40 answers another question.
-    if let Some(raw) = gravity {
+    if let Some(raw) = lens_field {
         let requested = raw
             .trim()
             .parse::<f64>()
