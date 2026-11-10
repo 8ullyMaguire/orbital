@@ -476,7 +476,7 @@ mod tests {
         assert!((cosine(&a, &b) - 1.0).abs() < 1e-9);
         let c = vec!["rust".to_string()];
         assert!((cosine(&a, &c) - 0.7071).abs() < 1e-3);
-        assert_eq!(cosine(&a, &[], 1.0), 0.0);
+        assert_eq!(cosine(&a, &[]), 0.0);
     }
 
     #[test]
@@ -528,7 +528,7 @@ mod tests {
     #[test]
     fn relevance_is_a_weighted_share_and_zero_without_weights() {
         let tags = vec!["chiptune".to_string(), "godot".to_string()];
-        assert_eq!(tag_relevance(&tags, &[], 1.0), 0.0, "no weights, no opinion");
+        assert_eq!(tag_relevance(&tags, &[]), 0.0, "no weights, no opinion");
         assert_eq!(
             tag_relevance(&tags, &[("chiptune".into(), 1.0)]),
             1.0,
@@ -621,7 +621,7 @@ mod tests {
         let weights = vec![("v:music".to_string(), 1.0)];
 
         assert_eq!(relevance(&dev, &weights, 1.0), 0.0);
-        assert_eq!(relevance(&muso, &weights, 1.0), 1.0);
+        assert_eq!(relevance(&muso, &weights), 1.0);
         let order = rank_top(vec![dev, muso], &weights, 1.0);
         assert_eq!(order[0].handle, "muso");
     }
