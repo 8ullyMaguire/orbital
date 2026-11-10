@@ -342,6 +342,14 @@ server {
     # The read API: limited, cached, and still carrying the estate security headers.
     # NOTE: any add_header inside this location stops inheritance from the http
     # block, so the snippet is repeated here on purpose.
+    #
+    # Before this location, the capability document. It is an EXACT match, so it outranks the
+    # /api/v1/ prefix below and nginx answers it from a static file instead of the app. Measured
+    # 2026-11-10: without this include the vhost proxied the path and answered 404, so the estate's
+    # W0 contract was unmet while the document itself sat correctly installed in
+    # /var/www/estate/capabilities.
+    include /etc/nginx/snippets/estate-capabilities.conf;
+
     location /api/v1/ {
         limit_req zone=orbital_api burst=30 nodelay;
         limit_req_status 429;
@@ -456,6 +464,10 @@ echo -n "dashboard shell:   "; curl -s "http://127.0.0.1:$PUBLIC_PORT/app/" | gr
 echo -n "adult 301:         "; curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: orbitalnsfw.polarisocial.xyz' "http://127.0.0.1:$PUBLIC_PORT/"
 echo -n "sfw profile:       "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@criticalnexus"
 echo -n "adult profile:     "; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PUBLIC_PORT/@steeltitan"
+# The W0 contract: the document must be SERVED and must tell the truth about this site. A 404 here
+# means the vhost does not include the estate snippet; a route that 404s means the document drifted.
+echo "capabilities:"
+bash $APP/scripts/check-capabilities.sh "http://127.0.0.1:$PUBLIC_PORT"
 REMOTE
 
 say "done"

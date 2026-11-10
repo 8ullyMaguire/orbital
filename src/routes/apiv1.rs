@@ -34,6 +34,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/members/{handle}", get(member))
         .route("/api/v1/members/{handle}/links", get(member_links))
         .route("/api/v1/links/health", get(link_health))
+        .route("/api/v1/search", get(search))
         .route("/api/v1/ring/{slug}", get(ring))
         .merge(super::tokens::v1_router())
 }
@@ -115,6 +116,55 @@ async fn link_counts(st: &AppState) -> PageResult<Value> {
     .fetch_one(&st.pool)
     .await?;
     Ok(json!({ "total": row.0, "failing": row.1, "unchecked": row.2 }))
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+/// `GET /api/v1/search?q=&limit=` — the same query the HTML page runs, in a shape a client can use.
+///
+/// It is not a second search implementation: `store::search` is the one query, and this route
+/// serialises its two outputs (members and tag counts) instead of rendering them. It exists because
+/// the estate's capabilities contract declares a search route, and a declaration with nothing behind
+/// it is exactly what that contract was written to prevent.
+///
+/// The adult layer is filtered here, unconditionally: the read API hands out no identity, so it
+/// cannot honour a per-viewer opt-in and must not leak the layer to a viewer who never opted in.
+async fn search(
+    State(st): State<AppState>,
+    Query(q): Query<SearchQuery>,
+    headers: HeaderMap,
+) -> PageResult<Response> {
+    let limit = q.limit.unwrap_or(20).clamp(1, 100);
+    let term = q.q.trim().to_string();
+    if term.is_empty() {
+        return Ok(cached(
+            &headers,
+            json!({ "q": "", "total": 0, "members": [], "tags": [] }),
+        ));
+    }
+    let (mut members, tags) = store::search(&st.pool, &term, true).await?;
+    members.retain(|m| !m.nsfw_enabled);
+    let total = members.len() as i64;
+    let rows: Vec<Value> = members
+        .iter()
+        .take(limit as usize)
+        .map(|m| member_json(m, &st.cfg.public_base))
+        .collect();
+    let tag_rows: Vec<Value> = tags
+        .iter()
+        .take(limit as usize)
+        .map(|(slug, count)| json!({ "slug": slug, "count": count, "url": format!("/search?q={slug}") }))
+        .collect();
+    Ok(cached(
+        &headers,
+        json!({ "q": term, "total": total, "members": rows, "tags": tag_rows }),
+    ))
 }
 
 async fn verticals(State(st): State<AppState>, headers: HeaderMap) -> PageResult<Response> {

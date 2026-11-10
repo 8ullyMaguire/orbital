@@ -1483,3 +1483,41 @@ async fn the_site_reads_in_spanish_when_asked(pool: PgPool) {
     .await;
     assert!(negotiated.body.contains("Ir al contenido"), "Accept-Language is honoured");
 }
+
+#[sqlx::test]
+async fn the_read_api_search_answers_the_route_the_capability_document_declares(pool: PgPool) {
+    // The estate's capabilities document declares `search: local` with a route. A declaration with
+    // no route behind it is what the W0 contract exists to prevent, so this test asks the route the
+    // same question the HTML page answers: does it find the member, and does it name the tags?
+    let app = app(pool).await;
+    register(&app, "searcher", "dev").await;
+
+    let hit = call(&app, get("/api/v1/search?q=searcher")).await;
+    assert_eq!(hit.status, StatusCode::OK, "{}", hit.body);
+    let body: serde_json::Value = serde_json::from_str(&hit.body).expect("the route must answer JSON");
+    assert_eq!(body["q"], "searcher", "{}", hit.body);
+    assert!(
+        body["total"].as_i64().unwrap_or(0) >= 1,
+        "the member the page finds must be found here: {}",
+        hit.body
+    );
+    assert!(
+        body["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["handle"] == "searcher"),
+        "{}",
+        hit.body
+    );
+    assert!(hit.etag.is_some(), "the contract asks for a validator");
+    assert_eq!(hit.cors.as_deref(), Some("*"), "a client must be able to call it");
+
+    // An empty query is not an error, and it must not dump the directory: a client that forgets `q`
+    // would otherwise receive every member on the site.
+    let empty = call(&app, get("/api/v1/search?q=")).await;
+    assert_eq!(empty.status, StatusCode::OK, "{}", empty.body);
+    let eb: serde_json::Value = serde_json::from_str(&empty.body).unwrap();
+    assert_eq!(eb["total"], 0, "{}", empty.body);
+    assert!(eb["members"].as_array().unwrap().is_empty(), "{}", empty.body);
+}
