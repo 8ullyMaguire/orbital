@@ -35,7 +35,7 @@ pub enum Mode {
     Damped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub mode: Mode,
     pub alpha: f64,
