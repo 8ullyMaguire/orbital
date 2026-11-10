@@ -436,9 +436,10 @@ mod tests {
     fn a_person_with_no_visitors_does_not_rise() {
         let now = Utc::now();
         let out = rank_trending(
-            vec![member("quiet", 0, 2, 2, &[]), member("loud", 9, 400, 2, &[])],
+            vec![member("quiet", 0, 2, 2, &[], 1.0), member("loud", 9, 400, 2, &[], 1.0)],
             now,
             &[],
+            1.0,
         );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].handle, "loud");
@@ -447,7 +448,7 @@ mod tests {
     #[test]
     fn trending_is_empty_when_nobody_has_traffic() {
         let now = Utc::now();
-        let out = rank_trending(vec![member("a", 0, 1, 0, &[])], now, &[]);
+        let out = rank_trending(vec![member("a", 0, 1, 0, &[], 1.0)], now, &[], 1.0);
         assert!(out.is_empty(), "a zero-traffic vertical must hide the tab");
     }
 
@@ -475,7 +476,7 @@ mod tests {
         assert!((cosine(&a, &b) - 1.0).abs() < 1e-9);
         let c = vec!["rust".to_string()];
         assert!((cosine(&a, &c) - 0.7071).abs() < 1e-3);
-        assert_eq!(cosine(&a, &[]), 0.0);
+        assert_eq!(cosine(&a, &[], 1.0), 0.0);
     }
 
     #[test]
@@ -508,7 +509,7 @@ mod tests {
 
     #[test]
     fn neighbours_wrap_around() {
-        let members: Vec<MemberStat> = (0..3).map(|i| member(&format!("m{i}"), 0, 1, 0, &[])).collect();
+        let members: Vec<MemberStat> = (0..3).map(|i| member(&format!("m{i}"), 0, 1, 0, &[], 1.0)).collect();
         let order = ring(&members, &[], &[], 1);
         let (prev, next) = neighbours(&order, order[0].id);
         assert_eq!(prev.unwrap().id, order[2].id);
@@ -527,7 +528,7 @@ mod tests {
     #[test]
     fn relevance_is_a_weighted_share_and_zero_without_weights() {
         let tags = vec!["chiptune".to_string(), "godot".to_string()];
-        assert_eq!(tag_relevance(&tags, &[]), 0.0, "no weights, no opinion");
+        assert_eq!(tag_relevance(&tags, &[], 1.0), 0.0, "no weights, no opinion");
         assert_eq!(
             tag_relevance(&tags, &[("chiptune".into(), 1.0)]),
             1.0,
@@ -553,10 +554,10 @@ mod tests {
         b.clicks = 100;
         let weights = vec![("chiptune".to_string(), 1.0)];
 
-        let plain = rank_top(vec![a.clone(), b.clone()], &[]);
+        let plain = rank_top(vec![a.clone(), b.clone()], &[], 1.0);
         assert_eq!(plain[0].handle, "busier", "clicks decide without a lens");
 
-        let tuned = rank_top(vec![a.clone(), b.clone()], &weights);
+        let tuned = rank_top(vec![a.clone(), b.clone()], &weights, 1.0);
         assert_eq!(tuned[0].handle, "matching", "a full weight on a held tag flips a narrow lead");
 
         // ...and it cannot flip a wide one.
@@ -564,7 +565,7 @@ mod tests {
         far.clicks = 1;
         let mut loud = member("loud", 1, 40, 2, &["podcast"]);
         loud.clicks = 100;
-        let tuned = rank_top(vec![far, loud], &weights);
+        let tuned = rank_top(vec![far, loud], &weights, 1.0);
         assert_eq!(tuned[0].handle, "loud", "relevance is 40%, not a veto");
     }
 
@@ -577,7 +578,7 @@ mod tests {
         b.clicks = 90;
         let mut c = member("c", 10, 9, 2, &["x"]);
         c.clicks = 5;
-        let order = rank_top(vec![a, b, c], &[]);
+        let order = rank_top(vec![a, b, c], &[], 1.0);
         assert_eq!(
             order.iter().map(|m| m.handle.as_str()).collect::<Vec<_>>(),
             vec!["b", "c", "a"],
@@ -599,13 +600,13 @@ mod tests {
         // Both hold the tag, so relevance is saturated for both: the endorsement is the only
         // difference, which is exactly the case the additive term exists for.
 
-        let order = rank_top(vec![plain.clone(), liked.clone()], &weights);
+        let order = rank_top(vec![plain.clone(), liked.clone()], &weights, 1.0);
         assert_eq!(order[0].handle, "zzz", "an endorsed tag lifts its member");
 
         // Without the endorsement the same pair falls back to the tie-break.
         let mut liked_plain = liked.clone();
         liked_plain.endorse = 0.0;
-        let order = rank_top(vec![plain, liked_plain], &weights);
+        let order = rank_top(vec![plain, liked_plain], &weights, 1.0);
         assert_eq!(order[0].handle, "aaa", "no endorsement, no lift");
     }
 
@@ -619,9 +620,9 @@ mod tests {
         muso.verticals = vec!["music".into()];
         let weights = vec![("v:music".to_string(), 1.0)];
 
-        assert_eq!(relevance(&dev, &weights), 0.0);
-        assert_eq!(relevance(&muso, &weights), 1.0);
-        let order = rank_top(vec![dev, muso], &weights);
+        assert_eq!(relevance(&dev, &weights, 1.0), 0.0);
+        assert_eq!(relevance(&muso, &weights, 1.0), 1.0);
+        let order = rank_top(vec![dev, muso], &weights, 1.0);
         assert_eq!(order[0].handle, "muso");
     }
 
