@@ -31,6 +31,8 @@ DOCS = [
     ("docs/SPEC.md", "spec", "spec", "SPEC"),
     ("docs/ROADMAP.md", "plan", "plan", "ROADMAP (the ledger)"),
     ("docs/DECISIONS.md", "adr", "decisions", "DECISIONS"),
+    ("docs/SHARED-RECOMMENDATION.md", "wiki", "shared-recommendation",
+     "What orbital shares with kindred's recommender"),
     ("docs/monetization.md", "wiki", "monetization", "Monetization (measured, not claimed)"),
 ]
 VAULT_DOCS = [

@@ -725,3 +725,45 @@ declaration. Duplicated arithmetic in this repo is a defect, not a design choice
 **Consequences.** `git grep` for the deleted functions is part of the gate, and `cargo tree -i <crate>`
 is how the adoption is proved. Where orbital and the family disagree, the family wins unless it
 contradicts D9 (one surface) or D27 (the prior is silent).
+
+## D32 — Capabilities are declared through the estate's mechanism, and `taste` is declared off
+
+**Context.** The estate's W0 contract requires every public host to answer `GET /api/v1/capabilities`,
+and orbital answered **404** — measured 2026-11-10 — while the manifest's document for orbital sat
+correctly installed in `/var/www/estate/capabilities/orbital.json`. The vhost proxied all of `/api/v1/`
+to the app and never included the snippet, so the contract was unmet by an nginx line, not by a product
+feature. The same measurement found the manifest under-declaring: `search`, `recs` and `preservation`
+were `off` while the site has all three (`/search`, Top/Trending ordering, nightly dumps plus a monthly
+restore test).
+
+**Decision.** Orbital adopts the estate's mechanism and does not implement the document in Rust:
+`estate.toml` is the declaration, `tools/estate.py render` produces it, `install-capabilities.sh`
+publishes it, the nginx snippet's exact-match `location` serves it, and `scripts/check-capabilities.sh`
+is the deploy gate (200 with the right `Host`, `site = orbital`, every declared route answering).
+Because a declared capability must have a route behind it, orbital gained a real
+`GET /api/v1/search?q=` that serialises the one `store::search` query the HTML page already runs.
+
+**And `capabilities.taste` stays `off`, publicly, while an ordering prior exists.** D27 forbids any
+public surface from revealing that a prior exists; this document is a public surface, so declaring a
+taste capability would announce the exact thing the owner forbade. The estate's capability-truth rule is
+about not over-claiming to clients; under-declaring a private ranking costs a client nothing and is the
+only option that satisfies D27.
+
+**Rejected alternatives.**
+
+- *A Rust `/api/v1/capabilities` handler.* It would be a second implementation of the manifest, and it
+  would drift the moment `estate.toml` changed — the estate has already paid for that pattern six
+  times (six notification implementations).
+- *Declaring `taste = "local"` because it is true.* True and disclosing. The public document is not the
+  place for a true value that leaks a private one.
+- *Leaving the 404 and documenting the gap.* A contract that is machine-readable or nothing: a client
+  cannot distinguish "no capabilities" from "nginx forgot".
+- *Declaring `search = "off"` to avoid writing a route.* That is the under-declaration this decision
+  fixes; the route is 40 lines over an existing query.
+
+**Consequences.** The deploy now fails if the contract breaks, which is the point. `capabilities` is a
+disclosure surface with a rule attached (roadmap §6.2): any future capability that hints at the prior
+stays `off`. The gate itself had two bugs on first contact — it dialled the origin without a `Host`, so
+the estate map produced an empty document name and a false 404, and it counted Cloudflare's 403 for
+Python's default agent as "the route answers". Both are fixed and both are recorded here because a gate
+is a program and it fails like one.
