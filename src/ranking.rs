@@ -65,6 +65,12 @@ pub fn relevance(m: &MemberStat, weights: &[(String, f64)]) -> f64 {
     (hit / total).clamp(0.0, 1.0)
 }
 
+/// Half-life decay on a member's own last activity.
+///
+/// **Uncalled today, on purpose.** Its only caller was `similarity`, the sidebar blend D49 replaced with the
+/// neighbourhood; nothing else in the ranking reads `last_active_at`, so an absent owner currently ranks exactly
+/// like an active one with the same audience. This function is the seam the activity step (ROADMAP §4) will wire,
+/// with the weight chosen by `orbital eval` — it is left here, with its test, rather than deleted and retyped.
 pub fn recency(last_active: DateTime<Utc>, now: DateTime<Utc>) -> f64 {
     let days = (now - last_active).num_seconds().max(0) as f64 / 86_400.0;
     0.5f64.powf(days / 30.0)
@@ -91,35 +97,6 @@ pub fn vertical_match_full(candidate_verticals: &[String], context: Option<&str>
             }
         }
     }
-}
-
-/// The sidebar formula from v3: the viewer's stated taste dominates, the page owner gives context,
-/// and the hub owner's pull is a light hand (0.15, down from 0.35).
-///
-/// The viewer term is their **weights** when they have any, and their own tags when they do not —
-/// a signed-in member who never opened the tuner still gets a sidebar about them rather than a
-/// sidebar about whoever happens to be popular. The six terms sum to 1 in both cases, so a score
-/// means the same thing whether or not the viewer has tuned anything.
-pub fn similarity(
-    viewer_tags: &[String],
-    owner_tags: &[String],
-    hub_tags: &[String],
-    viewer_weights: &[(String, f64)],
-    candidate: &MemberStat,
-    context: Option<&str>,
-    now: DateTime<Utc>,
-) -> f64 {
-    let relevance = if viewer_weights.is_empty() {
-        cosine(&candidate.tags, viewer_tags)
-    } else {
-        relevance(candidate, viewer_weights)
-    };
-    0.40 * relevance
-        + 0.25 * cosine(&candidate.tags, owner_tags)
-        + 0.15 * cosine(&candidate.tags, hub_tags)
-        + 0.10 * vertical_match_full(&candidate.verticals, context)
-        + 0.05 * recency(candidate.last_active_at, now)
-        + 0.05 * (candidate.trust_level as f64 / 3.0)
 }
 
 /// Top: 60% all-time attention, 40% "is this what the viewer asked for".
