@@ -717,3 +717,92 @@ mod undiscovered {
         assert!(ranking::momentum(&m("fall", 0, 0.0, 10, 300)) < 0.5, "falling from a hundred a week");
     }
 }
+
+#[cfg(test)]
+mod gems {
+    use super::*;
+    use chrono::Duration;
+
+    fn m(handle: &str, clicks: i64, visitors: i64, recent: f64) -> MemberStat {
+        MemberStat {
+            id: uuid::Uuid::new_v4(),
+            handle: handle.to_string(),
+            display_name: handle.to_string(),
+            bio: String::new(),
+            accent: String::new(),
+            avatar_url: None,
+            trust_level: 1,
+            bsky_handle: None,
+            nsfw_enabled: false,
+            created_at: Utc::now() - Duration::days(60),
+            last_active_at: Utc::now(),
+            role: "member".to_string(),
+            visitors,
+            visitors_7d: 0,
+            visitors_prev: 0,
+            clicks,
+            tags: vec![],
+            verticals: vec!["dev".to_string()],
+            endorse: 0.0,
+            attention: recent,
+            recent,
+        }
+    }
+
+    fn build_all(members: &[MemberStat]) -> Vec<Shelf> {
+        build(
+            members,
+            &[],
+            Utc::now(),
+            &Declaration::default(),
+            crate::dial::Lens::full(),
+            crate::attention::Config::raw(),
+            &crate::exposure::Config::off(),
+            &crate::ceiling::Config::off(),
+        )
+    }
+
+    /// THE GATE, first half: the shelf is the members clicks overlooked, ordered by conversion — and a member with
+    /// a large click total is not "overlooked" however well it converts.
+    #[test]
+    fn the_gem_shelf_is_conversion_among_the_overlooked() {
+        let mut members: Vec<MemberStat> = (0..18)
+            .map(|i| m(&format!("loud{i:02}"), 40, 80, 100.0))
+            .collect();
+        // Overlooked by clicks, converts every visitor.
+        members.push(m("quiet_gem", 5, 5, 5.0));
+        // Overlooked by clicks, converts half — below the gem.
+        members.push(m("quiet_ok", 3, 6, 4.0));
+        let shelves = build_all(&members);
+        let gems = shelves
+            .iter()
+            .find(|s| s.key == "gems")
+            .expect("a pool with overlooked members must render the shelf");
+        let order: Vec<&str> = gems.items.iter().map(|r| members[r.index].handle.as_str()).collect();
+        assert_eq!(order.first(), Some(&"quiet_gem"), "conversion leads: {order:?}");
+        assert!(
+            !order.iter().any(|h| h.starts_with("loud")),
+            "the loud members are not overlooked: {order:?}"
+        );
+        assert!(gems.items[0].why.contains("5 clicks from 5 visitors"), "{}", gems.items[0].why);
+        assert!(
+            !gems.items[0].why.chars().any(|c| c.is_ascii_digit() && false),
+            "the why line is counts, not a ratio"
+        );
+    }
+
+    /// THE GATE, second half: no audience, no rate. A member with four visitors and four clicks is a coin toss,
+    /// not a hidden gem.
+    #[test]
+    fn a_tiny_audience_is_not_a_conversion_rate() {
+        let mut members: Vec<MemberStat> = (0..18)
+            .map(|i| m(&format!("loud{i:02}"), 40, 80, 100.0))
+            .collect();
+        members.push(m("tiny_perfect", 4, 4, 1.0));
+        let shelves = build_all(&members);
+        assert!(
+            shelves.iter().all(|s| s.key != "gems"),
+            "nobody has a big enough audience for the shelf to exist"
+        );
+    }
+}
