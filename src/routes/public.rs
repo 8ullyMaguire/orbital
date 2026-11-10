@@ -185,10 +185,17 @@ pub async fn home(
     // The picks rail is the same page view, so it obeys the same cross-shelf rule (D43): a member the
     // shelves already show is not shown again here. Without this the cap would be true of three sections
     // and false of the fourth, which is how a rule quietly stops being a rule.
-    let already: std::collections::HashSet<String> = shelves
-        .iter()
-        .flat_map(|s| s.cards.iter().map(|c| c.handle.clone()))
-        .collect();
+    // With the caps declared off, this filter must not run either: `slots_per_member: 0` is the escape
+    // hatch that restores the page that shipped before D43, and a page that still dropped repeats here
+    // would make that promise false by one section.
+    let already: std::collections::HashSet<String> = if st.cfg.exposure.is_off() {
+        std::collections::HashSet::new()
+    } else {
+        shelves
+            .iter()
+            .flat_map(|s| s.cards.iter().map(|c| c.handle.clone()))
+            .collect()
+    };
     let picks: Vec<MemberCard> = store::curated_any(&st.pool, true, 6)
         .await?
         .iter()
