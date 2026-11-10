@@ -164,3 +164,59 @@ pub async fn latest(pool: &PgPool) -> Result<Vec<Snapshot>> {
         })
         .collect())
 }
+
+/// The floor under a long-tail claim, in impressions. Chosen so a day of traffic cannot produce one: below this
+/// many impressions the share moves by whole percents on a single visitor's page view, and reporting it would be
+/// reporting noise with a number attached.
+pub const LONG_TAIL_FLOOR: i64 = 200;
+
+/// What share of a window's impressions went to the members below the median exposure.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LongTail {
+    pub total: i64,
+    pub tail_impressions: i64,
+    pub tail_members: usize,
+    pub share: f64,
+    pub window_hours: i64,
+}
+
+impl LongTail {
+    /// The line `orbital impressions` prints — and the step's gate reads. Under the floor it refuses.
+    pub fn verdict(&self) -> String {
+        if self.total < LONG_TAIL_FLOOR {
+            return format!(
+                "NO VERDICT — only {} impression(s) in {}h; the floor is {}",
+                self.total, self.window_hours, LONG_TAIL_FLOOR
+            );
+        }
+        format!(
+            "long tail: {:.1}% of {} impression(s) in {}h went to the {} member(s) below the median exposure",
+            self.share * 100.0,
+            self.total,
+            self.window_hours,
+            self.tail_members
+        )
+    }
+}
+
+/// `rows` is `(exposure, impressions)` per member. The tail is the members whose exposure is *strictly* below the
+/// median of the pool's exposure: an all-flat pool has no tail, and the answer is a zero share rather than a
+/// fabricated half. `None` when the window holds no impressions at all — "nobody was shown anything" and "the tail
+/// got nothing" are different facts.
+pub fn long_tail(rows: &[(f64, i64)]) -> Option<LongTail> {
+    let total: i64 = rows.iter().map(|(_, i)| *i).sum();
+    if total <= 0 {
+        return None;
+    }
+    let exposures: Vec<f64> = rows.iter().map(|(e, _)| *e).collect();
+    let median = crate::exposure::percentile(&exposures, 0.5);
+    let tail: Vec<&(f64, i64)> = rows.iter().filter(|(e, _)| *e < median).collect();
+    let tail_impressions: i64 = tail.iter().map(|(_, i)| *i).sum();
+    Some(LongTail {
+        total,
+        tail_impressions,
+        tail_members: tail.len(),
+        share: tail_impressions as f64 / total as f64,
+        window_hours: 24,
+    })
+}
