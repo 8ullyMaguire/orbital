@@ -80,7 +80,10 @@ impl Config {
             dial: DialConfig::for_test(),
             attention: AttentionConfig::for_test(),
             exposure: ExposureConfig::for_test(),
-            ceiling: CeilingConfig::for_test(),
+            // Off in tests on purpose: every render now records impressions, so a fixture that renders the
+            // page a dozen times would trip a real ceiling and change the order some other test is
+            // asserting. The ceiling's own tests opt in, exactly as the exposure tests opt out.
+            ceiling: CeilingConfig::off(),
         }
     }
 

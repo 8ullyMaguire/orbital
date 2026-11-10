@@ -2255,3 +2255,97 @@ async fn the_same_vertical_twice_is_the_same_bytes(pool: PgPool) {
         panic!("the same page twice differs at line {}: {:?} vs {:?}", at + 1, a.get(at), b.get(at));
     }
 }
+
+/// THE GATE, on the page: a member over its share of the surface's 24-hour impressions is not shown, and is
+/// shown again once the window has moved past those impressions.
+#[sqlx::test]
+async fn a_member_over_the_impression_ceiling_is_not_shown_until_the_window_moves(pool: PgPool) {
+    let mut cfg = test_config();
+    cfg.ceiling = orbital::ceiling::Config::default();
+    let app = app_with(pool.clone(), cfg).await;
+
+    for handle in ["loud", "bravo", "charlie", "delta", "echo", "foxtrot"] {
+        register(&app, handle, "dev").await;
+    }
+    for handle in ["loud", "bravo", "charlie", "delta", "echo", "foxtrot"] {
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, 3) g WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("imp-{handle}"))
+        .execute(&pool)
+        .await
+        .expect("real hits");
+    }
+
+    let loud: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'loud'")
+        .fetch_one(&pool)
+        .await
+        .expect("a member");
+    sqlx::query(
+        "INSERT INTO impressions (surface, user_id, bucket, count)
+         VALUES ('home', $1, date_trunc('hour', now()), 100),
+                ('home', (SELECT id FROM users WHERE handle = 'bravo'), date_trunc('hour', now()), 1),
+                ('home', (SELECT id FROM users WHERE handle = 'charlie'), date_trunc('hour', now()), 1)",
+    )
+    .bind(loud)
+    .execute(&pool)
+    .await
+    .expect("real impressions");
+
+    let capped = call(&app, get("/")).await;
+    assert_eq!(capped.status, StatusCode::OK);
+    assert!(
+        !capped.body.contains("/@loud"),
+        "100 of 102 impressions is over a 50% ceiling, so the member is not shown"
+    );
+    assert!(capped.body.contains("/@bravo"), "the members inside their share still are");
+
+    // The next day: the same rows, one day older, are outside the window.
+    sqlx::query("UPDATE impressions SET bucket = bucket - interval '25 hours'")
+        .execute(&pool)
+        .await
+        .expect("the window moves");
+    let uncapped = call(&app, get("/")).await;
+    assert!(
+        uncapped.body.contains("/@loud"),
+        "with the impressions outside the window the member is shown again"
+    );
+}
+
+/// A render records what it showed: the ceiling cannot be computed from clicks, so the exposure side has to
+/// be measured, and measured after the choice rather than before it.
+#[sqlx::test]
+async fn a_home_render_records_its_impressions(pool: PgPool) {
+    let mut cfg = test_config();
+    cfg.ceiling = orbital::ceiling::Config::default();
+    let app = app_with(pool.clone(), cfg).await;
+    for handle in ["alpha", "bravo", "charlie"] {
+        register(&app, handle, "dev").await;
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 FROM users u WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("rec-{handle}"))
+        .execute(&pool)
+        .await
+        .expect("a hit");
+    }
+    let before = orbital::store::impressions_window(&pool, "home", 24).await.expect("window");
+    assert!(before.is_empty(), "nothing shown yet: {before:?}");
+
+    let page = call(&app, get("/")).await;
+    assert_eq!(page.status, StatusCode::OK);
+
+    let after = orbital::store::impressions_window(&pool, "home", 24).await.expect("window");
+    assert!(!after.is_empty(), "one render must record what it showed");
+    for (id, n) in &after {
+        assert_eq!(*n, 1, "one render, one impression per member ({id})");
+        assert!(
+            page.body.contains("@"),
+            "and the page it recorded is the page it served"
+        );
+    }
+}
