@@ -1378,3 +1378,50 @@ on the tuner's `in dev weight` line: `value="1"` in one render and `value="0"` i
 step is now not a step (`the removes-flicker` tests: `row_weight(0.05) == 0`, and `0.3` still shows as `3`
 despite `0.3 * 10` being `2.9999999999999996`). It was also a lie to the visitor: one page read is not a
 preference they expressed.
+
+## D48 — Tag overlap: the rarity weighting built and proven, wired nowhere until the eval can measure it
+
+**Context.** `cosine` claimed to weight rare tags and did not. The roadmap's step is "adopt
+`polaris-candidates::signal` + IDF tag overlap, replacing `cosine` and `tag_relevance`, with top-10 byte-identical
+for 200 seeds" — two instructions that pull against each other the moment a real pool has an uneven tag
+distribution, because IDF *changes* the ordering of a ranking that is otherwise fixed.
+
+**Decision.** Split the two claims and satisfy both without lying about either.
+
+- **One module** holds both entry points (`src/overlap.rs`); the definitions in `ranking.rs` are deleted, and
+  `the_old_definitions_survive_only_in_the_adapter` reads `src/` and fails if a second definition appears.
+- **The page keeps the uniform arithmetic** (`Overlap::uniform()`), so the ordering is unchanged bit for bit —
+  proven against the deleted formula over 10,000+ pairs in 200 seeded pools, not asserted.
+- **The IDF arithmetic exists and is tested** (`Overlap::from_sets`, `TagSignal`), normalised so the rarest tag
+  weighs `1.0` and a uniform pool is exactly the old formula.
+- **The pool-level path is not wired into any surface.** A test asserts `ranking.rs` never mentions
+  `Overlap::from_sets` or `TagSignal`; enabling it is an order change, and order changes wait for `orbital eval`
+  (ROADMAP §3). The neighbourhood step is where it becomes live, with the eval as its gate.
+- **The crate's contract is adopted at the seam**: `TagSignal` implements `polaris_candidates::Signal`, and
+  absence is `None`. The rankers still read `None` as zero, because that is what they meant; the seam can now say
+  which it is.
+
+**Rejected alternatives.**
+
+- *Wire IDF into the page now.* It changes orders on uneven pools, and the roadmap's own rule is that an order
+  change gets measured first. "Adopt" is not permission to smuggle a ranking change in behind a refactor.
+- *Keep the unweighted arithmetic and just fix the comment.* Cheaper, but it leaves the estate without the one
+  thing every other recommender already has, and the neighbourhood surface needs it.
+- *Clamp `pair` to `[0,1]` like the old prose implied.* A self-overlap of three tags is `1.0000000000000002`; the
+  clamp hid a one-ulp difference and broke the "same arithmetic" claim. The bound belongs at the signal seam.
+- *Rename `cosine`/`tag_relevance` while moving them.* Thirty-one call sites, no behaviour gained; the names are
+  what four rankers and a dozen tests already say.
+- *Use `polaris_candidates::Profile` for the weighted share.* Its names are `&'static str`; orbital's weights are
+  user tags. Adopting a crate does not mean forcing a type that does not fit.
+
+**Consequences.** **187 tests**. Gate, run on the deployed tree: `git grep -n "fn cosine\|fn tag_relevance" src/`
+→ `src/overlap.rs:155` and `src/overlap.rs:164`, nothing else — after renaming a test called
+`cosine_is_set_overlap`, which was the third match and would have satisfied the grep while defeating it. Live home
+order before and after the deploy: `(['criticalnexus', 'steeltitan'], ['for_you'])` both times, byte-identical.
+Three mutations prove the gate can fail: a one-ulp drift in the pair arithmetic, `Some(0.0)` for an empty side,
+and a second definition in `ranking.rs` (reported as `["src/ranking.rs defines `fn cosine(`"]`).
+
+One measurement artefact worth recording: `orbital doctor` reported `FAIL uptime probe 000` right after the deploy,
+because the probe fires every ten minutes and caught the service mid-restart. Re-running the probe by hand gave
+`200 at 2026-11-10T18:22:22+01:00` and `0 failure(s)`. A deploy therefore reads as one failed probe, and that is
+the probe working, not a regression.

@@ -339,6 +339,32 @@ give the same slot, on any host, which is what makes the page reproducible from 
 The clock is a date, not a timestamp: `day_key(date)` is days since the epoch, so two hosts that disagree by
 minutes still agree on the rotation.
 
+### 2d-bis. Tag overlap, and the comment that lied (D48)
+
+`ranking.rs::cosine` carried the comment "weighted so a rare tag counts for more than a tag everybody has" and then
+counted shared tags with no weights at all. It is now `src/overlap.rs`, and the weighting exists:
+
+| call | weighting | why |
+|---|---|---|
+| `overlap::cosine(a, b)` — what every ranker uses | uniform, `w(t) = 1.0` | this is the arithmetic the page already used, bit for bit |
+| `Overlap::from_sets(pool)` — built, tested, unwired | `idf(t) = ln(1 + N/df(t))`, normalised so the rarest tag weighs `1.0` | for the neighbourhood surface, once an order change can be measured |
+| `TagSignal` — the crate's seam | `Option<f64>`, `None` when a side has no tags | absence is a fact, not a zero |
+
+Normalising by the rarest tag is what makes the two rows agree on a pool where no tag is rarer than another: every
+weight is `1.0`, the sums are the old sums, and the result is identical to the last bit. The gate compares **10,000+
+pairs over 200 seeded pools** against the deleted formula, kept as an oracle in `tests/overlap.rs`.
+
+**Why the pool-level weighting is not wired.** Turning it on changes an order on any pool whose tags are unevenly
+distributed, and `docs/ROADMAP.md` §3 forbids an order change before `orbital eval` has measured it. So the
+arithmetic ships, the seam ships, and `the_page_ranks_with_the_uniform_entry_point_and_nothing_else` fails if a
+pool-level overlap ever reaches `ranking.rs` without that gate. The IDF path is not dead code: it is the
+neighbourhood step's input, and it is proven to do something (a rare tag outweighs a common one on a skewed pool,
+where the old formula gave both pairs the same score).
+
+`polaris_candidates::Signal` is adopted; `polaris_candidates::Profile` is not usable here — its names are
+`&'static str` signal names, and orbital's weights are user-authored tags. Recorded in
+`docs/SHARED-RECOMMENDATION.md` rather than worked around.
+
 ### 2c-septies. The guardrail, and the one clause of its gate that is false (D47)
 
 Damping has one promise and one exemption.
