@@ -1210,6 +1210,7 @@ mod tests {
             role: "primary".into(),
             visitors: 0,
             visitors_7d: 0,
+            visitors_prev: 0,
             clicks: 0,
             endorse: 0.0,
             attention: 0.0,

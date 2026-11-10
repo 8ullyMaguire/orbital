@@ -505,6 +505,7 @@ mod probe {
             role: "member".to_string(),
             visitors: clicks,
             visitors_7d: v7,
+            visitors_prev: 0,
             clicks,
             tags: vec![],
             verticals: vec!["dev".to_string()],

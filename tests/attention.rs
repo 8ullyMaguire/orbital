@@ -28,6 +28,7 @@ fn member(handle: &str, clicks: i64, attention: f64) -> MemberStat {
         role: "member".into(),
         visitors: clicks,
         visitors_7d: clicks,
+        visitors_prev: 0,
         clicks,
         tags: Vec::new(),
         verticals: Vec::new(),

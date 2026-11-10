@@ -496,6 +496,7 @@ mod tests {
             role: "primary".into(),
             visitors: visitors_7d,
             visitors_7d,
+            visitors_prev: 0,
             clicks: visitors_7d,
             tags: tags.iter().map(|s| s.to_string()).collect(),
             verticals: vec!["dev".into()],
