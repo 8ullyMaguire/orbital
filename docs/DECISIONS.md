@@ -767,3 +767,35 @@ stays `off`. The gate itself had two bugs on first contact — it dialled the or
 the estate map produced an empty document name and a false 404, and it counted Cloudflare's 403 for
 Python's default agent as "the route answers". Both are fixed and both are recorded here because a gate
 is a program and it fails like one.
+
+## D33 — The home shelves are a composition, and the ordered two are frozen at lambda 1.0
+
+**Context.** The home page carried three lists, each computed inline and truncated with its own
+`.take(6)`: no record of which source proposed a card, no budget, no diversity, and no shared arithmetic
+with the rest of the estate. Roadmap step 1 replaced them with three shelves composed by
+`polaris-candidates` (D31).
+
+**Decision.** A shelf is a composition: named sources, a declared per-source budget, provenance, then a
+selection. `for_you` unions the viewer's tag relevance with raw clicks and runs MMR at
+`for_you_lambda = 0.85`; `rising` and `new` each have one source and run at **1.0 — pure relevance**,
+which makes their order identical to `rank_trending` / `rank_new`. That equality is a *promise to the
+reader*: a change to those two shelves changes what the site says "rising" means, so it needs its own
+gate and its own declaration, not an edit inside a selection call.
+
+An empty shelf renders no heading (it is not backfilled), and every card's `why` is built only from facts
+the reader can observe — their own tags, clicks, visitors, age. Never the prior (D27).
+
+**Rejected alternatives.**
+
+- *Keep the inline loops and add diversity to one of them.* That is the fourth copy of the same
+  arithmetic, and it is the copy that drifts (the estate's three divergent `trust_mult`s).
+- *Run MMR at 0.85 on all three shelves.* "Rising" would then rename cards in a list whose definition is
+  a visitor count; a shelf named after a fact must be sorted by that fact.
+- *Backfill an empty shelf with the next-best list.* A zero-filled "rising" list is a recency list
+  wearing a costume, and the reader cannot tell.
+
+**Consequences.** The shelf declaration is a temporary constant in `src/shelf.rs`; roadmap step 2 moves
+it into the config file with per-surface ceilings, and step 4 gives any weight change an eval with a
+decision rule. Until then the two ordered shelves are frozen by a unit test
+(`the_ordered_shelves_keep_the_rankers_own_order`), which is the cheapest possible guard against a
+"harmless" weight edit.

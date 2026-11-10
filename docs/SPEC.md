@@ -193,6 +193,28 @@ list is a recency list wearing a costume).
 0.10 · trust_level/3
 ```
 
+## 2b. The home shelves
+
+The home page carries three shelves — `for_you`, `rising`, `new` — and each is a **composition**, not a
+sort: named sources, a declared per-source budget, provenance, then selection. The arithmetic is
+`polaris-candidates` (`compose`, `select`, `convex`), the crate kindred and darkhold already run; orbital
+owns only the source lists, the shelf names and the `why` line (SPEC §1e's silence rule applies to it).
+
+| shelf | sources | selection |
+|---|---|---|
+| `for_you` | viewer tag relevance (`rank_top`) + raw clicks | MMR at `for_you_lambda` (default 0.85) |
+| `rising` | `rank_trending` | MMR at 1.0 — pure relevance, i.e. the ranker's own order |
+| `new` | `rank_new` | MMR at 1.0 — the ranker's own order |
+
+`lambda = 1.0` is what makes the ordered shelves **byte-identical** to the lists they replaced; a change
+to those two shelves is therefore a declared change and needs its own gate. A shelf whose candidates are
+all filtered out (e.g. `rising` with no visitors in seven days) renders no heading at all: an empty shelf
+is not backfilled, because a zero-filled "rising" list is a recency list wearing a costume.
+
+Every card carries a `why` string built only from facts the reader can observe: a tag the *viewer* set,
+clicks, visitors this week, or age. It may never cite the instance's prior (D27) — the same silence rule
+as every other surface.
+
 Context vertical: the vertical page being viewed, else the profile's primary.
 
 **Ring** — per vertical and global, ordered by taste-similarity to the hub owner

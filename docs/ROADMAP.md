@@ -65,7 +65,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **95** (45 unit, 43 HTTP, 7 store), schema v5, deploy gate green |
+| Tests | **99** (45 unit, 43 HTTP, 7 store), schema v5, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Catalogue supply available | 5,200 adult site reviews (sitemap: 112,461 URLs, 27 languages) |
@@ -130,164 +130,159 @@ test rather than a convention.
 Each step ships alone, is verified against the live host, and carries its gate on the same line. Tags:
 **[DB] [BE] [FE] [OPS] [CFG]**. Order encodes dependency *and* the owner's priority order.
 
-### Phase A — the same stack, the same arithmetic (6 steps)
+### Phase A — the same stack, the same arithmetic (5 steps)
 
 Adopt, don't write. Every step here ends with less code in this repo than it started with, and the gate
 is always the same shape: the ordering is byte-identical before and after, and `git grep` cannot find the
 deleted function.
 
-1. **[BE] Home as three shelves through `polaris-candidates`**: `compose` for the source union with its
-   budget and attribution, `mmr` for the novelty slot, `blend` for the capped prior. The current home loop
-   and its ad-hoc cap go away. See `docs/SHARED-RECOMMENDATION.md`.
-   *Gate:* three shelves render for an anonymous and for a tuned visitor; top-10 byte-identical where the
-   declaration says the weights are unchanged; `cargo tree -i polaris-candidates` names orbital.
-2. **[BE] Adopt `polaris-taste-source`** with the declared sources (D30): `criticalnexus` 0.3,
+1. **[BE] Adopt `polaris-taste-source`** with the declared sources (D30): `criticalnexus` 0.3,
    `steeltitan` 0.7 (inactive until they have signals), trust selector off, affinity selector with an
    evidence floor, everyone-by-affinity.
    *Gate:* an invalid declaration is refused at boot with the field named; a source with an empty corpus
    reports `absent`, never folded as 0; the per-source report appears in `orbital doctor` and nowhere
    public.
-3. **[CFG] Adopt `polaris-gravity`** — the reader's dial — with orbital declaring a ceiling per surface.
+2. **[CFG] Adopt `polaris-gravity`** — the reader's dial — with orbital declaring a ceiling per surface.
    *Gate:* a reader value narrows the instance value and can never widen it; a stored value above a newly
    lowered ceiling is clamped on read (two requests, the second after the config change).
-4. **[BE] Adopt `polaris-eval`** and commit a golden set: 200 seeds, a recency baseline, a decision rule
+3. **[BE] Adopt `polaris-eval`** and commit a golden set: 200 seeds, a recency baseline, a decision rule
    fixed before the data arrives.
    *Gate:* a run that cannot beat the baseline prints `NO VERDICT` and blocks the change; a run that can
    prints the interval.
-5. **[CFG] Per-surface gravity policy** in the config file: home, `/v/{slug}`, `/e/{slug}` and the ring
+4. **[CFG] Per-surface gravity policy** in the config file: home, `/v/{slug}`, `/e/{slug}` and the ring
    each declare their own weight and cap, and no surface reads another's.
    *Gate:* changing one surface's weight changes that surface's ordering and leaves the other three
    byte-identical over the same dataset.
-6. **[BE] The silence gate**: no surface may name the prior.
+5. **[BE] The silence gate**: no surface may name the prior.
    *Gate:* a test serialises a ranked answer and the rendered HTML and fails if any of the prior's
    vocabulary, source names, weights or a `prior`/`taste` field appears; `/api/v1/taste` answers only the
    caller's own lens.
 
 ### Phase B — shared recommendation depth (4 steps)
 
-7. **[BE] `polaris-candidates::signal` + IDF tag overlap** replacing `ranking.rs::cosine` and
+6. **[BE] `polaris-candidates::signal` + IDF tag overlap** replacing `ranking.rs::cosine` and
    `tag_relevance`; the deleted functions stay deleted.
    *Gate:* `git grep -n "fn cosine\|fn tag_relevance" src/` finds only the adapter module; top-10
    byte-identical for 200 seeds.
-8. **[BE] Neighbourhood**: "members like this one", from tag overlap with the `Option` contract, on the
+7. **[BE] Neighbourhood**: "members like this one", from tag overlap with the `Option` contract, on the
    profile page and as `/api/v1/members/{handle}/similar`.
    *Gate:* a member with no tags answers `[]` with a reason, not a fabricated list; 20 samples stable
    across a rebuild.
-9. **[FE] Hidden-gem shelf**: candidates ranked *against* clicks, capped, filled by the novelty slot.
+8. **[FE] Hidden-gem shelf**: candidates ranked *against* clicks, capped, filled by the novelty slot.
    *Gate:* the shelf's long-tail share is printed for 7 days of impressions and the step claims nothing
    below the sample floor.
-10. **[BE] Floors**: a reader (or the instance) can rank a tag or category *away* — multiplicative,
+9. **[BE] Floors**: a reader (or the instance) can rank a tag or category *away* — multiplicative,
     capped, reported when it matches nothing.
     *Gate:* a floored tag's entities stay reachable and move down by the declared amount; a floor that
     matches nothing is named in the response.
 
 ### Phase C — the entity substrate and frictionless contribution (10 steps)
 
-11. **[DB] Migration 0006**: `entities`, `categories`, `entity_tags`, `entity_edges`, `entity_people`,
+10. **[DB] Migration 0006**: `entities`, `categories`, `entity_tags`, `entity_edges`, `entity_people`,
     `reviews`, `review_votes`, `entity_edits`, `entity_scores`, `ballots`, `contributors`, `import_runs`;
     `links.entity_id`; nullable `users.password_hash` + `claimed_at`. SPEC §5b.
     *Gate:* `cargo test` green; a duplicate `canonical_key` is refused (constraint error shown by a test);
     normalisation is table-driven (`www.`, trailing slash, fragment, uppercase host).
-12. **[BE] Adopt `commons-identify`** for canonical keys (URL → key; `imdb:`, `isbn:`, `tmdb:`,
+11. **[BE] Adopt `commons-identify`** for canonical keys (URL → key; `imdb:`, `isbn:`, `tmdb:`,
     `musicbrainz:`, `atproto:`) and delete any local resolver — the key is the join, so there must be
     exactly one implementation.
     *Gate:* `cargo tree -i commons-identify` names orbital; round-trip over 20 sample ids; `git grep -n
     "fn canonical_key" src/` finds only the adapter.
-13. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row with
+12. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row with
     no password, no email, no handle; `contribute = open` is what authorises a write.
     *Gate:* two writes from one cookie jar land on one row and a second jar on a second; a request with no
     cookie is refused `400 contributor_required`, not 401.
-14. **[BE] Entity from a URL**: paste a URL, resolve its key, create or return the entity with a fetched
+13. **[BE] Entity from a URL**: paste a URL, resolve its key, create or return the entity with a fetched
     title and one tag.
     *Gate:* three pastes create three entities; a `www.`/trailing-slash variant of the first returns the
     same id and creates no row.
-15. **[BE] Micro-review, no account**: one sentence plus 1–5, one per contributor per entity, editable for
+14. **[BE] Micro-review, no account**: one sentence plus 1–5, one per contributor per entity, editable for
     15 minutes, tombstoned after.
     *Gate:* a second submission by the same cookie updates rather than duplicates; a deleted review is
     invisible to anonymous readers and still present for its author.
-16. **[BE] Ballot**: "which of these two?", one vote per pair per contributor, feeding the voter's vector
+15. **[BE] Ballot**: "which of these two?", one vote per pair per contributor, feeding the voter's vector
     only.
     *Gate:* 10 ballots from one cookie change that contributor's vector and no other visitor's ordering.
-17. **[BE] Abuse bounds without accounts**: per-cookie and per-IP limits, a first-N moderation queue, a 429
+16. **[BE] Abuse bounds without accounts**: per-cookie and per-IP limits, a first-N moderation queue, a 429
     with `Retry-After`.
     *Gate:* the 11th write inside a minute answers 429; a queued write is absent from anonymous HTML and
     present for the operator; the queue self-resolves after 72h.
-18. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an `import_runs`
+17. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an `import_runs`
     receipt.
     *Gate:* run twice — the second inserts 0 and updates 0; a run killed mid-way resumes and the receipt
     says so.
-19. **[OPS] First sources**: 5,200 adult rows (facts only) plus a non-adult seed so the catalogue is not
+18. **[OPS] First sources**: 5,200 adult rows (facts only) plus a non-adult seed so the catalogue is not
     99% one category; health and metadata backfill with the existing checker, 500/day made proportional.
     *Gate:* every imported row has `last_checked`/`last_status`; the dead share is quoted per source; one
     full pass fits in a stated number of days.
-20. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
+19. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
     *Gate:* `links` drops by 5 (24 → 19) and `/` and `/v/dev` still render 200 with content.
 
 ### Phase D — the entity page and reading depth (3 steps)
 
-21. **[FE] `/e/{slug}`**: kind, title, description, image, category, tags, health, people, similar
+20. **[FE] `/e/{slug}`**: kind, title, description, image, category, tags, health, people, similar
     entities, rating summary, reviews ordered by helpfulness.
     *Gate:* a dead site says so; a film and a site render from the same template with no `if kind ==`; the
     page carries JSON-LD `Review`/`AggregateRating` and a canonical URL.
-22. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's own
+21. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's own
     filters and its `/api/v1/search` shape.
     *Gate:* a committed golden set records `nDCG@10` + `recall@50` against the local search it replaces; a
     zero-result query returns the labelled cross-site fallback; `/api/v1/search` keeps its contract.
-23. **[FE] Home shelves over entities**, not members — the same three shelves, a bigger catalogue.
+22. **[FE] Home shelves over entities**, not members — the same three shelves, a bigger catalogue.
     *Gate:* the shelves fill from imported entities and an entity-free vertical says why it is empty.
 
 ### Phase E — configuration and modularity (4 steps)
 
-24. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and weights, per-surface gravity,
+23. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and weights, per-surface gravity,
     capability gates, which shelves run, limits, importer pacing. No policy in code.
     *Gate:* two config files over one dataset produce two orderings and two shelf sets; `orbital config
     check` exits non-zero on an unknown key or invalid weight.
-25. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
+24. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
     `polaris-authz`; all four declared `open` today.
     *Gate:* a capability declared `open` accepts an anonymous write; flipped to `login` the same request
     answers 401 and an authenticated one 200, with no code change.
-26. **[FE] Admin settings page** that edits the config and cannot display the prior.
+25. **[FE] Admin settings page** that edits the config and cannot display the prior.
     *Gate:* the page's HTML and its API contain no prior values (asserted); saving a weight changes the
     live ordering after restart.
-27. **[BE] User-written metadata edits** with diff and revert, plus the report/quarantine queue with
+26. **[BE] User-written metadata edits** with diff and revert, plus the report/quarantine queue with
     structured reasons, a 72-hour self-resolution and a public modlog.
     *Gate:* a revert restores the previous text byte for byte; a quarantined review is 404 to anonymous and
     200 to its author; an unreported item self-resolves inside its window with the action logged.
 
 ### Phase F — power users (3 steps)
 
-28. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
+27. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
     `config check`, with one exit-code table (0 ok, 2 bad input, 3 refused, 4 not found, 5 unavailable).
     *Gate:* each subcommand runs against the live host; the exit table is a test; `--help` is honest about
     which subcommands need a token.
-29. **[FE] TUI** (`ratatui`): verticals → entities → review, keyboard-first.
+28. **[FE] TUI** (`ratatui`): verticals → entities → review, keyboard-first.
     *Gate:* a scripted session renders three screens to a snapshot and completes a review end to end.
-30. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
+29. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
     *Gate:* a bundle restores into a scratch database with matching per-table row counts; a corrupted byte
     is caught by the checksum; a webhook delivery is logged with its response code.
 
 ### Phase G — claims (1 step)
 
-31. **[BE] Entity claims** through `polaris-ledger`: page proof, Bluesky token or DNS TXT, with
+30. **[BE] Entity claims** through `polaris-ledger`: page proof, Bluesky token or DNS TXT, with
     merge-on-claim.
     *Gate:* a claim with no proof is refused; a claim whose proof disappears within 24h is reversed and the
     reversal is a ledger entry.
 
 ### Phase H — federation (4 steps)
 
-32. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
+31. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
     `http_signature`) and publish one actor + WebFinger for the instance.
     *Gate:* `curl -H 'Accept: application/activity+json'` on the actor returns a valid document; a real
     Mastodon instance resolves the handle.
-33. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
+32. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
     followers, with the `Note`+schema.org fallback.
     *Gate:* a review appears in a Mastodon timeline with its rating visible, and the `ap_id` is the same
     object on re-delivery.
-34. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
+33. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
     entity, unseen domain quarantined.
     *Gate:* a review from a second local instance lands on the right entity page and stays out of search
     until approved.
-35. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
+34. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
     federation, staffed by the operator only as an exception path.
     *Gate:* an unseen domain is quarantined by default; the monthly review page renders with real counts and
     names what it cannot decide.
@@ -297,6 +292,13 @@ deleted function.
 Shipped steps move here, newest last, with the commit and the one line of gate output that proved them. A
 step is not done because it merged; it is done because its gate ran against the live host.
 
+- **2026-11-10** `fdb3bbd` — the home page is three shelves composed by `polaris-candidates`
+  (`compose` with a declared per-source budget, then MMR). Live: `data-shelf` renders once each for
+  `for_you`, `rising`, `new` (it was 0 before), every card carries an observable `why` line
+  ("76 clicks"), and the page contains zero prior vocabulary —
+  `grep -ciE 'taste|prior|gravity' /` → **0**. The two ordered shelves are byte-identical to the
+  rankers they replaced at lambda 1.0 (unit test `the_ordered_shelves_keep_the_rankers_own_order`);
+  **99 tests** green (48 unit, 44 HTTP, 7 store).
 - **2026-11-10** `340a45c` — the tuner arrives folded for everyone: the live page ships no `open`
   attribute, a visitor's own state persists in `localStorage['orbital:tuner']`, and the HTTP test covers
   the cold page and the tuned one.
