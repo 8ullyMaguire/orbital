@@ -467,7 +467,7 @@ echo -n "adult profile:     "; curl -s -o /dev/null -w '%{http_code}\n' "http://
 # The W0 contract: the document must be SERVED and must tell the truth about this site. A 404 here
 # means the vhost does not include the estate snippet; a route that 404s means the document drifted.
 echo "capabilities:"
-bash $APP/scripts/check-capabilities.sh "http://127.0.0.1:$PUBLIC_PORT"
+bash $APP/scripts/check-capabilities.sh "http://127.0.0.1:$PUBLIC_PORT" orbital.polarisocial.xyz
 REMOTE
 
 say "done"
