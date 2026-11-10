@@ -68,7 +68,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Tests | **144** (59 unit, 51 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
-| Concentration on home | **2 members hold every card**; 186 clicks total; no Gini or impression share recorded yet (step 4 measures it) |
+| Concentration | weekly snapshots exist: profile **gini 0.39 / top-10 100 %** over 3 members, vertical **0.30 / 100 %** over 2 — N is far too small for a trend, recorded as such |
 | Catalogue supply available | 5,200 adult site reviews (sitemap: 112,461 URLs, 27 languages) |
 | Shared arithmetic already written | `polaris-candidates` (6 modules), `polaris-taste-source`, `polaris-gravity`, `polaris-eval` |
 
