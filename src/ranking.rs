@@ -436,7 +436,7 @@ mod tests {
     fn a_person_with_no_visitors_does_not_rise() {
         let now = Utc::now();
         let out = rank_trending(
-            vec![member("quiet", 0, 2, 2, &[], 1.0), member("loud", 9, 400, 2, &[], 1.0)],
+            vec![member("quiet", 0, 2, 2, &[]), member("loud", 9, 400, 2, &[])],
             now,
             &[],
             1.0,
@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn trending_is_empty_when_nobody_has_traffic() {
         let now = Utc::now();
-        let out = rank_trending(vec![member("a", 0, 1, 0, &[], 1.0)], now, &[], 1.0);
+        let out = rank_trending(vec![member("a", 0, 1, 0, &[])], now, &[], 1.0);
         assert!(out.is_empty(), "a zero-traffic vertical must hide the tab");
     }
 
@@ -509,7 +509,7 @@ mod tests {
 
     #[test]
     fn neighbours_wrap_around() {
-        let members: Vec<MemberStat> = (0..3).map(|i| member(&format!("m{i}"), 0, 1, 0, &[], 1.0)).collect();
+        let members: Vec<MemberStat> = (0..3).map(|i| member(&format!("m{i}"), 0, 1, 0, &[])).collect();
         let order = ring(&members, &[], &[], 1);
         let (prev, next) = neighbours(&order, order[0].id);
         assert_eq!(prev.unwrap().id, order[2].id);
