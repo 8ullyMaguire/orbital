@@ -31,6 +31,17 @@ async fn app(pool: PgPool) -> Router {
     orbital::build_router(state).await
 }
 
+/// The same router, with a config an operator could have written.
+async fn app_with(pool: PgPool, cfg: Config) -> Router {
+    let http = reqwest::Client::new();
+    let state = AppState {
+        pool,
+        cfg: std::sync::Arc::new(cfg),
+        http,
+    };
+    orbital::build_router(state).await
+}
+
 struct Res {
     status: StatusCode,
     body: String,
@@ -1714,4 +1725,69 @@ async fn the_concentration_numbers_are_not_served(pool: PgPool) {
     for word in ["gini", "concentration"] {
         assert!(!page.contains(word), "the home page must not carry {word}");
     }
+}
+
+/// THE GATE for the per-surface policy: a weight is declared per surface, and no surface reads another's.
+/// One dataset, four surfaces, one number changed at a time.
+#[sqlx::test]
+async fn each_surface_declares_its_own_weight_and_reads_no_other(pool: PgPool) {
+    let base = test_config();
+    let declare = |surface: &str, key: &str, value: f64| {
+        let raw = format!(
+            r#"{{"surfaces":[{{"name":"{surface}","strength":0.40,"{key}":{value}}}]}}"#
+        );
+        let mut cfg = base.clone();
+        cfg.dial = orbital::dial::Config::from_json(&raw).expect("a valid declaration");
+        cfg
+    };
+
+    let plain = app(pool.clone()).await;
+    register(&plain, "robi", "music").await;
+    register(&plain, "zara", "music").await;
+    give_tags(&pool, "robi", &["chiptune"]).await;
+    give_tags(&pool, "zara", &["podcast"]).await;
+    // robi has the tag, zara has twice the traffic: without a lens zara leads.
+    for _ in 0..2 {
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, surface, session_hash)
+             SELECT id, 'profile', 'gate-session' FROM users WHERE handle = 'zara'",
+        )
+        .execute(&pool)
+        .await
+        .expect("a real impression");
+    }
+
+    let cold = call(&plain, get("/v/music")).await;
+    let viewer = cold.vcookie.clone().expect("a visitor id");
+    call(&plain, post_form("/prefs", "tag=chiptune&w=10", &viewer)).await;
+
+    // The declaration is read from a file, so it is exercised the way an operator would set it: parse,
+    // boot, ask the same URL with the same cookie.
+    let with_vertical = app_with(pool.clone(), declare("vertical", "weight", 0.10)).await;
+    let with_home = app_with(pool.clone(), declare("home", "weight", 0.10)).await;
+
+    let before = order_of(&call(&plain, cookie(get("/v/music"), &viewer)).await.body, &["robi", "zara"]);
+    let after = order_of(&call(&with_vertical, cookie(get("/v/music"), &viewer)).await.body, &["robi", "zara"]);
+    assert_eq!(before, vec!["robi", "zara"], "the lens leads at the default weight");
+    assert_eq!(
+        after,
+        vec!["zara", "robi"],
+        "cutting the vertical's weight to a quarter must hand the order back to the traffic"
+    );
+
+    // The other three surfaces do not move: the home page byte for byte, the ring where it pointed.
+    let home_before = call(&plain, cookie(get("/"), &viewer)).await.body;
+    let home_after = call(&with_vertical, cookie(get("/"), &viewer)).await.body;
+    assert_eq!(home_before, home_after, "the vertical's weight must not reach the home page");
+
+    let ring_before = call(&plain, cookie(get("/ring"), &viewer)).await.location;
+    let ring_after = call(&with_vertical, cookie(get("/ring"), &viewer)).await.location;
+    assert_eq!(ring_before, ring_after, "nor the ring");
+
+    // And the reverse: the home page's own weight does not reach a vertical.
+    let vertical_under_home = order_of(
+        &call(&with_home, cookie(get("/v/music"), &viewer)).await.body,
+        &["robi", "zara"],
+    );
+    assert_eq!(vertical_under_home, before, "the home's weight must not reach /v/{{slug}}");
 }
