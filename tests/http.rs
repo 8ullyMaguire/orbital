@@ -2223,3 +2223,34 @@ async fn a_curation_row_changes_no_page(pool: PgPool) {
     }
     assert!(offenders.is_empty(), "templates still carry a hand: {offenders:?}");
 }
+
+/// The same page, twice, from the same database: it must be the same bytes. A page that reshuffles itself
+/// between two identical requests cannot be cached, cannot be diffed, and cannot be gated — and this step's
+/// gate is a byte comparison, so it would have been measuring the shuffle and calling it a curation row.
+#[sqlx::test]
+async fn the_same_vertical_twice_is_the_same_bytes(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    for handle in ["alpha", "beta", "gamma"] {
+        register(&app, handle, "dev").await;
+    }
+    for (handle, n) in [("alpha", 3), ("beta", 2), ("gamma", 1)] {
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("det-{handle}"))
+        .bind(n)
+        .execute(&pool)
+        .await
+        .expect("real hits");
+    }
+    let first = call(&app, get("/v/dev")).await.body;
+    let second = call(&app, get("/v/dev")).await.body;
+    if first != second {
+        let a: Vec<&str> = first.lines().collect();
+        let b: Vec<&str> = second.lines().collect();
+        let at = a.iter().zip(b.iter()).position(|(x, y)| x != y).unwrap_or(0);
+        panic!("the same page twice differs at line {}: {:?} vs {:?}", at + 1, a.get(at), b.get(at));
+    }
+}
