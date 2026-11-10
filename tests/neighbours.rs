@@ -150,7 +150,8 @@ fn a_rare_shared_tag_outranks_a_common_one() {
         // `common` is on everyone, `rare` on two, `filler` on three.
         member("me", &["common", "rare"]),
         member("common_sharer", &["common", "filler"]),
-        member("rare_sharer", &["rare", "filler"]),
+        // Three tags, so unweighted it is the *weaker* match — that is what makes the two orders differ.
+        member("rare_sharer", &["rare", "filler", "spare"]),
     ];
     for i in 0..7 {
         pool.push(member(&format!("c{i}"), &["common"]));
