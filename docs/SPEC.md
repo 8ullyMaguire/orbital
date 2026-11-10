@@ -307,6 +307,16 @@ candidate, so a positive verdict bounds how much *worse* the candidate is than r
 somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
 block so it travels with the numbers.
 
+**The measurement.** `concentration_snapshots` holds one row per surface per ISO week — Gini and the
+top-10 share of impressions, over the members that received any. Two properties are load-bearing: it is
+**per surface** (home, a vertical, a profile and the ring have different pools and different lifetimes, and
+one aggregate number would be an average of four questions) and it is **keyed by the week**, so a re-run
+inside the same week corrects the row instead of appending a second one. `orbital snapshot` records it;
+`orbital doctor` prints it; nothing serves it — a public Gini is a sentence about whose work the site
+favours. The first numbers on the live site are `profile 0.39 / vertical 0.30` over 187 and 5 impressions,
+which is three and two members respectively: **the metric is honest and the sample is not yet a trend**, and
+the report says so by printing the counts beside the coefficient.
+
 ## 2e. The reader's dial (`polaris-gravity`, D36)
 
 The instance's taste is not the only pull. A reader may say **how much of their own lens to apply** — and

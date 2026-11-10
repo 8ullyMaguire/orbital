@@ -969,3 +969,44 @@ the run beats the baseline with an interval that excludes zero over at least **3
 cases — the candidate beats a recency list, and that is now a bound rather than an opinion. Any later
 change to a ceiling, a source weight or a shelf declaration re-runs the same command, and a red or
 `NO VERDICT` result means the change waits for more clicks.
+
+## D38 — The headwind is judged by a per-surface weekly Gini, and that number is never public
+
+**Context.** D34 makes visibility damping the default, and every lever in SPEC §2c changes who is seen. A
+policy that cannot be measured is a preference, and a policy measured by one aggregate number over four
+surfaces is four questions averaged into none. The trap on the other side is worse: publishing "90% of
+impressions go to one member" is a public statement about whose work the site favours, and it names the
+mechanism D27 keeps silent.
+
+**Decision.** Orbital measures concentration per surface, weekly, and shows it only to the operator.
+
+- **Cases**: members with at least one impression on that surface, all time. Surfaces are read from the
+  data (`SELECT DISTINCT surface FROM source_hits`); a surface nobody used is not a surface with a
+  concentration of zero, so it produces no row.
+- **Metric**: `gini` over the impression counts and `top_share(…, 10)`. Both are pure functions with
+  hand-computable values, and the tests assert the values, not the shape ("one member with 900 impressions
+  and ninety-nine with one each is Gini 0.8909 and a 90.99% top-10 share").
+- **Cadence**: one row per `(surface, week)` — ISO week, so re-running inside a week corrects the row. A
+  series with two rows per week is a series nobody can read a trend from.
+- **Exposure**: `orbital doctor` prints it, `orbital snapshot` records it, and **no route, field, feed or
+  page** carries it. The gate asserts the shape of the public responses rather than the absence of a route:
+  `/api/v1/stats` must be byte-identical and the home page must contain zero occurrences of the word.
+- `--as-of` exists so a week can be backfilled without hand-editing rows, which is what made the two-week
+  proof possible on the live host on the same day.
+
+**Rejected alternatives.**
+
+- *One global Gini.* Averaging four surfaces with different pools and lifetimes produces a number that moves
+  for reasons nobody can name, and the headwind is applied per surface.
+- *Compute on the fly per request.* The number would change under the operator's feet while reading it, and
+  it belongs with the other weekly facts, not in a hot path.
+- *Publish it as a fairness badge.* It is precisely the disclosure D27 forbids: a reader who learns that
+  attention is 90% concentrated has learned that something is being done about it, and roughly how much.
+- *Judge damping by the roadmap's own intuition ("it feels fairer").* That is the alternative D37 exists to
+  refuse for ranking; it applies with more force to a policy that demotes real members.
+
+**Consequences.** The baseline for every Phase B step now exists and is real:
+`profile gini 0.39, top-10 100.0% of 187 impressions over 3 members` and `vertical 0.30 / 100.0% / 5
+impressions over 2 members`, recorded for 2026-11-02 and 2026-11-09. With three and two members the top-10
+share is 100% by arithmetic, not by fame, and the printed counts make that obvious. A later step that claims
+"damping reduced concentration" must show the same surfaces moving against this series.
