@@ -121,7 +121,7 @@ pub async fn home(
             });
             continue;
         }
-        let ranked = ranking::rank_top(members, &weights, lens);
+        let ranked = ranking::rank_top(members, &weights, lens.relevance);
         let top = ranked
             .iter()
             .take(3)
@@ -273,8 +273,8 @@ pub async fn vertical(
     };
 
     let ranked: Vec<MemberStat> = match tab.as_str() {
-        "trending" => ranking::rank_trending(filtered.clone(), now, &weights, lens),
-        "new" => ranking::rank_new(filtered.clone(), now, &weights, lens),
+        "trending" => ranking::rank_trending(filtered.clone(), now, &weights, lens.ordered),
+        "new" => ranking::rank_new(filtered.clone(), now, &weights, lens.ordered),
         "curated" => {
             let curated = store::curated(&st.pool, &v.slug).await?;
             curated
@@ -282,7 +282,7 @@ pub async fn vertical(
                 .filter(|m| visible(m))
                 .collect()
         }
-        _ => ranking::rank_top(filtered.clone(), &weights, lens),
+        _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance),
     };
     let mode = match tab.as_str() {
         "trending" => StatMode::Trending,
@@ -344,7 +344,7 @@ pub async fn vertical(
             label: "Trending".into(),
             href: format!("/v/{}?tab=trending", v.slug),
             active: tab == "trending",
-            count: ranking::rank_trending(members.clone(), now, &weights, lens).len() as i64,
+            count: ranking::rank_trending(members.clone(), now, &weights, lens.ordered).len() as i64,
         },
         Tab {
             label: "New".into(),
@@ -816,7 +816,7 @@ pub(crate) async fn vertical_next(
     let visited = std::collections::HashSet::new();
     let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Ring).await;
     let personalised =
-        current.and_then(|id| crate::ranking::ring_next(&members, id, &weights, &visited, lens));
+        current.and_then(|id| crate::ranking::ring_next(&members, id, &weights, &visited, lens.relevance));
     let next = match (personalised, current) {
         (Some(m), _) => m,
         (None, Some(id)) => {

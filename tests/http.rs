@@ -1746,8 +1746,9 @@ async fn each_surface_declares_its_own_weight_and_reads_no_other(pool: PgPool) {
     register(&plain, "zara", "music").await;
     give_tags(&pool, "robi", &["chiptune"]).await;
     give_tags(&pool, "zara", &["podcast"]).await;
-    // robi has the tag, zara has twice the traffic: without a lens zara leads.
-    for _ in 0..2 {
+    // robi has the tag and zara has one impression: 0.6 x 1 for zara against 0.4 x 2.0 for robi, so
+    // the lens wins by a margin, and a quarter of it loses.
+    for _ in 0..1 {
         sqlx::query(
             "INSERT INTO source_hits (user_id, surface, session_hash)
              SELECT id, 'profile', 'gate-session' FROM users WHERE handle = 'zara'",

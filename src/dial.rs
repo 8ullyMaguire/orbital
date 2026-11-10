@@ -63,9 +63,51 @@ impl Surface {
     }
 }
 
+/// One surface's declared policy: the **weight** its relevance-led order gives the lens, the **ordered**
+/// weight its velocity-led order gives it (smaller, because the point of those shelves is movement), and
+/// the **ceiling** a reader may dial up to. A weight is the operator's own share; a ceiling is the most a
+/// reader may ask for. They are different nouns and the file keeps them apart.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Policy {
+    pub weight: f64,
+    pub ordered: f64,
+    pub ceiling: Ceiling,
+}
+
+/// The dial in force for one request. Two numbers because a surface ranks twice: `relevance` for
+/// `rank_top` and the `for_you` shelf, `ordered` for `rank_trending`/`rank_new`/`rising`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Lens {
+    pub relevance: f64,
+    pub ordered: f64,
+}
+
+impl Lens {
+    /// Everything: what a caller with no reader and no dial means (`x * 1.0 == x` exactly).
+    pub const fn full() -> Self {
+        Self {
+            relevance: 1.0,
+            ordered: 1.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     ceilings: [Ceiling; 4],
+    weights: [f64; 4],
+    ordered: [f64; 4],
+}
+
+/// The shares the rankers apply in code, per surface. A declared weight is applied **relative to this**,
+/// so a declaration that equals the reference is a multiplication by `1.0` and changes no ordering. Without
+/// that normalisation every existing page would be re-ranked by the act of declaring what it already did.
+fn reference(surface: Surface) -> (f64, f64) {
+    match surface {
+        Surface::Home | Surface::Vertical => (0.40, 0.30),
+        Surface::Entity => (0.25, 0.25),
+        Surface::Ring => (0.60, 0.60),
+    }
 }
 
 impl Default for Config {
@@ -80,6 +122,8 @@ impl Default for Config {
                 Ceiling::open(0.25),
                 Ceiling::open(0.60),
             ],
+            weights: [0.40, 0.40, 0.25, 0.60],
+            ordered: [0.30, 0.30, 0.25, 0.60],
         }
     }
 }
@@ -128,6 +172,24 @@ impl Config {
                 strength: entry.strength,
                 locked: entry.locked,
             };
+            if let Some(weight) = entry.weight {
+                if !(0.0..=1.0).contains(&weight) || !weight.is_finite() {
+                    return Err(anyhow!(
+                        "field `weight` of surface `{}`: {weight} is outside 0.0..=1.0",
+                        entry.name
+                    ));
+                }
+                config.weights[surface.key()] = weight;
+            }
+            if let Some(ordered) = entry.ordered {
+                if !(0.0..=1.0).contains(&ordered) || !ordered.is_finite() {
+                    return Err(anyhow!(
+                        "field `ordered` of surface `{}`: {ordered} is outside 0.0..=1.0",
+                        entry.name
+                    ));
+                }
+                config.ordered[surface.key()] = ordered;
+            }
         }
         Ok(config)
     }
@@ -143,15 +205,49 @@ impl Config {
         effective(self.ceiling(surface).strength, stored)
     }
 
+    /// The declared policy for one surface: its weights and its ceiling, and nothing of any other's.
+    pub fn policy(&self, surface: Surface) -> Policy {
+        Policy {
+            weight: self.weights[surface.key()],
+            ordered: self.ordered[surface.key()],
+            ceiling: self.ceilings[surface.key()],
+        }
+    }
+
     /// [`share`] as a fraction of the ceiling, which is what a ranker multiplies its own constant by:
     /// `1.0` means "apply the score share the code already applies", `0.0` means "no lens at all".
     /// Normalising here is what keeps the default byte-identical to yesterday's ordering.
     pub fn factor(&self, surface: Surface, stored: Option<f64>) -> f64 {
+        self.factor_at(surface, stored, true)
+    }
+
+    /// The same, for a velocity-led order (`rank_trending`, `rank_new`, the `rising` shelf), which declares
+    /// its own weight: an ordered shelf leans on movement and only lightly on the lens.
+    pub fn factor_ordered(&self, surface: Surface, stored: Option<f64>) -> f64 {
+        self.factor_at(surface, stored, false)
+    }
+
+    fn factor_at(&self, surface: Surface, stored: Option<f64>, relevance: bool) -> f64 {
         let ceiling = self.ceiling(surface).strength;
         if ceiling <= 0.0 {
             return 0.0;
         }
-        (self.share(surface, stored) / ceiling).clamp(0.0, 1.0)
+        let (reference, declared) = {
+            let (r_relevance, r_ordered) = reference(surface);
+            let policy = self.policy(surface);
+            if relevance {
+                (r_relevance, policy.weight)
+            } else {
+                (r_ordered, policy.ordered)
+            }
+        };
+        if reference <= 0.0 {
+            return 0.0;
+        }
+        // The reader's share of the ceiling, mapped onto the weight this surface declares. At the
+        // defaults `weight == reference`, so this is exactly `share / ceiling` and the ordering is
+        // byte-identical to the one the site served before the declaration existed.
+        (self.share(surface, stored) / ceiling).clamp(0.0, 1.0) * (declared / reference)
     }
 
     /// What to store for a reader's request, or why it is refused. Refused, never clamped: a reader
@@ -187,10 +283,13 @@ pub fn refusal_sentence(refusal: DialRefusal) -> String {
 }
 
 /// The dial in force for one request, as a factor a ranker multiplies its own constant by.
-pub async fn lens(st: &crate::AppState, visitor: &str, surface: Surface) -> f64 {
+pub async fn lens(st: &crate::AppState, visitor: &str, surface: Surface) -> Lens {
     let hash = crate::prefs::visitor_hash(visitor);
     let stored = stored(&st.pool, &hash).await;
-    st.cfg.dial.factor(surface, stored)
+    Lens {
+        relevance: st.cfg.dial.factor(surface, stored),
+        ordered: st.cfg.dial.factor_ordered(surface, stored),
+    }
 }
 
 #[derive(Deserialize)]
@@ -205,6 +304,13 @@ struct SpecSurface {
     strength: f64,
     #[serde(default)]
     locked: bool,
+    /// The share this surface's relevance-led order gives the lens. Optional: absent means the
+    /// reference the rankers already apply.
+    #[serde(default)]
+    weight: Option<f64>,
+    /// The share its velocity-led order gives it (trending, new, rising).
+    #[serde(default)]
+    ordered: Option<f64>,
 }
 
 #[cfg(test)]

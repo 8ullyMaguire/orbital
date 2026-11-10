@@ -135,7 +135,24 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         Err(e) => say(false, "taste profile", format!("{e}")),
     }
 
-    // 8. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    // 8. What each surface declares, so an operator can see the file's effect without reading rankings.
+    //    Four lines, one per surface, and no surface's number appears on another's line.
+    for surface in crate::dial::Surface::ALL {
+        let policy = cfg.dial.policy(surface);
+        say(
+            true,
+            &format!("dial/{}", surface.name()),
+            format!(
+                "weight {:.2}, ordered {:.2}, ceiling {:.2}{}",
+                policy.weight,
+                policy.ordered,
+                policy.ceiling.strength,
+                if policy.ceiling.locked { " (locked)" } else { "" }
+            ),
+        );
+    }
+
+    // 9. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
     //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
     //    favours, which is not a sentence a page may carry.
     match crate::concentration::latest(pool).await {
