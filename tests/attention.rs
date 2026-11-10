@@ -33,6 +33,7 @@ fn member(handle: &str, clicks: i64, attention: f64) -> MemberStat {
         verticals: Vec::new(),
         endorse: 0.0,
         attention,
+        recent: attention,
     }
 }
 

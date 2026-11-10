@@ -297,6 +297,7 @@ mod tests {
             verticals: vec!["dev".to_string()],
             endorse: 0.0,
         attention: clicks as f64,
+        recent: clicks as f64,
         }
     }
 
