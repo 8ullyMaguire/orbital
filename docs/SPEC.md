@@ -430,6 +430,40 @@ and a window of surrounding text for the machinery's words.
 photography" in a bio), so it is checked structurally: no member card carries `data-score`/`data-weight`/
 `data-attention`/`data-rank` or a decimal number, and no `/api/v1/*` response carries a score-like key.
 
+### 2c-decies. The "hidden gems" shelf, and the long-tail share its gate reads (D50)
+
+The fourth shelf — after `For you`, `Rising`, `Undiscovered`… actually **third**, because it is the most specific
+claim on the page — is a shelf of members the click count has *overlooked* and who convert the readers they do get:
+
+```
+eligible   : visitors >= 5                                  (below five, a rate is 0, ½, ⅓ — a coin toss)
+candidates : eligible AND clicks < median(clicks of eligible)   (strict: a flat pool has no "overlooked")
+order      : clicks / visitors, descending, ties by handle
+then       : the exposure caps, then the novelty slot fills what the caps leave empty
+```
+
+`clicks / visitors` is all-time and already in the stats fragment. Nothing here is a judgement about quality: it is
+"of the people who landed on this profile, how many clicked through", restricted to the profiles the leaderboards do
+not surface. The why line says the counts (`5 clicks from 5 visitors`), not the ratio, because the counts are what a
+reader can check.
+
+**The share the gate reads.** `orbital impressions --days N` prints, per surface:
+
+```
+home: 224 impression(s) in the last 168h, 2 member(s)
+  long tail: 12.4% of 224 impression(s) in 168h went to the 3 member(s) below the median exposure
+```
+
+Two floors, and the verdict refuses under either — the step may claim nothing below them:
+
+| floor | value | why |
+|---|---|---|
+| impressions | 200 | under it the share moves whole percents on one page view |
+| members in the pool | 8 | with two members the "tail" is one member and its share is half by arithmetic |
+
+`NO VERDICT — 2 member(s) in the pool; a tail needs at least 8 to mean anything` is the answer this site gets today,
+and that is the point of printing it: the instrument now declines to report a number it cannot stand behind.
+
 ### 2c-sexies. The "undiscovered" shelf (D46)
 
 The fourth home shelf is the only one that exists to show a member the *other three would not*: candidates are

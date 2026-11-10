@@ -1472,3 +1472,49 @@ switched off, so the fixture now gives the rare sharer a third tag — unweighte
 prints `shares bluesky, self-hosting`. **Not exercised on live**: the three empty reasons — every visible member
 here has tags, and inventing an untagged member to demonstrate one would be fabricating the very row the gate
 forbids. They are proven in the suite, page and wire.
+
+## D50 — Hidden gems: conversion among the overlooked, and a long-tail share that refuses to be reported
+
+**Context.** Every shelf so far answers "who is being read" (Top, Rising, For you) or "who is moving" (`Undiscovered`).
+None answers the question a directory exists to answer for its quiet members: *who is good and never shown*. The
+roadmap asked for a shelf "ranked against clicks, capped, filled by the novelty slot", with a gate that prints the
+long-tail share and claims nothing under the sample floor.
+
+**Decision.**
+
+- **Gem = conversion among the overlooked.** Eligible at `visitors >= 5`; candidates are those *strictly* below the
+  median clicks of the eligible set; ordered by `clicks / visitors`. The minimum audience exists because below five
+  the rate is 0, ½ or ⅓ and the ranking becomes a coin toss dressed as a ratio. Strictly-below because a flat pool
+  has no overlooked member, and `<=` quietly made every member eligible in exactly that case (the test caught it).
+- **The shelf sits third**, ahead of `Undiscovered`: a statement about conversion is more specific than a statement
+  about momentum, and the cross-shelf rule (D43) means the more specific claim gets first pick of the shared tail.
+- **Capped like every other shelf** (one slot per member per page, cohort share), and **the novelty slot fills what
+  the caps leave empty** so an eligible member is not permanently invisible because six others got there first.
+- **The long-tail share is printed, with two floors**: 200 impressions and 8 members in the pool. Under either, the
+  verdict is `NO VERDICT` with the number that failed — not a small claim, a refusal.
+
+**Rejected alternatives.**
+
+- *Rank gems by endorsement count.* It rewards being known, which is the failure mode the shelf exists to correct.
+- *Use `visitors_7d` for the rate.* It is the momentum signal already used by `Undiscovered`; two shelves on one
+  signal is one shelf with two headings.
+- *Include everyone below the median, however small.* A member with four visitors and four clicks tops the list
+  every time, and the list becomes "profiles with one reader". The floor is the whole difference between a rate and
+  a coincidence.
+- *Report the share under the floor with a caveat.* A caveat under a number is read as the number. This site already
+  has the discipline in `orbital eval` (`NO VERDICT` under 30 paired readers); a second instrument gets the same rule.
+- *Cut the members floor and rely on the impression floor.* Live proved why not: 224 impressions over seven days, two
+  members, and a "50.0% long tail" that is one member out of two. The number was arithmetically correct and told you
+  nothing, which is the most dangerous kind.
+
+**Consequences.** **199 tests**. Gates: removing the `clicks < median` filter puts the loud members on the shelf
+(`the loud members are not overlooked: ["quiet_gem", "loud00", …]`); removing the audience floor makes a 4-visitor
+member a gem; removing the verdict floor turns `NO VERDICT` into `long tail: 9.1% of 110 impression(s)`. Live:
+`orbital impressions --days 7` → `home: 224 impression(s) in the last 168h, 2 member(s)` and
+`NO VERDICT — 2 member(s) in the pool; a tail needs at least 8 to mean anything`. **The shelf itself cannot render
+on live**: two members, both already on `For you`, and the cross-shelf rule gives each member one slot — so this step
+ships with its gate met by refusal and its shelf proven on fixtures, and the ledger says exactly that.
+
+One knock-on: `the_undiscovered_shelf_...` asserted a *named* member led that shelf, and moving `gems` ahead of it
+took that member. The test now asserts the property (only tail members, each with a why line) instead of a name —
+the second time the same lesson has been paid for, which is why it is written into D46 and repeated here.
