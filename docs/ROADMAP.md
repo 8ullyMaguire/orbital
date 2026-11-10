@@ -65,7 +65,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **150** (65 unit, 54 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
+| Tests | **150** (65 unit, 56 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Concentration | weekly snapshots exist: profile **gini 0.39 / top-10 100 %** over 3 members, vertical **0.30 / 100 %** over 2 — N is far too small for a trend, recorded as such |
