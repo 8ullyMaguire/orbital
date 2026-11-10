@@ -31,7 +31,50 @@ pub const PRIOR_WORDS: [&str; 8] = [
 /// Every place a needle occurs in `body`, case-insensitively, as a whole word. Whole-word because
 /// `priority` is not `prior` and `gravityfed` is not a disclosure.
 pub fn leaks(body: &str, extra: &[String]) -> Vec<String> {
-    unimplemented!("RED: the matcher")
+    let haystack = body.to_lowercase();
+    let needles = PRIOR_WORDS
+        .iter()
+        .map(|w| (*w).to_string())
+        .chain(extra.iter().cloned());
+    let mut found: Vec<String> = Vec::new();
+    for needle in needles {
+        let lowered = needle.to_lowercase();
+        if lowered.trim().is_empty() || found.contains(&needle) {
+            continue;
+        }
+        if occurs_as_a_word(&haystack, &lowered) {
+            found.push(needle);
+        }
+    }
+    found
+}
+
+/// A whole-word occurrence: the character before and after must not be alphanumeric. `priority` is not
+/// `prior`, and a hyphen joins parts of one phrase rather than separating words.
+fn occurs_as_a_word(haystack: &str, needle: &str) -> bool {
+    let mut from = 0;
+    while let Some(at) = haystack[from..].find(needle) {
+        let start = from + at;
+        let end = start + needle.len();
+        let before_ok = haystack[..start]
+            .chars()
+            .next_back()
+            .map(|c| !c.is_alphanumeric())
+            .unwrap_or(true);
+        let after_ok = haystack[end..]
+            .chars()
+            .next()
+            .map(|c| !c.is_alphanumeric())
+            .unwrap_or(true);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = start + 1;
+        if from >= haystack.len() {
+            break;
+        }
+    }
+    false
 }
 
 /// True when nothing in `body` names the prior.

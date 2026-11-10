@@ -36,6 +36,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/links/health", get(link_health))
         .route("/api/v1/search", get(search))
         .route("/api/v1/ring/{slug}", get(ring))
+        .route("/api/v1/taste", get(lens))
         .merge(super::tokens::v1_router())
 }
 
@@ -87,6 +88,64 @@ fn cached(headers: &HeaderMap, value: Value) -> Response {
         Json(value),
     )
         .into_response()
+}
+
+
+/// The caller's **own** lens: the tag weights they set and the dial they own. Nothing of the instance's
+/// appears here — not a source, not a weight, not a field — and this handler never reads `cfg.taste`
+/// (D40). It is private by nature, so it is `no-store` and must not be reached through the edge cache:
+/// a per-reader answer served to everybody would be a disclosure of somebody else's lens.
+async fn lens(
+    State(st): State<AppState>,
+    axum::extract::Extension(crate::auth::VisitorId(vid)): axum::extract::Extension<crate::auth::VisitorId>,
+    headers: HeaderMap,
+) -> PageResult<Response> {
+    let hash = crate::prefs::visitor_hash(&vid);
+    let weights = store::prefs(&st.pool, "visitor", &hash).await?;
+    let tags: serde_json::Map<String, Value> = weights
+        .iter()
+        .filter(|(_, w)| *w > 0.0)
+        .map(|(tag, w)| (tag.clone(), json!(w)))
+        .collect();
+    // The dial as the reader set it, per surface, in the same 0..1 the slider speaks. Their number, from
+    // the same table `/prefs` writes; the ceiling is the slider's maximum and is already public in it.
+    let mut dial = serde_json::Map::new();
+    for surface in crate::dial::Surface::ALL {
+        let stored = crate::dial::stored(&st.pool, &hash).await;
+        dial.insert(
+            surface.name().to_string(),
+            json!(st.cfg.dial.share(surface, stored)),
+        );
+    }
+    let body = json!({ "tags": tags, "dial": dial });
+    let bytes = serde_json::to_vec(&body).unwrap_or_default();
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    let etag = format!("W/\"{:016x}\"", hasher.finish());
+    let matched = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .map(|inm| {
+            inm.split(',')
+                .map(|t| t.trim().trim_start_matches("W/"))
+                .any(|t| t == etag.trim_start_matches("W/"))
+        })
+        .unwrap_or(false);
+    let status = if matched {
+        StatusCode::NOT_MODIFIED
+    } else {
+        StatusCode::OK
+    };
+    Ok((
+        status,
+        [
+            (header::CACHE_CONTROL, "private, no-store".to_string()),
+            (header::ETAG, etag),
+            (header::CONTENT_TYPE, "application/json; charset=utf-8".to_string()),
+        ],
+        axum::Json(body),
+    )
+        .into_response())
 }
 
 /// The numbers on the front door, in one request.
