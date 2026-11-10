@@ -799,3 +799,50 @@ it into the config file with per-surface ceilings, and step 4 gives any weight c
 decision rule. Until then the two ordered shelves are frozen by a unit test
 (`the_ordered_shelves_keep_the_rankers_own_order`), which is the cheapest possible guard against a
 "harmless" weight edit.
+
+## D34 — The already-visible are ranked lower by default, and the strength is a number
+
+**Context.** The owner's 2026-11-10 observation: on attention-ranked sites every participant appears to be
+in the "top 0.1%" and nobody can find anyone outside that elite, because the elite are too well known to be
+compared with. The mechanism is structural, not moral — attention is the score, the score buys position,
+position buys attention. Orbital's current `Top` ranks by all-time clicks and its `Trending` by seven-day
+visitors, so the first 500 rows would inherit exactly that loop. Two members and 186 clicks is the cheapest
+possible moment to fix a default.
+
+**Decision.** Orbital ships a **fame headwind**: the already-visible are ranked lower by default, the
+strength is configurable (`attention = damped | raw`, exponent, half-life, quotas, ceiling), and the whole
+policy obeys one guardrail — **damped, never hidden**.
+
+1. Attenuation acts on the *signal* (log clicks, exposure-corrected clicks, a per-session cap) and on the
+   *structure* (per-member slot quota, long-tail cohort share, cross-shelf dedupe, an impression ceiling,
+   daily tail rotation).
+2. It may cost **position** and may never cost **reachability**: profile, search, vertical page, sitemap and
+   the API always include every member, and no damped score may exceed its raw score.
+3. It is **measurable before it is tunable**: Gini and top-10 impression share per surface are snapshotted
+   weekly first (roadmap step 4), and a ranking change may not increase concentration without a recorded
+   decision.
+4. It is **stated in one sentence on the site** ("we rank the already-visible lower") and exposes **no
+   per-entity number**. D27 forbids disclosing the *taste prior*; a concentration policy is a different fact
+   and hiding a fairness rule would be the same mistake in the other direction.
+5. An `exempt` list in config (default empty) marks a "monument"; it is visible in the config file and never
+   on the page.
+
+**Rejected alternatives.**
+
+- *Hide the famous / hard-filter the top.* A filter is a policy decision taken silently on the reader's
+  behalf and it removes the thing the reader came for. A soft, capped, reported demotion keeps the page
+  useful and the policy visible.
+- *Only show newcomers on a separate "new" tab.* That is what the site already had (`New`), and it is why
+  nobody browses it: a ghetto is not a quota.
+- *Leave the default raw and let the operator opt in.* The owner asked for the opposite, and defaults are
+  what the first 500 rows inherit; an opt-in fairness rule ships as never-opt-in in practice.
+- *Damp search results too (idea 14).* Search relevance and visibility are different promises; mixing them
+  makes a zero-result query indistinguishable from a suppressed one. Filed as refused on the Concord page.
+- *Apply damping inside the prior (as a term in the taste vector).* That would make a public fairness policy
+  indistinguishable from the private prior, which is the one thing D27 protects.
+
+**Consequences.** The declaration is a config surface with a measurement attached, so "how hard should we
+damp" is an experiment (step 4's metric), not an instinct. The worst case of a mis-set number is a duller
+page, not a missing member — that is what the monotone guardrail buys. Ideas and their dispositions:
+`~/secondbrain/10-Projects/orbital-fame-headwind-2026-11-10.md` (20 ideas: 15 scheduled, 4 later, 1
+refused) and the Concord page carries all 20 with reasons.

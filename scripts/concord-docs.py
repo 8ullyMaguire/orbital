@@ -38,6 +38,8 @@ DOCS = [
 VAULT_DOCS = [
     ("~/secondbrain/10-Projects/orbital-ideas-disposition.md", "wiki", "brainstorm-disposition",
      "2026-11-10 brainstorm — disposition"),
+    ("~/secondbrain/10-Projects/orbital-fame-headwind-2026-11-10.md", "wiki", "fame-headwind",
+     "The fame headwind — 20 ideas, filed and dispositioned (D34)"),
 ]
 
 

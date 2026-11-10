@@ -215,6 +215,37 @@ Every card carries a `why` string built only from facts the reader can observe: 
 clicks, visitors this week, or age. It may never cite the instance's prior (D27) — the same silence rule
 as every other surface.
 
+## 2c. The fame headwind (visibility damping)
+
+Attention is the score, the score buys position, position buys attention. Left alone, the loop makes the
+first members permanent and the rest unfindable — the "everyone is top 0.1%" problem, which is structural
+and appears on every attention-ranked catalogue. Orbital damps it **by default**, with the strength
+declared as data (D34):
+
+| lever | default | what it does |
+|---|---|---|
+| attention signal | `damped` | `log1p(clicks)` (exponent configurable) instead of `clicks / max` |
+| exposure correction | on | divides clicks by the impressions the member received at the positions shown |
+| per-session cap | on | one session counts at most once per member per day |
+| `Top` half-life | 90 days | lifetime fame decays; a **monument** tab keeps the lifetime total reachable |
+| slot quota | `k = 1` per shelf | a member takes at most one card per shelf; no member on two shelves at once |
+| long-tail cohort | 40% of slots | reserved for members below median exposure |
+| impression ceiling | rolling 24h share | a member over the cap loses position for the day, not tomorrow |
+| tail rotation | last `N` slots, daily | deterministic by date, so the tail is reachable without a button |
+| `exempt` list | empty | a "monument" member ranks exactly as raw |
+
+Guardrails, in order of importance:
+
+1. **Damped, never hidden.** Attenuation costs position, never reachability: the profile, `/search`, the
+   vertical page, the sitemap and the API always include every member, and a damped score may never exceed
+   its raw score. An assertion, not a convention.
+2. **Measured before tunable.** Gini and top-10 impression share per surface are snapshotted weekly; a
+   ranking change may not increase concentration without a recorded decision.
+3. **Stated, not exposed.** One sentence on the site may say the already-visible are ranked lower. No
+   per-entity damping number, badge or message: that is the D27 leak wearing a fairness costume.
+4. **`raw` is always reachable.** Flipping the declaration to `raw` reproduces the undamped order
+   byte-identically, which is what makes the damping falsifiable.
+
 Context vertical: the vertical page being viewed, else the profile's primary.
 
 **Ring** — per vertical and global, ordered by taste-similarity to the hub owner
