@@ -74,6 +74,16 @@ fn member_stats(ctx: &str) -> String {
                        WHERE sh.user_id = u.id
                          AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
                        ORDER BY sh.session_hash, sh.created_at) h), 0)::float8 AS attention,
+    -- The same measurement with fame on a 90-day half-life (D42): a click six months ago is worth a
+    -- sixty-fourth of one today, so an early member stops being permanently first without being erased —
+    -- the lifetime total stays in `attention`, and the monument tab reads it.
+    COALESCE((SELECT sum((1.0 + ln(greatest(coalesce(h.position, 1), 1)::float8))
+                         * power(0.5, extract(epoch FROM (now() - h.created_at)) / 86400.0 / 90.0))
+                FROM (SELECT DISTINCT ON (sh.session_hash) sh.session_hash, sh.position, sh.created_at
+                        FROM source_hits sh
+                       WHERE sh.user_id = u.id
+                         AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
+                       ORDER BY sh.session_hash, sh.created_at) h), 0)::float8 AS recent,
     COALESCE((SELECT array_agg(t.tag_slug ORDER BY t.tag_slug) FROM tags t WHERE t.user_id = u.id),
              '{{}}'::text[]) AS tags,
     COALESCE((SELECT array_agg(v.slug ORDER BY CASE WHEN uv2.role = 'primary' THEN 0 ELSE 1 END, v.sort)
@@ -1073,7 +1083,7 @@ pub async fn standing(
             .filter(|m| if v.nsfw { m.nsfw_enabled } else { m.verticals.first().map(|p| p != "nsfw").unwrap_or(true) })
             .collect();
         let total = members.len() as i64;
-        let top = crate::ranking::rank_top(members.clone(), &[], 1.0, crate::attention::Config::raw());
+        let top = crate::ranking::rank_top(members.clone(), &[], 1.0, crate::attention::Config::raw(), crate::ranking::Window::Lifetime);
         let trending = crate::ranking::rank_trending(members.clone(), now, &[], 1.0);
         let me = members.iter().find(|m| m.id == user_id);
         out.push(crate::models::Standing {

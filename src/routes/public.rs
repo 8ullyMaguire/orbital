@@ -122,7 +122,7 @@ pub async fn home(
             });
             continue;
         }
-        let ranked = ranking::rank_top(members, &weights, lens.relevance, attn);
+        let ranked = ranking::rank_top(members, &weights, lens.relevance, attn, ranking::Window::Recent);
         let top = ranked
             .iter()
             .take(3)
@@ -277,6 +277,9 @@ pub async fn vertical(
     let ranked: Vec<MemberStat> = match tab.as_str() {
         "trending" => ranking::rank_trending(filtered.clone(), now, &weights, lens.ordered),
         "new" => ranking::rank_new(filtered.clone(), now, &weights, lens.ordered),
+        // The monument: the lifetime record, with no lens and no decay (D42). Reachability for a member
+        // whose fame has been amortised, and the honest answer to "who has ever been read here".
+        "monument" => ranking::rank_monument(filtered.clone()),
         "curated" => {
             let curated = store::curated(&st.pool, &v.slug).await?;
             curated
@@ -284,11 +287,12 @@ pub async fn vertical(
                 .filter(|m| visible(m))
                 .collect()
         }
-        _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance, attn),
+        _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance, attn, ranking::Window::Recent),
     };
     let mode = match tab.as_str() {
         "trending" => StatMode::Trending,
         "new" => StatMode::New,
+        "monument" => StatMode::Monument,
         _ => StatMode::Top,
     };
     let rows: Vec<MemberCard> = ranked
@@ -352,6 +356,12 @@ pub async fn vertical(
             label: "New".into(),
             href: format!("/v/{}?tab=new", v.slug),
             active: tab == "new",
+            count: members.len() as i64,
+        },
+        Tab {
+            label: "Monument".into(),
+            href: format!("/v/{}?tab=monument", v.slug),
+            active: tab == "monument",
             count: members.len() as i64,
         },
         Tab {
@@ -872,7 +882,7 @@ pub async fn embed(
         // An embed serves the same bytes to every page that includes it, so it ranks under the
         // declaration's own policy and never a reader's dial.
         _ => (
-            ranking::rank_top(members, &[], 1.0, st.cfg.attention),
+            ranking::rank_top(members, &[], 1.0, st.cfg.attention, ranking::Window::Recent),
             StatMode::Top,
         ),
     };

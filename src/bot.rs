@@ -127,7 +127,7 @@ pub async fn spotlight(pool: &PgPool, cfg: &Config, http: &reqwest::Client, dry:
             continue;
         }
         let members: Vec<MemberStat> = store::vertical_members(pool, &v.slug).await?;
-        let candidate = ranking::rank_top(members, &[], 1.0, crate::attention::Config::for_test())
+        let candidate = ranking::rank_top(members, &[], 1.0, crate::attention::Config::for_test(), crate::ranking::Window::Lifetime)
             .into_iter()
             .find(|m| !recent.contains(&m.handle) && !m.nsfw_enabled && !m.bio.trim().is_empty());
         let Some(m) = candidate else { continue };
@@ -197,7 +197,7 @@ pub async fn roundup(
         return Ok(());
     };
     let members = store::vertical_members(pool, &v.slug).await?;
-    let top: Vec<MemberStat> = ranking::rank_top(members, &[], 1.0, crate::attention::Config::for_test())
+    let top: Vec<MemberStat> = ranking::rank_top(members, &[], 1.0, crate::attention::Config::for_test(), crate::ranking::Window::Lifetime)
         .into_iter()
         .filter(|m| m.visitors > 0)
         .take(5)

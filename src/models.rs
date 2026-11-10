@@ -89,6 +89,10 @@ pub struct MemberStat {
     /// pages print; this field exists only to be ranked.
     #[sqlx(default)]
     pub attention: f64,
+    /// The same measurement on a 90-day half-life (D42): what `Top` ranks by. `attention` is the lifetime
+    /// total, which the monument tab keeps reachable.
+    #[sqlx(default)]
+    pub recent: f64,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

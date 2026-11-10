@@ -140,6 +140,11 @@ pub fn member_card(
             "visitors".to_string(),
             format!("{} visitors", fmt_count(m.visitors)),
         ),
+        StatMode::Monument => (
+            fmt_count(m.clicks),
+            "clicks, all time".to_string(),
+            format!("{} clicks, all time", fmt_count(m.clicks)),
+        ),
         StatMode::Trending => (
             fmt_count(m.visitors_7d),
             "this week".to_string(),
@@ -190,6 +195,8 @@ pub fn short_age(created: DateTime<Utc>, now: DateTime<Utc>) -> String {
 #[derive(Clone, Copy, PartialEq)]
 pub enum StatMode {
     Top,
+    /// The lifetime record: the number the monument tab claims, and the one a member never loses.
+    Monument,
     Trending,
     New,
     Similar,

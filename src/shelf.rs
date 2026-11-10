@@ -103,7 +103,7 @@ pub fn build(
     // The three source lists, each produced by a ranker that already exists. Reusing them is what
     // makes the ordered shelves byte-identical to the lists they replaced: the arithmetic that turns
     // clicks, visitors and age into an order is not re-implemented here.
-    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights, lens.relevance, attention));
+    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights, lens.relevance, attention, ranking::Window::Recent));
     let by_clicks = {
         let mut idx: Vec<usize> = (0..members.len()).collect();
         idx.sort_by(|a, b| {
