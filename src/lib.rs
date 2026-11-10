@@ -24,6 +24,7 @@ pub mod ceiling;
 pub mod concentration;
 pub mod dial;
 pub mod exposure;
+pub mod floors;
 pub mod eval;
 pub mod shelf;
 pub mod taste;
