@@ -1,7 +1,7 @@
 # Orbital — roadmap
 
 State at the time of writing: **schema v9**, **211 tests**, `orbital doctor` green, seven timers, 2 visible
-members, 19 links across 16 domains, capabilities document served and gate-checked. Last rewrite **2026-11-10** (v5): the order below is the owner's — **stack first, then
+members, 19 links across 18 domains, capabilities document served and gate-checked. Last rewrite **2026-11-10** (v5): the order below is the owner's — **stack first, then
 shared recommendations, then frictionless contribution, then federation**.
 
 This file is the honest list **and the ledger**: every open step carries its gate on the same line, and
@@ -59,7 +59,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 |---|---|
 | Visible members | 2 (one is the operator) |
 | Verticals configured | 10; **6** hold nothing — and the nav no longer offers them (D53) |
-| Links | **19**, across **16 distinct domains**, 0 failing — the five `example.com` rows a smoke test wrote are deleted (D53) |
+| Links | **19**, across **18 distinct domains**, 0 failing — the five `example.com` rows a smoke test wrote are deleted (D53) |
 | Outbound clicks recorded | **195** |
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
