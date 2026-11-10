@@ -65,7 +65,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **144** (45 unit, 43 HTTP, 7 store), schema v5, deploy gate green |
+| Tests | **144** (59 unit, 51 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Concentration on home | **2 members hold every card**; 186 clicks total; no Gini or impression share recorded yet (step 4 measures it) |
