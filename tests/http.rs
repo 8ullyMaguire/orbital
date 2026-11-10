@@ -1915,10 +1915,12 @@ async fn the_monument_tab_shows_the_lifetime_record(pool: PgPool) {
 
     let top = call(&app, get("/v/dev?tab=top")).await;
     assert_eq!(top.status, StatusCode::OK);
+    let at_vet = top.body.find("/@veteran").unwrap_or(0);
+    let at_new = top.body.find("/@newcomer").unwrap_or(0);
     assert_eq!(
         order_of(&top.body, &["veteran", "newcomer"]),
         vec!["newcomer", "veteran"],
-        "Top is a recent list, and the stale ten thousand ranks below it"
+        "Top is a recent list, and the stale ten thousand ranks below it (veteran at {at_vet}, newcomer at {at_new})"
     );
     assert!(
         !top.body.contains("10,000"),
