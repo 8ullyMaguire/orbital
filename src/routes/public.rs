@@ -109,7 +109,7 @@ pub async fn home(
     };
     let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Home).await;
     let attn = st.cfg.attention.clone();
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
 
     for v in &verticals {
@@ -294,7 +294,7 @@ pub async fn vertical(
         return Err(PageError(AppError::NotFound));
     };
     // One surface: the adult vertical has a page like every other vertical.
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     let members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
         .await?
         .into_iter()
@@ -765,7 +765,7 @@ pub async fn profile(
         total_members,
     };
 
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     Ok(ProfileTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         p: view,
@@ -822,7 +822,7 @@ pub async fn search(
     Query(q): Query<SearchQuery>,
 ) -> PageResult<SearchTemplate> {
     let now = Utc::now();
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     let query = q.q.trim().to_string();
     let (mut members, mut tags) = if query.is_empty() {
         (Vec::new(), Vec::new())
@@ -1098,7 +1098,7 @@ pub(crate) async fn sitemap(State(st): State<AppState>, _ctx: Ctx) -> PageResult
         body.push_str(&format!(
             "<url><loc>{base}/about</loc><priority>0.5</priority></url>"
         ));
-        for v in store::verticals(&st.pool, true).await? {
+        for v in store::populated_verticals(&st.pool, true).await? {
             let members = store::vertical_members(&st.pool, &v.slug).await?;
             if members.is_empty() {
                 continue;
@@ -1143,7 +1143,7 @@ pub async fn about(
     ctx: Ctx,
     PageUser(user): PageUser,
 ) -> PageResult<AboutTemplate> {
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     Ok(AboutTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
     })
@@ -1155,7 +1155,7 @@ pub async fn report(
     PageUser(user): PageUser,
     Query(q): Query<ReportQuery>,
 ) -> PageResult<ReportTemplate> {
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     Ok(ReportTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         handle: q.u.clone().unwrap_or_default(),
@@ -1191,7 +1191,7 @@ pub async fn report_post(
     PageUser(user): PageUser,
     Form(form): Form<ReportForm>,
 ) -> PageResult<ReportTemplate> {
-    let verticals = store::verticals(&st.pool, true).await?;
+    let verticals = store::populated_verticals(&st.pool, true).await?;
     let handle = normalise_handle(&form.handle).unwrap_or_default();
     let target = store::user_by_handle(&st.pool, &handle).await?;
     let Some(target) = target else {

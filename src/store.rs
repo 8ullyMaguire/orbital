@@ -407,6 +407,23 @@ pub async fn verticals(pool: &PgPool, include_nsfw: bool) -> Result<Vec<Vertical
         .await?)
 }
 
+/// The verticals that have somebody in them. This is what the navigation and the front page may offer, because a
+/// vertical nobody is in is a page that exists and not yet a destination. The API keeps the full taxonomy
+/// (`verticals`), since publishing a count of zero is honest; *offering* a door with nobody behind it is not.
+pub async fn populated_verticals(pool: &PgPool, include_nsfw: bool) -> Result<Vec<VerticalRow>, AppError> {
+    let sql = format!(
+        "SELECT {VERTICAL_COLS} FROM verticals v
+          WHERE ($1 OR v.nsfw = false)
+            AND EXISTS (SELECT 1 FROM user_verticals uv JOIN users u ON u.id = uv.user_id
+                         WHERE uv.vertical_slug = v.slug AND NOT u.hidden)
+          ORDER BY v.sort, v.slug"
+    );
+    Ok(sqlx::query_as::<_, VerticalRow>(&sql)
+        .bind(include_nsfw)
+        .fetch_all(pool)
+        .await?)
+}
+
 pub async fn vertical_by_slug(pool: &PgPool, slug: &str) -> Result<Option<VerticalRow>, AppError> {
     let sql = format!("SELECT {VERTICAL_COLS} FROM verticals WHERE slug = $1");
     Ok(sqlx::query_as::<_, VerticalRow>(&sql)
