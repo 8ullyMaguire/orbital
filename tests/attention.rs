@@ -123,7 +123,7 @@ fn damped_shrinks_a_ten_fold_lead_to_the_declared_ratio() {
     assert!(lead < 3.0, "and the compression must be real, got {lead:.3}x");
 
     // A sharper alpha compresses less; alpha 1.0 is the log alone.
-    let log_only = Config { mode: Mode::Damped, alpha: 1.0 };
+    let log_only = Config { mode: Mode::Damped, alpha: 1.0, exempt: Vec::new() };
     assert!((log_only.lead_after(10.0) - 11f64.ln() / 2f64.ln()).abs() < 1e-9);
 }
 

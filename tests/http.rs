@@ -2093,7 +2093,7 @@ async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
     let mut cfg = test_config();
     cfg.exposure = orbital::exposure::Config::off();
     let capped = app(pool.clone()).await;
-    let attention = cfg.attention;
+    let attention = cfg.attention.clone();
     let uncapped = app_with(pool.clone(), cfg).await;
     for handle in ["leader", "second", "third"] {
         register(&capped, handle, "dev").await;
