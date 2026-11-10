@@ -1425,3 +1425,46 @@ One measurement artefact worth recording: `orbital doctor` reported `FAIL uptime
 because the probe fires every ten minutes and caught the service mid-restart. Re-running the probe by hand gave
 `200 at 2026-11-10T18:22:22+01:00` and `0 failure(s)`. A deploy therefore reads as one failed probe, and that is
 the probe working, not a regression.
+
+## D49 — The neighbourhood is tag overlap, and having nobody is three different answers
+
+**Context.** D48 built pool-level IDF and left it unwired, naming "the neighbourhood surface" as the place it
+becomes live because a *new* list has no previous order to regress. The profile sidebar was the candidate: it
+already said "Shared tags, not paid placement" while computing `ranking::similarity` — tag overlap blended with hub
+tags, the reader's weights and recency. The promise was not the implementation.
+
+**Decision.** The sidebar and `/api/v1/members/{handle}/similar` are both `neighbours::similar`:
+
+- **IDF overlap** over the member pool, on from the first row.
+- **Four reasons**, not one empty list: `shared`, `no_tags`, `nothing_shared`, `alone`, each with a sentence the
+  page renders in place of the box.
+- **Determinism on purpose**: overlap descending, ties by handle; shared tags by rarity then alphabetically.
+- **`ranking::similarity` deleted** — one caller, and that caller now wants a different list. Adopting a module by
+  leaving its predecessor behind is how two arithmetics end up disagreeing about the same word.
+- **The overlap coefficient is not in the JSON.** The shared tags are the explanation; a coefficient is a knob.
+
+**Rejected alternatives.**
+
+- *Keep the blend and change the copy to match it.* Then the sidebar would say "people we think are similar",
+  which is a claim about the operator's judgement — the thing the operator-authors-nothing rule forbids. The tags
+  are shown, so the reason is checkable.
+- *Pad the list with recent members when there is no overlap.* That is inventing a relationship and calling it a
+  recommendation; the gate's whole first clause exists to stop it.
+- *Return `[]` with no reason.* A reader cannot tell "you have not tagged yourself" from "the site is broken", and
+  the most likely reader is the one who just signed up.
+- *Break ties by display name.* Display names are editable and colliding; a handle is stable and unique, so the
+  order survives a rename.
+- *Publish `overlap` so clients can re-rank.* It would immediately become the number to game, and it is not what
+  the page shows (the API's own rule: never more than the page).
+
+**Consequences.** **195 tests** (75 unit, 67 HTTP, 7 store, 5 taste, 5 ceiling, 5 neighbours, 4 eval, 4
+concentration, 4 dial, 4 silence, 4 attention, 6 overlap, 3 guardrail, 2 fame). Two gates had to be strengthened
+before they were worth having: a determinism test that compares two runs of the same code passes with *any*
+tiebreak, so `ties_are_broken_by_handle` now asserts the exact order; and a rare-tag test passed with the weighting
+switched off, so the fixture now gives the rare sharer a third tag — unweighted the common sharer wins (`0.5` vs
+`0.408`), weighted the rare sharer does, and both orders are asserted. Live:
+`/api/v1/members/criticalnexus/similar` → `{"reason":"shared","similar":[{"handle":"steeltitan","shared_tags":
+["bluesky","self-hosting"]}]}` with `etag: W/"6e69584104ab96e5"` and `304` on `If-None-Match`; the profile sidebar
+prints `shares bluesky, self-hosting`. **Not exercised on live**: the three empty reasons — every visible member
+here has tags, and inventing an untagged member to demonstrate one would be fabricating the very row the gate
+forbids. They are proven in the suite, page and wire.

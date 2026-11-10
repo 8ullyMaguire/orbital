@@ -339,6 +339,35 @@ give the same slot, on any host, which is what makes the page reproducible from 
 The clock is a date, not a timestamp: `day_key(date)` is days since the epoch, so two hosts that disagree by
 minutes still agree on the rotation.
 
+### 2e. The neighbourhood: "people like you", and the three ways to have nobody (D49)
+
+The profile sidebar promises "shared tags, not paid placement". It used to be `ranking::similarity`, a blend of tag
+overlap, hub tags, the reader's weights and recency — a reasonable list under a sentence that described a different
+one. It is now the sentence:
+
+```
+overlap(a, b) = Σ_{t ∈ a∩b} w(t)² / sqrt( Σ_{t∈a} w(t)² · Σ_{t∈b} w(t)² )     w = IDF over the member pool
+```
+
+Pool-level rarity is **live on this surface** (D48 said this is where it becomes live): a tag two profiles carry
+outweighs one everybody carries. Because the list is new, there is no previous order to regress behind an eval gate.
+
+| answer | `reason` | sentence on the page |
+|---|---|---|
+| neighbours exist | `shared` | the list, each with "shares <tags>" |
+| the member has no tags | `no_tags` | "No tags yet, so there is nothing to compare with anyone." |
+| tags, but nobody shares one | `nothing_shared` | "Nothing in common with anyone here yet." |
+| nobody else in the directory | `alone` | "The only profile here so far." |
+
+Three different facts, because one empty box that means any of them is a bug report waiting to happen. The ordering
+is `overlap` descending, ties by **handle** (not display name, which changes under a reader's feet); shared tags are
+listed by rarity, then alphabetically. No clock, no visitor, no random tiebreak → twenty samples computed twice from
+the same data are identical, and the test says which order it expects rather than only that two runs agree.
+
+The same function serves `/api/v1/members/{handle}/similar` (`reason`, `says`, `similar[].shared_tags`), so the API
+cannot drift from the page. The overlap coefficient is deliberately **not** published: the tags are the reason, and
+a number the page does not print is a number a client would start tuning against.
+
 ### 2d-bis. Tag overlap, and the comment that lied (D48)
 
 `ranking.rs::cosine` carried the comment "weighted so a rare tag counts for more than a tag everybody has" and then

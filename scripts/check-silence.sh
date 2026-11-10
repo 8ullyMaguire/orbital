@@ -18,6 +18,7 @@ say() { printf '  %-26s %s\n' "$1" "$2"; }
 
 for path in / /about /v/dev "/v/dev?tab=trending" "/search?q=rust" /api/v1/members \
             /api/v1/stats /api/v1/verticals "/api/v1/search?q=rust" /api/v1/ring/dev \
+            "/api/v1/members/steeltitan/similar" \
             /feed.xml /feed.json /sitemap.xml /robots.txt; do
   body=$(curl -s -H "User-Agent: $UA" "$BASE$path") || { say "$path" "FETCH FAILED"; fail=1; continue; }
   hits=$(printf '%s' "$body" | grep -oiE "\b($WORDS)\b" | sort -u | paste -sd, -)
