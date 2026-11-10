@@ -2610,3 +2610,121 @@ async fn no_surface_publishes_a_per_member_score(pool: PgPool) {
         }
     }
 }
+
+/// THE GATE, on the wire: a member with no tags gets an empty list and a reason — not a fabricated list, not a
+/// 500, and not the same empty answer a member with tags but no shared tags gets.
+#[sqlx::test]
+async fn a_member_with_no_tags_answers_an_empty_list_and_a_reason(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "tagless", "dev").await;
+    register(&app, "tagged", "dev").await;
+    sqlx::query(
+        "INSERT INTO tags (user_id, tag_slug) SELECT id, 'rust' FROM users WHERE handle = 'tagged'",
+    )
+    .execute(&pool)
+    .await
+    .expect("a real tag");
+
+    let r = call(&app, get("/api/v1/members/tagless/similar")).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    let j = r.json();
+    assert_eq!(j["similar"].as_array().map(|a| a.len()), Some(0), "{}", r.body);
+    assert_eq!(j["reason"], "no_tags", "{}", r.body);
+    assert!(
+        j["says"].as_str().unwrap_or("").contains("tag"),
+        "the reason is a sentence, not a code alone: {}",
+        r.body
+    );
+
+    // The profile page says the same thing, in the same place the list would be.
+    let page = call(&app, get("/@tagless")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(
+        page.body.contains("No tags yet, so there is nothing to compare with anyone."),
+        "the sidebar explains itself instead of showing an empty box"
+    );
+    assert!(!page.body.contains("Shared tags, not paid placement"), "no heading over nothing");
+}
+
+/// ...and a member whose tags nobody shares gets the *other* reason.
+#[sqlx::test]
+async fn tags_nobody_shares_is_a_different_answer(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "lonely", "dev").await;
+    register(&app, "other", "dev").await;
+    for (handle, tag) in [("lonely", "obscure"), ("other", "rust")] {
+        sqlx::query("INSERT INTO tags (user_id, tag_slug) SELECT id, $2 FROM users WHERE handle = $1")
+            .bind(handle)
+            .bind(tag)
+            .execute(&pool)
+            .await
+            .expect("a real tag");
+    }
+    let r = call(&app, get("/api/v1/members/lonely/similar")).await;
+    let j = r.json();
+    assert_eq!(j["reason"], "nothing_shared", "{}", r.body);
+    assert_eq!(j["similar"].as_array().map(|a| a.len()), Some(0));
+}
+
+/// THE GATE, second half on the wire: the list is shared tags, ranked, stable — and it is the same list the page
+/// renders. A second request answers 304 off the same validator.
+#[sqlx::test]
+async fn similar_members_are_shared_tags_and_do_not_move(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    for handle in ["anchor", "twins", "faraway", "commoner"] {
+        register(&app, handle, "dev").await;
+    }
+    // `twins` shares the rare pair; `commoner` shares only the tag everybody has.
+    for (handle, tags) in [
+        ("anchor", vec!["rust", "cli"]),
+        ("twins", vec!["rust", "cli"]),
+        ("faraway", vec!["garden"]),
+        ("commoner", vec!["rust", "cooking"]),
+    ] {
+        for t in tags {
+            sqlx::query("INSERT INTO tags (user_id, tag_slug) SELECT id, $2 FROM users WHERE handle = $1")
+                .bind(handle)
+                .bind(t)
+                .execute(&pool)
+                .await
+                .expect("a real tag");
+        }
+    }
+
+    let first = call(&app, get("/api/v1/members/anchor/similar")).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.body);
+    let j = first.json();
+    assert_eq!(j["reason"], "shared", "{}", first.body);
+    let list = j["similar"].as_array().expect("a list").clone();
+    let handles: Vec<&str> = list.iter().filter_map(|v| v["handle"].as_str()).collect();
+    assert_eq!(handles.first().copied(), Some("twins"), "the double overlap leads: {handles:?}");
+    assert!(handles.contains(&"commoner"), "{handles:?}");
+    assert!(!handles.contains(&"faraway"), "no shared tags, no entry: {handles:?}");
+    assert!(!handles.contains(&"anchor"), "not its own neighbour");
+    assert_eq!(
+        list[0]["shared_tags"].as_array().map(|a| a.len()),
+        Some(2),
+        "the reason is named: {}",
+        first.body
+    );
+
+    // Stable: the same request twice, same body.
+    let second = call(&app, get("/api/v1/members/anchor/similar")).await;
+    assert_eq!(first.body, second.body, "the neighbourhood moved between two reads");
+
+    // ...and the validator works.
+    let etag = first.etag.clone().expect("an ETag");
+    let mut req = get("/api/v1/members/anchor/similar");
+    req.headers_mut().insert("if-none-match", etag.parse().unwrap());
+    let cached = call(&app, req).await;
+    assert_eq!(cached.status, StatusCode::NOT_MODIFIED, "{}", cached.body);
+
+    // The page renders the same people, in the same order, with the shared tags as the why line.
+    let page = call(&app, get("/@anchor")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    let page_twins = page.body.find("/@twins").unwrap_or(usize::MAX);
+    let page_commoner = page.body.find("/@commoner").unwrap_or(usize::MAX);
+    assert!(page_twins != usize::MAX && page_commoner != usize::MAX, "the sidebar lists both");
+    assert!(page_twins < page_commoner, "and in the same order as the API");
+    assert!(page.body.contains("shares rust, cli"), "the why line names the tags");
+}
