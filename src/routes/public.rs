@@ -148,7 +148,15 @@ pub async fn home(
     // at lambda 1.0, so their order is still `rank_trending`/`rank_new`'s order exactly; `For you`
     // spends a little relevance on diversity, which is the only shelf whose order is new.
     let shelves: Vec<crate::render::ShelfView> =
-        crate::shelf::build(&all, &weights, now, &crate::shelf::Declaration::default(), lens, attn)
+        crate::shelf::build(
+            &all,
+            &weights,
+            now,
+            &crate::shelf::Declaration::default(),
+            lens,
+            attn,
+            &st.cfg.exposure,
+        )
             .into_iter()
             .map(|s| {
                 let mode = match s.key {

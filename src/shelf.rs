@@ -90,6 +90,7 @@ pub fn build(
     decl: &Declaration,
     lens: crate::dial::Lens,
     attention: crate::attention::Config,
+    caps: &crate::exposure::Config,
 ) -> Vec<Shelf> {
     // `lens` is the reader's dial as a fraction of this surface's declared ceiling: 1.0 is the
     // ordering the site has always served, 0.0 is no lens at all.
@@ -98,6 +99,12 @@ pub fn build(
     }
 
     let position = positions(members);
+    // Exposure is the same 90-day weighted attention `Top` ranks by (D42), so the cohort rule needs no
+    // second instrument: a member the page shows a lot of is a member who has been read a lot.
+    let exposure: Vec<f64> = members.iter().map(|m| m.recent).collect();
+    // Members already placed on this page view: the cross-shelf rule (D43) lives here, in one set that
+    // every shelf adds to, because a rule each shelf enforced alone would be no rule at all.
+    let mut used: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let tag_ids = tag_ids(members);
 
     // The three source lists, each produced by a ranker that already exists. Reusing them is what
@@ -134,9 +141,12 @@ pub fn build(
         // between the crate's vocabulary and this repo's, and it stays in one place.
         let candidates: Vec<usize> = pool.ids().iter().map(|id| *id as usize).collect();
         let items = to_items(&candidates, &tag_ids);
-        let chosen = select(items, decl.per_shelf, decl.for_you_lambda, |a, b| {
+        // The full MMR ordering, then the caps: `enforce` needs somewhere to look for a tail slot, and a
+        // selection that stopped at `per_shelf` would have thrown away the candidates it needs.
+        let order = select(items.clone(), items.len(), decl.for_you_lambda, |a, b| {
             polaris_candidates::jaccard(a, b)
         });
+        let chosen = crate::exposure::enforce(&order, decl.per_shelf, &mut used, &exposure, caps);
         shelves.push(Shelf {
             key: "for_you",
             title: "For you",
@@ -150,17 +160,14 @@ pub fn build(
         key: "rising",
         title: "Rising this week",
         subtitle: "Distinct visitors in the last seven days, damped for brand-new accounts.",
-        items: why_lines(
-            members,
-            weights,
-            now,
-            select(
-                to_items(&by_rising, &tag_ids),
-                decl.per_shelf,
-                decl.ordered_lambda,
-                |a, b| polaris_candidates::jaccard(a, b),
-            ),
-        ),
+        items: {
+            let items = to_items(&by_rising, &tag_ids);
+            let order = select(items.clone(), items.len(), decl.ordered_lambda, |a, b| {
+                polaris_candidates::jaccard(a, b)
+            });
+            let chosen = crate::exposure::enforce(&order, decl.per_shelf, &mut used, &exposure, caps);
+            why_lines(members, weights, now, chosen)
+        },
     });
 
     // `New`: one source, pure relevance — the New ranker's own order.
@@ -168,17 +175,14 @@ pub fn build(
         key: "new",
         title: "New to the directory",
         subtitle: "Everyone who joined recently, newest first. No threshold to clear.",
-        items: why_lines(
-            members,
-            weights,
-            now,
-            select(
-                to_items(&by_new, &tag_ids),
-                decl.per_shelf,
-                decl.ordered_lambda,
-                |a, b| polaris_candidates::jaccard(a, b),
-            ),
-        ),
+        items: {
+            let items = to_items(&by_new, &tag_ids);
+            let order = select(items.clone(), items.len(), decl.ordered_lambda, |a, b| {
+                polaris_candidates::jaccard(a, b)
+            });
+            let chosen = crate::exposure::enforce(&order, decl.per_shelf, &mut used, &exposure, caps);
+            why_lines(members, weights, now, chosen)
+        },
     });
 
     shelves
@@ -320,7 +324,7 @@ mod tests {
             member("fresh", 2, 4, 2, &["dev"]),
             member("steady", 10, 12, 40, &["music"]),
         ];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::off());
 
         let rising = shelves.iter().find(|s| s.key == "rising").unwrap();
         let expected_rising: Vec<String> = ranking::rank_trending(members.clone(), Utc::now(), &[], 1.0)
@@ -350,7 +354,7 @@ mod tests {
             member("odd", 1, 1, 30, &["music"]),
         ];
         let weights = vec![("rust".to_string(), 1.0)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default());
         let for_you = shelves.iter().find(|s| s.key == "for_you").unwrap();
         let order = handles(&members, for_you);
         assert_eq!(order.first().map(String::as_str), Some("a"), "the top stays the top: {order:?}");
@@ -367,7 +371,7 @@ mod tests {
             member("fresh", 0, 0, 1, &["dev"]),
         ];
         let weights = vec![("rust".to_string(), 0.9)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default());
         let forbidden = ["taste", "prior", "gravity", "curated", "editor", "operator", "orbit"];
         for shelf in &shelves {
             for item in &shelf.items {

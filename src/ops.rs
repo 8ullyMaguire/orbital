@@ -177,7 +177,10 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         say(true, "fame", "Top reads a 90-day half-life; no members yet".to_string());
     }
 
-    // 11. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    // 11. How many slots one member may hold, and how much of a shelf is the tail (D43).
+    say(true, "exposure", cfg.exposure.sentence());
+
+    // 12. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
     //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
     //    favours, which is not a sentence a page may carry.
     match crate::concentration::latest(pool).await {

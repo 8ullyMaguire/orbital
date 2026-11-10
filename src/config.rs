@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::attention::Config as AttentionConfig;
 use crate::dial::Config as DialConfig;
+use crate::exposure::Config as ExposureConfig;
 use crate::taste::TasteConfig;
 
 #[derive(Clone, Debug)]
@@ -27,6 +28,9 @@ pub struct Config {
     pub dial: DialConfig,
     /// What a click is worth (D41). Loaded at boot: an alpha outside (0, 1] is a typo, refused.
     pub attention: AttentionConfig,
+    /// How many slots one member may hold, and how much of each shelf is the long tail (SPEC §2c-quater,
+    /// D43). Loaded at boot: a share of 40 is a typo and must fail there, not in a page.
+    pub exposure: ExposureConfig,
 }
 
 impl Config {
@@ -51,6 +55,7 @@ impl Config {
             taste: TasteConfig::from_env()?,
             dial: DialConfig::from_env()?,
             attention: AttentionConfig::from_env()?,
+            exposure: ExposureConfig::from_env()?,
         })
     }
 
@@ -70,6 +75,7 @@ impl Config {
             taste: TasteConfig::for_test(),
             dial: DialConfig::for_test(),
             attention: AttentionConfig::for_test(),
+            exposure: ExposureConfig::for_test(),
         }
     }
 

@@ -20,6 +20,7 @@ pub mod seed;
 pub mod attention;
 pub mod concentration;
 pub mod dial;
+pub mod exposure;
 pub mod eval;
 pub mod shelf;
 pub mod taste;
