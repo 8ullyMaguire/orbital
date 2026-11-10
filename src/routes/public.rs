@@ -122,7 +122,8 @@ pub async fn home(
             });
             continue;
         }
-        let ranked = ranking::rank_top(members, &weights, lens.relevance, attn, ranking::Window::Recent);
+        let ranked =
+            ranking::rank_top(members, &weights, lens.relevance, attn.clone(), ranking::Window::Recent);
         let top = ranked
             .iter()
             .take(3)
