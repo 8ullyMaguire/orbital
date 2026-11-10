@@ -182,9 +182,17 @@ pub async fn home(
                 }
             })
             .collect();
+    // The picks rail is the same page view, so it obeys the same cross-shelf rule (D43): a member the
+    // shelves already show is not shown again here. Without this the cap would be true of three sections
+    // and false of the fourth, which is how a rule quietly stops being a rule.
+    let already: std::collections::HashSet<String> = shelves
+        .iter()
+        .flat_map(|s| s.cards.iter().map(|c| c.handle.clone()))
+        .collect();
     let picks: Vec<MemberCard> = store::curated_any(&st.pool, true, 6)
         .await?
         .iter()
+        .filter(|m| !already.contains(&m.handle))
         .enumerate()
         .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Top, now))
         .collect();
