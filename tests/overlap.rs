@@ -37,30 +37,21 @@ fn pool_from(seed: &mut u64, n: usize, tags_per: usize, alphabet: usize) -> Vec<
         .collect()
 }
 
-/// THE GATE, first half: for pools whose tags are all equally common the new arithmetic is the old
-/// arithmetic, to the last bit — 200 seeds, every pair in every pool.
+/// THE GATE, first half: the arithmetic the page actually calls is the arithmetic it called before — every
+/// tag weighs `1.0`, on every pool, however skewed. 200 seeded pools, every pair, identical to the last bit.
 #[test]
-fn uniform_pools_score_exactly_as_the_formula_it_replaces() {
+fn the_uniform_weights_are_the_formula_this_step_replaces() {
     let mut seed = 0x2545_F491_4F6C_DD1D;
     let mut pairs = 0usize;
     for round in 0..200 {
-        // Every member draws from the same alphabet the same number of times, so no tag is rarer than
-        // another and IDF has nothing to say.
-        let n = 2 + round % 7;
-        let pool = pool_from(&mut seed, n, 2 + round % 4, 4);
-        let ov = Overlap::from_sets(pool.iter().map(|p| p.as_slice()));
+        let pool = pool_from(&mut seed, 2 + round % 7, 2 + round % 4, 4);
+        let ov = Overlap::uniform();
         for a in &pool {
             for b in &pool {
                 let want = legacy_cosine(a, b);
-                let got = ov.pair(a, b).unwrap_or_else(|| {
-                    if want == 0.0 {
-                        0.0
-                    } else {
-                        panic!("a pair with tags scored None: {a:?} {b:?}")
-                    }
-                });
+                let got = ov.pair_or_zero(a, b);
                 assert!(
-                    (got - want).abs() < 1e-12,
+                    got.to_bits() == want.to_bits(),
                     "round {round}: {a:?} vs {b:?} — old {want}, new {got}"
                 );
                 pairs += 1;
@@ -68,6 +59,20 @@ fn uniform_pools_score_exactly_as_the_formula_it_replaces() {
         }
     }
     assert!(pairs > 10_000, "the gate compared {pairs} pairs");
+}
+
+/// The page's ranking functions call the uniform entry point, and nothing else: pool-level rarity is built and
+/// tested here, but it is not wired into any surface. Turning it on changes an order, and an order change has
+/// to pass `orbital eval` first (ROADMAP §3, D48) — a refactor step does not get to smuggle a ranking change in
+/// behind the word "adopt".
+#[test]
+fn the_page_ranks_with_the_uniform_entry_point_and_nothing_else() {
+    let ranking = std::fs::read_to_string("src/ranking.rs").expect("src/ranking.rs");
+    assert!(ranking.contains("cosine("), "the page still ranks by tag overlap at all");
+    assert!(
+        !ranking.contains("Overlap::from_sets") && !ranking.contains("TagSignal"),
+        "a pool-level overlap reached the page without an eval gate"
+    );
 }
 
 /// THE GATE, second half: the doc comment that was there all along and was never true — "weighted so a
