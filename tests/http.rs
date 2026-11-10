@@ -1796,3 +1796,82 @@ async fn each_surface_declares_its_own_weight_and_reads_no_other(pool: PgPool) {
     );
     assert_eq!(vertical_under_home, before, "the home's weight must not reach /v/{{slug}}");
 }
+
+/// THE SILENCE GATE: walk every surface a stranger can reach and fail if any of them names the prior —
+/// its vocabulary, a declared source's own name, or a field that offers to report it. The declaration here
+/// names a source "the regulars", which is exactly the kind of editorial choice a reader must not see.
+#[sqlx::test]
+async fn no_surface_names_the_prior(pool: PgPool) {
+    use orbital::silence::leaks;
+
+    let mut cfg = test_config();
+    cfg.taste = orbital::taste::TasteConfig::from_json(
+        r#"{"sources":[{"name":"the regulars","selector":{"kind":"trust_level","at_least":3},
+             "weight":1.0,"kinds":["like"]}]}"#,
+    )
+    .expect("a valid declaration");
+    let extra = vec!["the regulars".to_string()];
+    let app = app_with(pool.clone(), cfg).await;
+    register(&app, "robi", "dev").await;
+    give_tags(&pool, "robi", &["rust"]).await;
+
+    let paths = [
+        "/", "/about", "/@robi", "/v/dev", "/v/dev?tab=trending", "/v/dev?tab=new",
+        "/search?q=rust", "/api/v1/members", "/api/v1/members/robi", "/api/v1/stats",
+        "/api/v1/verticals", "/api/v1/search?q=rust", "/api/v1/ring/dev", "/feed.xml",
+        "/feed.json", "/sitemap.xml", "/robots.txt", "/prefs",
+    ];
+    for path in paths {
+        let res = call(&app, get(path)).await;
+        assert!(
+            res.status.is_success() || res.status.is_redirection(),
+            "{path} answered {} — a surface that cannot be read cannot be proved silent",
+            res.status
+        );
+        assert_eq!(
+            leaks(&res.body, &extra),
+            Vec::<String>::new(),
+            "{path} names the prior"
+        );
+    }
+
+    // The one exemption, and it is written down: the estate's capabilities document is generated from a
+    // spec every site in the family shares, and its `taste` field is the family's word for a capability
+    // declared `off`. It says the site does not do this; it does not say what the site does instead.
+    let caps = call(&app, get("/api/v1/capabilities")).await;
+    assert_eq!(caps.status, StatusCode::OK, "{}", caps.body);
+    assert_eq!(
+        leaks(&caps.body, &extra),
+        vec!["taste".to_string()],
+        "capabilities may say `taste: off` and nothing else about it"
+    );
+}
+
+/// `/api/v1/taste` is the **reader's own** lens: their tag weights and their dial, and not one field of the
+/// instance's. It is the only place the word appears in a route, and it is about the caller.
+#[sqlx::test]
+async fn the_lens_route_answers_only_the_callers_own_lens(pool: PgPool) {
+    use orbital::silence::leaks;
+    let app = app(pool.clone()).await;
+    register(&app, "robi", "dev").await;
+
+    let cold = call(&app, get("/")).await;
+    let viewer = cold.vcookie.clone().expect("a visitor id");
+    let empty = call(&app, cookie(get("/api/v1/taste"), &viewer)).await;
+    assert_eq!(empty.status, StatusCode::OK, "{}", empty.body);
+    let body = empty.json();
+    assert_eq!(body["tags"], serde_json::json!({}), "a stranger has no lens, and that is an empty object");
+    assert!(body["dial"].is_object(), "their dial is theirs to read: {}", empty.body);
+    assert_eq!(leaks(&empty.body, &[]), Vec::<String>::new(), "{}", empty.body);
+
+    call(&app, post_form("/prefs", "tag=chiptune&w=10", &viewer)).await;
+    let tuned = call(&app, cookie(get("/api/v1/taste"), &viewer)).await;
+    assert_eq!(tuned.status, StatusCode::OK);
+    let tuned_body = tuned.json();
+    assert_eq!(
+        tuned_body["tags"]["chiptune"], 1.0,
+        "the weight the reader set, at full scale: {}",
+        tuned.body
+    );
+    assert_eq!(leaks(&tuned.body, &[]), Vec::<String>::new(), "{}", tuned.body);
+}
