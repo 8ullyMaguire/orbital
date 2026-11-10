@@ -2761,9 +2761,30 @@ async fn a_ranked_away_tag_moves_a_member_down_and_never_off_the_page(pool: PgPo
             .await
             .expect("a real tag");
     }
+    // Bruno is read more than Alfred, so without a floor bruno leads. Nine sessions for one and ten for the other
+    // keeps them close enough that a 0.5 floor has to reverse the order — otherwise the test passes on a page that
+    // never applied anything.
+    for (handle, n) in [("alfred", 9), ("bruno", 10)] {
+        for i in 0..n {
+            sqlx::query(
+                "INSERT INTO source_hits (user_id, surface, session_hash, position)
+                 SELECT id, 'home', $2, 1 FROM users WHERE handle = $1",
+            )
+            .bind(handle)
+            .bind(format!("s{i}"))
+            .execute(&pool)
+            .await
+            .expect("a real click");
+        }
+    }
 
     let plain = call(&app, get("/")).await;
     assert_eq!(plain.status, StatusCode::OK);
+    assert!(
+        plain.body.find("/@bruno").unwrap_or(usize::MAX) < plain.body.find("/@alfred").unwrap_or(usize::MAX),
+        "without a floor the more-read member leads: {}",
+        &plain.body[..plain.body.len().min(400)]
+    );
     let bruno_plain = plain
         .body
         .find("/@bruno")
@@ -2773,7 +2794,7 @@ async fn a_ranked_away_tag_moves_a_member_down_and_never_off_the_page(pool: PgPo
         .find("/@alfred")
         .unwrap_or_else(|| panic!("alfred is not on the plain page"));
 
-    let floored = call(&app, get("/?not=rust")).await;
+    let floored = call(&app, get("/?not=rust:0.5")).await;
     assert_eq!(floored.status, StatusCode::OK, "{}", floored.body);
     let bruno_floored = floored
         .body
@@ -2784,9 +2805,10 @@ async fn a_ranked_away_tag_moves_a_member_down_and_never_off_the_page(pool: PgPo
         bruno_floored > alfred_floored,
         "the floored member must be after the other one: bruno {bruno_floored} vs alfred {alfred_floored}"
     );
-    if bruno_plain < alfred_plain {
-        assert!(bruno_floored > bruno_plain, "and it must have moved down, not up");
-    }
+    assert!(
+        bruno_floored > bruno_plain,
+        "and it must have moved down, not up: {bruno_plain} -> {bruno_floored}"
+    );
     // The response names what it did, in the reader's words.
     assert!(
         floored.body.contains("ranked away: 1 profile lower"),
