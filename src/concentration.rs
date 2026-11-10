@@ -50,12 +50,34 @@ impl Snapshot {
 /// that needs no sorting and no cumulative sums — the pools here are small and the formula is harder to get
 /// subtly wrong.
 pub fn gini(values: &[f64]) -> f64 {
-    unimplemented!("RED: the Gini coefficient")
+    let n = values.len() as f64;
+    if n == 0.0 {
+        return 0.0;
+    }
+    let total: f64 = values.iter().sum();
+    if total <= 0.0 {
+        // Only empty counts can reach here, and "no impressions" is not "perfectly even".
+        return 0.0;
+    }
+    let mean = total / n;
+    let mut difference = 0.0;
+    for a in values {
+        for b in values {
+            difference += (a - b).abs();
+        }
+    }
+    difference / (2.0 * n * n * mean)
 }
 
 /// The share of the total held by the `k` heaviest items.
 pub fn top_share(values: &[f64], k: usize) -> f64 {
-    unimplemented!("RED: the top-k share")
+    let total: f64 = values.iter().sum();
+    if values.is_empty() || total <= 0.0 {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.iter().take(k).sum::<f64>() / total
 }
 
 /// Impression counts per member on one surface, all time.
@@ -82,7 +104,43 @@ pub async fn surfaces(pool: &PgPool) -> Result<Vec<String>> {
 
 /// Take this week's snapshot for every surface, correcting the row if it already exists.
 pub async fn record(pool: &PgPool, as_of: DateTime<Utc>) -> Result<Vec<Snapshot>> {
-    unimplemented!("RED: record the week")
+    let mut written = Vec::new();
+    for surface in surfaces(pool).await? {
+        let values = shares(pool, &surface).await?;
+        if values.is_empty() {
+            continue;
+        }
+        let gini = gini(&values);
+        let top10 = top_share(&values, TOP_K);
+        let members = values.len() as i32;
+        let impressions: i64 = values.iter().sum::<f64>() as i64;
+        let (week,): (NaiveDate,) = sqlx::query_as(
+            "INSERT INTO concentration_snapshots (surface, week, gini, top10, members, impressions)
+             VALUES ($1, date_trunc('week', $2::timestamptz)::date, $3, $4, $5, $6)
+             ON CONFLICT (surface, week) DO UPDATE
+                SET gini = EXCLUDED.gini, top10 = EXCLUDED.top10,
+                    members = EXCLUDED.members, impressions = EXCLUDED.impressions,
+                    taken_at = now()
+             RETURNING week",
+        )
+        .bind(&surface)
+        .bind(as_of)
+        .bind(gini)
+        .bind(top10)
+        .bind(members)
+        .bind(impressions)
+        .fetch_one(pool)
+        .await?;
+        written.push(Snapshot {
+            surface,
+            week,
+            gini,
+            top10,
+            members: members as i64,
+            impressions,
+        });
+    }
+    Ok(written)
 }
 
 /// The most recent row per surface.
