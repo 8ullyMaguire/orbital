@@ -2146,33 +2146,32 @@ async fn a_curation_row_changes_no_page(pool: PgPool) {
     for (handle, vertical) in [("alpha", "dev"), ("beta", "dev"), ("gamma", "music")] {
         register(&app, handle, vertical).await;
     }
-    for (i, handle) in ["alpha", "beta", "gamma"].iter().enumerate() {
+    // Different amounts of attention, so the default order is decided: alpha, beta, gamma.
+    for (handle, n) in [("alpha", 3), ("beta", 2), ("gamma", 1)] {
         sqlx::query(
             "INSERT INTO source_hits (user_id, session_hash)
-             SELECT id, $2 FROM users WHERE handle = $1",
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
         )
-        .bind(*handle)
-        .bind(format!("cur-{i}"))
+        .bind(handle)
+        .bind(format!("cur-{handle}"))
+        .bind(n)
         .execute(&pool)
         .await
-        .expect("a real hit");
+        .expect("real hits");
     }
 
     let home_before = call(&app, get("/")).await.body;
     let vertical_before = call(&app, get("/v/dev")).await.body;
 
-    // The exact rows that used to drive the rail and the tab: the operator's three picks, in order.
-    for (position, handle) in ["alpha", "gamma", "beta"].iter().enumerate() {
-        sqlx::query(
-            "INSERT INTO curation (vertical_slug, user_id, position)
-             SELECT 'dev', id, $2 FROM users WHERE handle = $1",
-        )
-        .bind(*handle)
-        .bind(position as i32)
-        .execute(&pool)
-        .await
-        .expect("a curation row");
-    }
+    // One row, naming the *last* member: a hand that promotes someone the ranking would not is the only
+    // kind of hand this test has to catch. A row naming everybody would move nobody.
+    sqlx::query(
+        "INSERT INTO curation (vertical_slug, user_id, position)
+         SELECT 'dev', id, 0 FROM users WHERE handle = 'gamma'",
+    )
+    .execute(&pool)
+    .await
+    .expect("a curation row");
 
     let home_after = call(&app, get("/")).await.body;
     let vertical_after = call(&app, get("/v/dev")).await.body;
