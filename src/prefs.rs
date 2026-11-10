@@ -71,7 +71,19 @@ impl TunerView {
                     None => format!("#{tag}"),
                 },
                 tag: tag.clone(),
-                weight: (w * 10.0).round().clamp(0.0, 10.0) as i64,
+                // A weight below three quarters of a slider step is not a step. The passive signal is 0.05 a
+                // page view and the stored value is decayed on read, so it lands within a hair of the 0.5
+                // rounding boundary — which made the slider flicker between 0 and 1 depending on how many
+                // microseconds had passed, and made an otherwise deterministic page differ between two
+                // identical requests (`the_same_vertical_twice_is_the_same_bytes` caught it, once).
+                weight: {
+                    let units = w * 10.0;
+                    if units < 0.75 {
+                        0
+                    } else {
+                        units.round().clamp(0.0, 10.0) as i64
+                    }
+                },
             })
             .collect();
         let suggestions = suggestions
@@ -254,5 +266,42 @@ mod tests {
             applied: true,
         };
         assert_eq!(tuned.ranking().len(), 1, "an explicit choice applies at once");
+    }
+}
+
+#[cfg(test)]
+mod tuner_steps {
+    use super::*;
+
+    fn row_weight(stored: f64) -> i64 {
+        let viewer = ViewerPrefs {
+            weights: vec![("v:dev".to_string(), stored)],
+            pages_seen: 1,
+            applied: false,
+        };
+        TunerView::new(&viewer, Vec::new(), 0, 40)
+            .rows
+            .first()
+            .map(|r| r.weight)
+            .unwrap_or(-1)
+    }
+
+    /// The passive signal never rounds up into a step: one page view is not a preference the visitor expressed,
+    /// and a slider that says "1" after a single visit is a claim the visitor did not make.
+    #[test]
+    fn a_page_view_is_not_a_slider_step() {
+        assert_eq!(row_weight(0.05), 0);
+        assert_eq!(row_weight(0.0499), 0);
+        assert_eq!(row_weight(0.049_999_999), 0);
+        assert_eq!(row_weight(0.0), 0);
+    }
+
+    /// ...and a weight the visitor actually set survives the mapping, including the values that do not land
+    /// exactly in binary (`0.3 * 10` is 2.9999999999999996).
+    #[test]
+    fn weights_a_visitor_set_survive_the_mapping() {
+        for (stored, shown) in [(0.1, 1), (0.2, 2), (0.3, 3), (0.4, 4), (0.7, 7), (1.0, 10)] {
+            assert_eq!(row_weight(stored), shown, "stored {stored}");
+        }
     }
 }
