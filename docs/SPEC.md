@@ -307,6 +307,29 @@ candidate, so a positive verdict bounds how much *worse* the candidate is than r
 somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
 block so it travels with the numbers.
 
+### 2c-bis. What a click is worth (D41)
+
+Attention is the score every discovery surface starts from, so it gets a declaration of its own:
+`attention = damped | raw`, plus `alpha`. Default: `damped`, `alpha = 0.50`.
+
+| input | `raw` | `damped` (default) |
+|---|---|---|
+| count | `clicks` — every hit | one hit per `(member, session)`: a fan looking ten times is one person |
+| weight per hit | 1 | `1 + ln position` — inverse-propensity, `exam(p) = 1/(1 + ln p)`; an unrecorded position is slot 1 |
+| normalisation | `c / max` | `ln(1+c) / ln(1+max)` |
+| compression | none | `^ alpha` |
+| a lead of `k×` becomes | `k×` | `(ln(1+k) / ln 2)^alpha` |
+
+At the default, a 10× lead becomes **1.86×** — the number `orbital doctor` prints, because a promise stated
+as a ratio can be checked and a constant cannot. `raw` is the reviewer's escape hatch: it reads the **raw
+count** and never the corrected column, so it is byte-for-byte the arithmetic of every version before this
+step, which the eval confirms by reproducing the previous run exactly.
+
+Three things this deliberately does not do: it does not record impressions (only clicks carry a position, so
+a member nobody was shown is invisible to the correction); it does not touch `rank_trending` (velocity is a
+week of distinct visitors, already an audience) or `rank_new` (recency); and it never hides anybody —
+attenuation costs position, and a damped score cannot exceed a raw one.
+
 **The band, and why it is a band.** The coefficient is a **guardrail, not a target**: a ranking change may
 not *increase* concentration on a discovery surface without a recorded decision, and the level is read
 against a band rather than aimed at a bullseye.

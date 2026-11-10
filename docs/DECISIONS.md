@@ -1088,3 +1088,40 @@ caller about themselves.
 `OK silence: every public surface is silent` — 14 surfaces silent, `capabilities silent but for taste:off`,
 `/api/v1/taste caller's lens only`. The gate found two real leaks the moment it ran, which is the only
 evidence that a gate is worth its lines.
+
+## D41 — A click is worth what the declaration says, and `raw` means raw
+
+**Context.** Every discovery surface starts from attention. The raw count makes three mistakes: a fan
+looking ten times is counted as ten people, a card at slot 1 is clicked because it is at slot 1, and between
+5,000 and 5,010 clicks the ordering describes noise. The fame headwind (D34) is built on this number, so the
+number has to be a declaration with a stated consequence, not a constant someone tuned once.
+
+**Decision.** `attention = damped | raw` plus `alpha`, default **damped / 0.50**.
+
+- **Damped** reads a corrected column computed in SQL: one hit per `(member, session)`, each weighted
+  `1 + ln position` (inverse-propensity with `exam(p) = 1/(1 + ln p)`; an unrecorded position is slot 1, the
+  least credit), then log-normalised and compressed by `alpha`.
+- The consequence is declared as a **ratio**: a lead of `k×` becomes `(ln(1+k)/ln 2)^alpha ×`, which is
+  1.86× at the default 10× lead and is what `orbital doctor` prints.
+- **Raw** reads the raw count and *never consults the corrected column*: `clicks / max`, ties by handle.
+- `alpha` outside `(0, 1]` is refused by field name — 0 flattens every member to the same score and above 1
+  sharpens the lead instead of damping it.
+- The corrected column is computed once, in the stats fragment, so no page or ranker can forget the cap.
+
+**Rejected alternatives.**
+
+- *Applying the session cap in `clicks` itself.* Then the number the pages print stops being what happened,
+  and every existing ordering moves silently. The tooltip "110 clicks" would become a lie.
+- *Making `raw` also read the corrected column.* This was the first implementation, and the eval caught it:
+  `raw`'s numbers moved (+0.0454 → +0.0483) on live data because a session that clicked twice now counted
+  once. `raw` means raw, and the eval reproducing its previous run exactly is the proof.
+- *A fixed `alpha` in the crate.* The ratio is a policy, and D38's band is the thing it serves; an operator
+  who wants the log alone sets `alpha` 1.0, and the file says so.
+- *Recording impressions to do real CTR correction.* That is a bigger instrument than this step and it
+  changes what the site stores about a visitor. The declared model uses what the rows already carry, and its
+  limitation is stated in SPEC §2c-bis.
+
+**Consequences.** The ordering on a two-member pool does not visibly change — 76 vs 110 clicks compresses
+from a 0.076 gap to 0.047, which the lens term still decides — and that is reported as the result rather than
+dressed up. The compression is proved on a fixture with a known answer, the session cap on real rows, and
+the identity over 200 seeds plus the live eval.
