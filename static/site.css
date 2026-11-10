@@ -587,3 +587,10 @@ p { margin: 0 0 1em; }
 /* A fetched favicon: the only image a link card needs, and it is optional. */
 .lb-ico{width:16px;height:16px;border-radius:3px;margin-right:8px;flex:0 0 auto;object-fit:cover}
 .lb-t small{display:block;max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* The reader's own ranked-away names (D51). Quiet by design: a preference the reader set, not a notice. */
+.ranked-away { margin: 0 0 1.25rem; padding: .6rem .8rem; border-left: 2px solid currentColor;
+  font-size: .85rem; opacity: .72; }
+.ranked-away p { margin: .15rem 0; }
+.ranked-away-fix { opacity: .7; }
+.ranked-away code { font-size: .95em; }

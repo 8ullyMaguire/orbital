@@ -2136,6 +2136,7 @@ async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
         attention,
         &orbital::exposure::Config::off(),
         &orbital::ceiling::Config::off(),
+        &orbital::floors::Floors::none(),
     );
     let rising = shelves.iter().find(|s| s.key == "rising").expect("rising");
     let expected: Vec<String> = orbital::ranking::rank_trending(

@@ -7,6 +7,11 @@
 {% block ogdesc %}{{ v.description }}{% endblock %}
 {% block head %}{% if v.nsfw %}<meta name="robots" content="noindex, nofollow">{% endif %}{% endblock %}
 {% block content %}
+{% if floor_notes.len() > 0 %}
+<div class="ranked-away">
+  {% for n in floor_notes %}<p>{{ n }}</p>{% endfor %}
+</div>
+{% endif %}
 <section class="vhead wrap" style="--accent:{{ v.accent }}">
   <a class="crumb" href="/">← All verticals</a>
   <div class="vhead-h">

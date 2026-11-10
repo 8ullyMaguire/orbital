@@ -272,6 +272,9 @@ pub struct HomeTemplate {
     pub quick: Vec<(String, String)>,
     pub q: String,
     pub tuner: crate::prefs::TunerView,
+    /// One line per declared floor, including the ones that matched nothing (D51). Empty is the common case and
+    /// renders no block at all.
+    pub floor_notes: Vec<String>,
 }
 
 /// One shelf as the template receives it: a heading, a subtitle that is a claim about the arithmetic,
@@ -338,6 +341,8 @@ pub struct VerticalTemplate {
     pub clear_tag: String,
     pub embed_snippet: String,
     pub tuner: crate::prefs::TunerView,
+    /// One line per declared floor, including the ones that matched nothing (D51).
+    pub floor_notes: Vec<String>,
 }
 
 // ------------------------------------------------------------------ profile

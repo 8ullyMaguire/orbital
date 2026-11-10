@@ -58,6 +58,12 @@
   Each person appears once on this page, and the busiest faces make room for the quieter ones.
 </p>
 
+{% if floor_notes.len() > 0 %}
+<div class="ranked-away">
+  {% for n in floor_notes %}<p>{{ n }}</p>{% endfor %}
+  <p class="ranked-away-fix">This is <code>?not=</code> in the address — <code>tag</code> or <code>v:category</code>, comma-separated, <code>:0.4</code> for how far. Nothing is stored.</p>
+</div>
+{% endif %}
 {% for s in shelves %}{% if s.cards.len() > 0 %}
 <section class="wrap section" data-shelf="{{ s.key }}">
   <div class="section-h">

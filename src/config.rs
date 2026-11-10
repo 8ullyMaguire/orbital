@@ -34,6 +34,9 @@ pub struct Config {
     pub exposure: ExposureConfig,
     /// The impression ceiling and the daily tail rotation (SPEC §2c-quinquies, D45).
     pub ceiling: CeilingConfig,
+    /// The instance's declared floors (D51). Loaded at boot so a weight above the cap stops the process instead
+    /// of silently becoming 0.5 on the first page.
+    pub floors: crate::floors::Floors,
 }
 
 impl Config {
@@ -60,6 +63,7 @@ impl Config {
             attention: AttentionConfig::from_env()?,
             exposure: ExposureConfig::from_env()?,
             ceiling: CeilingConfig::from_env()?,
+            floors: crate::floors::Floors::from_env().map_err(|e| anyhow::anyhow!(e))?,
         })
     }
 
@@ -84,6 +88,7 @@ impl Config {
             // page a dozen times would trip a real ceiling and change the order some other test is
             // asserting. The ceiling's own tests opt in, exactly as the exposure tests opt out.
             ceiling: CeilingConfig::off(),
+            floors: crate::floors::Floors::none(),
         }
     }
 

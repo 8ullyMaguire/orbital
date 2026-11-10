@@ -70,6 +70,10 @@ fn layout_for(
 pub struct HomeQuery {
     #[serde(default)]
     pub q: String,
+    /// `?not=rust,v:music:0.4` — the reader's own floors (D51). Ephemeral: nothing is stored, so a shared link
+    /// shows the same ordering to whoever opens it.
+    #[serde(default)]
+    pub not: String,
 }
 
 /// The weights that apply to this request. A signed-in member's own, otherwise the anonymous
@@ -160,6 +164,19 @@ pub async fn home(
     // Three shelves, composed by the estate's candidate arithmetic (`src/shelf.rs`). The ordered two run
     // at lambda 1.0, so their order is still `rank_trending`/`rank_new`'s order exactly; `For you`
     // spends a little relevance on diversity, which is the only shelf whose order is new.
+    // The reader's floors, merged over the instance's (D51). A refusal — a weight above the cap, a name carrying a
+    // colon — comes back as a note rather than a 400: the page still renders and the reader is told which of their
+    // words was not understood, the same rule as a floor that matched nothing.
+    let mut floor_error: Option<String> = None;
+    let reader_floors = if q.not.trim().is_empty() {
+        crate::floors::Floors::none()
+    } else {
+        crate::floors::Floors::parse_list(&q.not).unwrap_or_else(|e| {
+            floor_error = Some(e);
+            crate::floors::Floors::none()
+        })
+    };
+    let floors = st.cfg.floors.merged(&reader_floors);
     let shelves: Vec<crate::render::ShelfView> =
         crate::shelf::build(
             &all,
@@ -170,6 +187,7 @@ pub async fn home(
             attn,
             &st.cfg.exposure,
             &st.cfg.ceiling,
+            &floors,
         )
             .into_iter()
             .map(|s| {
@@ -218,6 +236,12 @@ pub async fn home(
     if let Err(e) = crate::prefs::visit(&st.pool, &vid, &[]).await {
         tracing::warn!(error = %e, "page view not recorded");
     }
+    // Every declared floor is named, including the ones that matched nothing: a typo that silently does nothing
+    // is worse than a typo that says so.
+    let mut floor_notes: Vec<String> = floors.report(&all).iter().map(|n| n.sentence(&all)).collect();
+    if let Some(e) = floor_error {
+        floor_notes.push(e);
+    }
     let mut tuner = crate::routes::prefs::view(&st, &vid, user.as_ref()).await;
     if off {
         tuner.personalized = false;
@@ -235,6 +259,7 @@ pub async fn home(
         total_clicks,
         quick,
         q: q.q,
+        floor_notes,
     })
 }
 
@@ -246,6 +271,9 @@ pub struct VerticalQuery {
     pub tab: Option<String>,
     #[serde(default)]
     pub tag: Option<String>,
+    /// The reader's own floors for this view (D51), same grammar as the home page.
+    #[serde(default)]
+    pub not: Option<String>,
 }
 
 pub async fn vertical(
@@ -301,6 +329,18 @@ pub async fn vertical(
             .collect()
     };
 
+    // The reader's floors, merged over the instance's (D51) — on a category page a `v:<slug>` and a tag are the
+    // two things a reader can rank away.
+    let mut floor_error: Option<String> = None;
+    let reader_floors = match q.not.as_deref().map(str::trim) {
+        None | Some("") => crate::floors::Floors::none(),
+        Some(raw) => crate::floors::Floors::parse_list(raw).unwrap_or_else(|e| {
+            floor_error = Some(e);
+            crate::floors::Floors::none()
+        }),
+    };
+    let floors = st.cfg.floors.merged(&reader_floors);
+
     // The ceiling and the rotation, on this vertical's own surface (D45).
     let surface = format!("v:{}", v.slug);
     let window = store::impressions_window(&st.pool, &surface, 24).await?;
@@ -321,7 +361,14 @@ pub async fn vertical(
         // The monument: the lifetime record, with no lens and no decay (D42). Reachability for a member
         // whose fame has been amortised, and the honest answer to "who has ever been read here".
         "monument" => ranking::rank_monument(filtered.clone()),
-        _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance, attn, ranking::Window::Recent),
+        _ => ranking::rank_top_floored(
+            filtered.clone(),
+            &weights,
+            lens.relevance,
+            attn,
+            ranking::Window::Recent,
+            &floors,
+        ),
     };
     let mode = match tab.as_str() {
         "trending" => StatMode::Trending,
@@ -443,6 +490,13 @@ pub async fn vertical(
         clear_tag: format!("/v/{}?tab={}", v.slug, tab),
         embed_snippet,
         tuner,
+        floor_notes: {
+            let mut notes: Vec<String> = floors.report(&members).iter().map(|n| n.sentence(&members)).collect();
+            if let Some(e) = floor_error {
+                notes.push(e);
+            }
+            notes
+        },
     })
 }
 

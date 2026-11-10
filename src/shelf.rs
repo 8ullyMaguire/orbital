@@ -101,6 +101,7 @@ pub fn build(
     attention: crate::attention::Config,
     caps: &crate::exposure::Config,
     ceiling: &crate::ceiling::Config,
+    floors: &crate::floors::Floors,
 ) -> Vec<Shelf> {
     // `lens` is the reader's dial as a fraction of this surface's declared ceiling: 1.0 is the
     // ordering the site has always served, 0.0 is no lens at all.
@@ -120,7 +121,17 @@ pub fn build(
     // The three source lists, each produced by a ranker that already exists. Reusing them is what
     // makes the ordered shelves byte-identical to the lists they replaced: the arithmetic that turns
     // clicks, visitors and age into an order is not re-implemented here.
-    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights, lens.relevance, attention, ranking::Window::Recent));
+    let by_relevance = ids(
+        &position,
+        &ranking::rank_top_floored(
+            members.to_vec(),
+            weights,
+            lens.relevance,
+            attention,
+            ranking::Window::Recent,
+            floors,
+        ),
+    );
     let by_clicks = {
         let mut idx: Vec<usize> = (0..members.len()).collect();
         idx.sort_by(|a, b| {
@@ -666,6 +677,7 @@ mod undiscovered {
             crate::attention::Config::raw(),
             &crate::exposure::Config::off(),
             &crate::ceiling::Config::off(),
+            &crate::floors::Floors::none(),
         );
         let shelf = shelf_of(&shelves, "undiscovered").expect("a real long tail must render the shelf");
         let order: Vec<String> = shelf.items.iter().map(|r| members[r.index].handle.clone()).collect();
@@ -702,6 +714,7 @@ mod undiscovered {
             crate::attention::Config::raw(),
             &crate::exposure::Config::off(),
             &crate::ceiling::Config::off(),
+            &crate::floors::Floors::none(),
         );
         assert!(
             shelf_of(&shelves, "undiscovered").map(|s| s.items.is_empty()).unwrap_or(true),
@@ -759,6 +772,7 @@ mod gems {
             crate::attention::Config::raw(),
             &crate::exposure::Config::off(),
             &crate::ceiling::Config::off(),
+            &crate::floors::Floors::none(),
         )
     }
 
