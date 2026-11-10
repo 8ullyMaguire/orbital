@@ -859,7 +859,7 @@ created_at)`, `source_hits(user_id, session_hash, created_at)`,
 
 ---
 
-## 5b. Entity, review and taste tables — planned, schema v6 (D23–D26)
+## 5b. Entity, review and taste tables — **shipped, schema v9** (`migrations/0009_entities.sql`, D52)
 
 ```
 entities(id uuid pk, slug citext unique,
@@ -894,7 +894,19 @@ users.password_hash text null        -- shell rows / federation-only actors (D22
 users.claimed_at timestamptz null
 ```
 
-Invariants the migration must enforce, not the caller:
+Shipped as written, with four corrections the implementation forced (each is in D52 and in `tests/entities.rs`):
+
+- the key keeps its scheme (`url:https://…`, `isbn:…`), as this spec always showed: `canonical_key()` lowercases the
+  scheme word of an identifier and rewrites a URL, and never confuses the two;
+- `reviews.user_id` is `ON DELETE CASCADE`, so erasing an account erases its words and not the catalogue
+  (`entity_edits.user_id` is `SET NULL`: history stays, attribution goes);
+- `reviews` and `ballots` carry a nullable `visitor_hash` beside a nullable `user_id` with
+  `CHECK (user_id IS NOT NULL OR visitor_hash IS NOT NULL)`: contribution is open (D28), so a review without an
+  account is a review, not a lesser row;
+- the migration is **0009**, not 0006: files are append-only and 0006–0008 were spent on the dial, the concentration
+  snapshots and the impressions. The ledger's ordinal is the roadmap's, not the filesystem's.
+
+Invariants the migration must enforce, not the caller (each one has a test that tries to break it):
 
 - `canonical_key` is normalised at write time (lowercase host, strip `www.`, trailing slash and
   fragment) and unique. It is the federation join key, so it cannot be a per-instance UUID.

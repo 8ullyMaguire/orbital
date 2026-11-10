@@ -1565,3 +1565,67 @@ floored member first, making an unapplied floor silent removes the sentence, and
 `ranked away: 1 profile lower (@criticalnexus)`; `/?not=typo_here` → `matches nothing here — check the spelling`;
 `/?not=rust:0.9` → `has weight 0.9; the cap is 0.5`; `orbital doctor` prints `PASS floors none declared
 (FLOORS_FILE absent)`; `/@criticalnexus`, `/v/dev` and the similar-members API all still 200.
+
+## D52 — The entity substrate: the key is normalised by the database, and erasure takes words not catalogue
+
+**Context.** Phase D is the substrate for everything after it: things that are not members (a site, a work, a place),
+their categories, tags, edges, reviews, votes, ballots and the imports that will fill them. SPEC §5b had described the
+tables since v6 and nothing existed. The step's gate: `cargo test` green, a duplicate `canonical_key` refused with the
+constraint error visible, and normalisation table-driven over `www.`, a trailing slash, a fragment and an uppercase
+host.
+
+**Decision.**
+
+- **The key is normalised by the database, at write time, in one function.** `canonical_key(text)` lowercases the
+  scheme word of an identifier (`isbn:978-…`, `imdb:tt…`), and for a URL emits `url:` plus the address with the
+  fragment, the trailing slash and the `www.` stripped and the host lowercased. A `BEFORE INSERT OR UPDATE` trigger
+  applies it and refuses an empty key, so no Rust path can write an unnormalised key and two importers cannot disagree
+  about what "the same page" means.
+- **The scheme stays in the key** (`url:https://…`), because SPEC §5b always showed it that way and because the prefix
+  is what makes an identifier and an address distinguishable at a glance in a database.
+- **An identifier key is not a URL.** Its value is only lowercased at the scheme; the identifier's own canonical form
+  belongs to its standard (`commons-identify`), not to this function.
+- **Normalisation rules are code, and the *test* is the table.** Five `(raw, expected)` rows drive one test. The rules
+  are not a table because a rule row can be deleted after the fact, and deleting "strip the fragment" retroactively
+  makes two rows that were one key collide in a way the unique index cannot repair; a rule list is a schema decision,
+  not a setting.
+- **Merge is non-destructive.** `merged_into` is a column, `CHECK (merged_into <> id)` refuses a cycle of one, and a
+  merged row stays resolvable while pointing at its survivor.
+- **Erasure is scoped to the person's words.** `reviews.user_id` and `review_votes.user_id` cascade, so an erased
+  account takes its reviews with it; `entity_edits.user_id` and `entity_people.user_id` are `SET NULL`, so a page's
+  history survives without its author. Nothing cascades from `users` to `entities`, which the test asserts by deleting
+  a contributor and reading the catalogue back.
+- **Contribution stays open at the schema level (D28).** `reviews`, `review_votes`, `entity_edits` and `ballots` all
+  carry a nullable `visitor_hash` beside a nullable `user_id`; the constraint is "an author, of some kind", not "an
+  account". `users.password_hash` becomes nullable so a shell row (a claim, a federation-only actor) can exist without
+  a way to log in, and `users.claimed_at` records the claim.
+
+**Rejected alternatives.**
+
+- *Normalising in Rust before the insert.* Every importer, every seed and every future federation delivery would have
+  to remember; the second one to forget creates a duplicate. The database is the one writer that cannot be bypassed.
+- *A `canonical_key_rules` table.* It reads as configurability and behaves as a schema migration with none of the
+  record-keeping: remove a rule and existing keys become wrong with no way to detect it, which is exactly the failure
+  the unique index is there to prevent.
+- *`ON DELETE SET NULL` on `reviews.user_id`.* Measured, not argued: it makes the CHECK constraint fail *inside the
+  user's deletion*, so erasing an account is refused by the database until every review is deleted first. The
+  constraint and the cascade have to agree, and they agree on "the words go".
+- *A per-instance UUID as the join key.* SPEC §5b already refuses it: federation needs a key two instances can compute
+  without asking each other.
+- *Keeping the ledger's "0006".* The file is 0009; pretending otherwise breaks the append-only rule for a number.
+
+**A finding that corrects the next step.** The roadmap's step 2 assumes `commons-identify` covers "URL → key; imdb:,
+isbn:, tmdb:, musicbrainz:, atproto:". Measured against the shipped crate
+(`~/code-local/rust/commons/crates/commons-identify`): it knows **isbn, tmdb, musicbrainz, isrc, wikidata** and
+nothing else — no URL scheme, no `imdb:`, no `atproto:`. So adopting it cannot replace the URL normalisation this step
+wrote, and doing both would be the two-implementation failure D31 forbids. The ledger step is rewritten accordingly:
+the crate supplies the *identifier* half, and the URL half stays where it is, with the overlap (nothing, today) named.
+
+**Consequences.** **209 tests**. Gate: `cargo test` green; a duplicate key refused by name
+(`entities_canonical_key_key`), including four variants of the same page; normalisation driven from a five-row table.
+Four mutations bite (unique index dropped, fragment kept, host not lowercased, self-merge allowed). Live: schema
+version **9**, all **11** tables present and **empty** (`entities 0, categories 0, reviews 0, import_runs 0`),
+`canonical_key('HTTPS://WWW.Example.com/x/#frag')` = `url:https://example.com/x` = `canonical_key('https://example.com/x')`,
+`isbn:978-0-306-40615-7`, the three indexes and the self-merge constraint present, `links.entity_id` added,
+`users.password_hash` nullable and `users.claimed_at` present. Every public surface still 200, the word *entity* appears
+nowhere on the home page, and `/entities` is 404 — a substrate step changes no surface, and the gate says so.
