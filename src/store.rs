@@ -78,7 +78,7 @@ fn member_stats(ctx: &str) -> String {
     -- sixty-fourth of one today, so an early member stops being permanently first without being erased —
     -- the lifetime total stays in `attention`, and the monument tab reads it.
     COALESCE((SELECT sum((1.0 + ln(greatest(coalesce(h.position, 1), 1)::float8))
-                         * power(0.5, extract(epoch FROM (now() - h.created_at)) / 86400.0 / 90.0))
+                         * 1.0)
                 FROM (SELECT DISTINCT ON (sh.session_hash) sh.session_hash, sh.position, sh.created_at
                         FROM source_hits sh
                        WHERE sh.user_id = u.id
