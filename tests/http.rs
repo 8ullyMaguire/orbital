@@ -2838,7 +2838,19 @@ async fn a_ranked_away_tag_moves_a_member_down_and_never_off_the_page(pool: PgPo
     // Reachability is absolute: the profile and its category answer regardless of any floor.
     let profile = call(&app, get("/@bruno")).await;
     assert_eq!(profile.status, StatusCode::OK);
-    let vertical = call(&app, get("/v/dev?not=rust")).await;
+    let vertical = call(&app, get("/v/dev?not=rust:0.5")).await;
     assert_eq!(vertical.status, StatusCode::OK, "{}", vertical.body);
     assert!(vertical.body.contains("ranked away"), "the category page says it too");
+    // And the floor holds on the category's Top list, not only on the home page: a preference about a list has to
+    // survive the list changing.
+    let v_plain = call(&app, get("/v/dev")).await;
+    assert!(
+        v_plain.body.find("/@bruno").unwrap_or(usize::MAX) < v_plain.body.find("/@alfred").unwrap_or(usize::MAX),
+        "without a floor bruno leads here too"
+    );
+    assert!(
+        vertical.body.find("/@bruno").unwrap_or(0) > vertical.body.find("/@alfred").unwrap_or(0),
+        "the floored member is below the other one on the category page as well: {}",
+        &vertical.body[..vertical.body.len().min(400)]
+    );
 }

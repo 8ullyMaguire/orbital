@@ -142,8 +142,8 @@ pub fn build(
         });
         idx
     };
-    let by_rising = ids(&position, &ranking::rank_trending(members.to_vec(), now, weights, lens.ordered));
-    let by_new = ids(&position, &ranking::rank_new(members.to_vec(), now, weights, lens.ordered));
+    let by_rising = ids(&position, &ranking::rank_trending_floored(members.to_vec(), now, weights, lens.ordered, floors));
+    let by_new = ids(&position, &ranking::rank_new_floored(members.to_vec(), now, weights, lens.ordered, floors));
 
     let mut shelves = Vec::new();
 

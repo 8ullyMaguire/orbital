@@ -240,6 +240,18 @@ pub fn rank_trending(
     weights: &[(String, f64)],
     lens: f64,
 ) -> Vec<MemberStat> {
+    rank_trending_floored(members, now, weights, lens, &crate::floors::Floors::none())
+}
+
+/// `rank_trending` with the reader's floors (D51). A floor is a preference about a list, not about one ranker, so
+/// every discovery surface takes it — a member the reader ranked away must not reappear higher on `Rising` or `New`.
+pub fn rank_trending_floored(
+    members: Vec<MemberStat>,
+    now: DateTime<Utc>,
+    weights: &[(String, f64)],
+    lens: f64,
+    floors: &crate::floors::Floors,
+) -> Vec<MemberStat> {
     let max_7d = members.iter().map(|m| m.visitors_7d).max().unwrap_or(0);
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
@@ -260,7 +272,7 @@ pub fn rank_trending(
                 let boost = 0.1 * (1.0 + 0.15 / ((age_days(m.created_at, now) + 2.0).log2()));
                 0.3 * lens * relevance(&m, weights) + velocity + boost + 0.1 * trust_mult(m.trust_level)
             };
-            (s, m)
+            (floors.apply(&m, s).0, m)
         })
         .filter(|(s, _)| *s > 0.0)
         .collect();
@@ -275,7 +287,18 @@ pub fn rank_new(
     weights: &[(String, f64)],
     lens: f64,
 ) -> Vec<MemberStat> {
-    if weights.is_empty() {
+    rank_new_floored(members, now, weights, lens, &crate::floors::Floors::none())
+}
+
+/// `rank_new` with the reader's floors (D51), for the same reason as `rank_trending_floored`.
+pub fn rank_new_floored(
+    members: Vec<MemberStat>,
+    now: DateTime<Utc>,
+    weights: &[(String, f64)],
+    lens: f64,
+    floors: &crate::floors::Floors,
+) -> Vec<MemberStat> {
+    if weights.is_empty() && floors.is_empty() {
         let mut members = members;
         members.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         return members;
@@ -284,7 +307,12 @@ pub fn rank_new(
         .into_iter()
         .map(|m| {
             let rec = 0.5f64.powf(age_days(m.created_at, now) / 14.0);
-            (0.7 * rec + 0.3 * lens * relevance(&m, weights), m)
+            let base = if weights.is_empty() {
+                rec
+            } else {
+                0.7 * rec + 0.3 * lens * relevance(&m, weights)
+            };
+            (floors.apply(&m, base).0, m)
         })
         .collect();
     scored.sort_by(|a, b| {
