@@ -4,7 +4,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::overlap::{cosine, tag_relevance};
+use crate::overlap::cosine;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 

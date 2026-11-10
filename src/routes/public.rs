@@ -567,10 +567,6 @@ pub async fn profile(
     if let Err(e) = crate::prefs::visit(&st.pool, &vid, &signal).await {
         tracing::warn!(error = %e, "profile view not recorded");
     }
-    let viewer_tags = match &user {
-        Some(u) if u.id != owner.id => store::tags_of(&st.pool, u.id).await?,
-        _ => owner_tags.clone(),
-    };
     let weights = viewer_weights(&st, &vid, user.as_ref()).await;
     let hub_tags = store::hub_tags(&st.pool).await?;
     // The sidebar's promise, on the page: "shared tags, not paid placement". It is now the tag-overlap
