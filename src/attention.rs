@@ -138,14 +138,20 @@ impl Config {
     }
 
     pub fn sentence(&self) -> String {
-        match self.mode {
+        let mut out = match self.mode {
             Mode::Raw => "raw: a lead of k times stays k times".to_string(),
             Mode::Damped => format!(
                 "damped: a lead of 10 times becomes {:.2} times (alpha {:.2})",
                 self.lead_after(10.0),
                 self.alpha
             ),
+        };
+        // A declaration that exempts somebody says so here, by name, because this line is the only place the
+        // policy is ever written down in full — and an operator who forgot a name must be able to see it.
+        if !self.exempt.is_empty() {
+            out.push_str(&format!("; {} exempt: {}", self.exempt.len(), self.exempt.join(", ")));
         }
+        out
     }
 }
 
@@ -160,6 +166,7 @@ pub fn exposure(position: Option<i32>) -> f64 {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Spec {
     #[serde(default)]
     exempt: Option<Vec<String>>,
@@ -214,5 +221,38 @@ mod tests {
         let err = Config::from_json(r#"{"attention":"loud"}"#).expect_err("refused");
         let text = format!("{err:#}");
         assert!(text.contains("unknown variant") && text.contains("damped"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod declaration {
+    use super::*;
+
+    /// A misspelt key is refused by name rather than ignored: a declaration that is silently read as "the
+    /// default" is worse than no declaration at all, because the operator believes it took effect.
+    #[test]
+    fn a_misspelt_field_is_refused_not_ignored() {
+        let err = Config::from_json(r#"{"exmpt":["steeltitan"]}"#).unwrap_err().to_string();
+        assert!(err.contains("exmpt") || err.contains("unknown field"), "{err}");
+    }
+
+    /// The wrong *type* is refused too: a list of names is not a string, and a declaration that says
+    /// `"exempt": "steeltitan"` must fail loudly instead of exempting nobody.
+    #[test]
+    fn an_exempt_that_is_not_a_list_is_refused() {
+        assert!(Config::from_json(r#"{"exempt":"steeltitan"}"#).is_err());
+    }
+
+    /// The list round-trips, case-insensitively, and the sentence names it — the one surface where an
+    /// operator can see what they declared.
+    #[test]
+    fn the_list_is_read_and_reported() {
+        let cfg = Config::from_json(r#"{"alpha":0.5,"exempt":["SteelTitan","criticalnexus"]}"#).unwrap();
+        assert!(cfg.is_exempt("steeltitan"));
+        assert!(cfg.is_exempt("CRITICALNEXUS"));
+        assert!(!cfg.is_exempt("nobody"));
+        let sentence = cfg.sentence();
+        assert!(sentence.contains("2 exempt"), "{sentence}");
+        assert!(sentence.contains("SteelTitan"), "the declaration is named back: {sentence}");
     }
 }
