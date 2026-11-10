@@ -231,7 +231,7 @@ pub fn score(cases: &[Case], now: chrono::DateTime<chrono::Utc>) -> (Arm, Arm) {
             continue;
         }
         let recency = crate::ranking::rank_new(case.members.clone(), now, &[], 1.0);
-        let candidate = crate::ranking::rank_top(case.members.clone(), &case.weights, 1.0);
+        let candidate = crate::ranking::rank_top(case.members.clone(), &case.weights, 1.0, crate::attention::Config::raw());
         let a = ndcg_at(&handles(&recency), &judged, K);
         let b = ndcg_at(&handles(&candidate), &judged, K);
         if let (Some(a), Some(b)) = (a, b) {

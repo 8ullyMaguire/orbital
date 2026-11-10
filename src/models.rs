@@ -84,6 +84,11 @@ pub struct MemberStat {
     /// stats fragment, defaulted everywhere else so a query that does not care still decodes.
     #[sqlx(default)]
     pub endorse: f64,
+    /// What this member's attention is worth after the correction (D41): distinct sessions, weighted by
+    /// where the click was seen and log-normalised by the ranker. `clicks` stays the honest raw count the
+    /// pages print; this field exists only to be ranked.
+    #[sqlx(default)]
+    pub attention: f64,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

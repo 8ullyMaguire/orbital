@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use crate::attention::Config as AttentionConfig;
 use crate::dial::Config as DialConfig;
 use crate::taste::TasteConfig;
 
@@ -24,6 +25,8 @@ pub struct Config {
     /// Per-surface dial ceilings (SPEC §1e, D36). Loaded at boot: a share of 40 is a typo and must
     /// stop the process, not be clamped into service.
     pub dial: DialConfig,
+    /// What a click is worth (D41). Loaded at boot: an alpha outside (0, 1] is a typo, refused.
+    pub attention: AttentionConfig,
 }
 
 impl Config {
@@ -47,6 +50,7 @@ impl Config {
             hub_handle: std::env::var("HUB_HANDLE").unwrap_or_else(|_| "criticalnexus".into()),
             taste: TasteConfig::from_env()?,
             dial: DialConfig::from_env()?,
+            attention: AttentionConfig::from_env()?,
         })
     }
 
@@ -65,6 +69,7 @@ impl Config {
             hub_handle: "hubowner".into(),
             taste: TasteConfig::for_test(),
             dial: DialConfig::for_test(),
+            attention: AttentionConfig::for_test(),
         }
     }
 

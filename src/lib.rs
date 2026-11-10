@@ -17,6 +17,7 @@ pub mod render;
 pub mod routes;
 pub mod silence;
 pub mod seed;
+pub mod attention;
 pub mod concentration;
 pub mod dial;
 pub mod eval;

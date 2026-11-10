@@ -26,6 +26,7 @@ fn member(handle: &str, age_days: i64, clicks: i64, tags: &[&str]) -> MemberStat
         visitors_7d: clicks,
         clicks,
         endorse: 0.0,
+        attention: clicks as f64,
         created_at: now - chrono::Duration::days(age_days),
         last_active_at: now,
         trust_level: 1,

@@ -64,6 +64,16 @@ fn member_stats(ctx: &str) -> String {
        WHERE sh.user_id = u.id
          AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
     )::bigint AS clicks,
+    -- What the ranker reads instead of `clicks` (D41): one hit per session (a fan looking ten times is
+    -- one person), each weighted by where it was seen (a click at slot 9 is harder to get than one at
+    -- slot 1), so the sum is an audience rather than a tally. NULL position means slot 1 — the least
+    -- credit, because nothing proves it was hard to find.
+    COALESCE((SELECT sum(1.0 + ln(greatest(coalesce(h.position, 1), 1)::float8))
+                FROM (SELECT DISTINCT ON (sh.session_hash) sh.session_hash, sh.position
+                        FROM source_hits sh
+                       WHERE sh.user_id = u.id
+                         AND ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
+                       ORDER BY sh.session_hash, sh.created_at) h), 0)::float8 AS attention,
     COALESCE((SELECT array_agg(t.tag_slug ORDER BY t.tag_slug) FROM tags t WHERE t.user_id = u.id),
              '{{}}'::text[]) AS tags,
     COALESCE((SELECT array_agg(v.slug ORDER BY CASE WHEN uv2.role = 'primary' THEN 0 ELSE 1 END, v.sort)
@@ -1063,7 +1073,7 @@ pub async fn standing(
             .filter(|m| if v.nsfw { m.nsfw_enabled } else { m.verticals.first().map(|p| p != "nsfw").unwrap_or(true) })
             .collect();
         let total = members.len() as i64;
-        let top = crate::ranking::rank_top(members.clone(), &[], 1.0);
+        let top = crate::ranking::rank_top(members.clone(), &[], 1.0, crate::attention::Config::raw());
         let trending = crate::ranking::rank_trending(members.clone(), now, &[], 1.0);
         let me = members.iter().find(|m| m.id == user_id);
         out.push(crate::models::Standing {

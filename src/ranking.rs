@@ -157,6 +157,7 @@ pub fn rank_top(
     members: Vec<MemberStat>,
     weights: &[(String, f64)],
     lens: f64,
+    attention: crate::attention::Config,
 ) -> Vec<MemberStat> {
     // The reader's dial, as a fraction of this surface's ceiling. 1.0 is the ordering the site has
     // always served (`x * 1.0 == x` exactly), 0.0 removes the lens term entirely.
@@ -170,11 +171,18 @@ pub fn rank_top(
         });
         return members;
     }
-    let max_clicks = members.iter().map(|m| m.clicks).max().unwrap_or(0).max(1) as f64;
+    // What a click is worth is a declaration (D41): `raw` is `clicks / max`, byte for byte the arithmetic
+    // this function shipped before the declaration existed; `damped` is the log-normalised, compressed
+    // share of an audience that is counted once per session and credited by where it was seen.
+    let max_attention = members
+        .iter()
+        .map(|m| m.attention)
+        .fold(0.0f64, f64::max)
+        .max(1.0);
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
         .map(|m| {
-            let clicks = m.clicks as f64 / max_clicks;
+            let clicks = attention.share(m.attention, max_attention);
             let rel = relevance(&m, weights);
             // Endorsements are a separate term, not a bigger `rel`: relevance saturates at 1.0 for a
             // member who holds every tag in the lens, so adding inside it did nothing for exactly
@@ -338,6 +346,7 @@ pub fn neighbours<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attention::Config;
     use chrono::{Duration, TimeZone};
 
     /// The dial's whole job: the lens term scales with it, and at 0.0 it is gone. Measured as the
@@ -360,21 +369,21 @@ mod tests {
                 .unwrap_or_else(|| panic!("{handle} must be in the order"))
         };
 
-        let full = rank_top(members.clone(), &weights, 1.0);
+        let full = rank_top(members.clone(), &weights, 1.0, Config::raw());
         assert!(
             position(&full, "tagged") < position(&full, "popular"),
             "a full lens lifts the tag-matched member over the one with six times the clicks: {:?}",
             full.iter().map(|m| &m.handle).collect::<Vec<_>>()
         );
 
-        let none = rank_top(members.clone(), &weights, 0.0);
+        let none = rank_top(members.clone(), &weights, 0.0, Config::raw());
         assert!(
             position(&none, "popular") < position(&none, "tagged"),
             "no lens means the clicks order, and the tag match stops counting"
         );
         assert_eq!(
             none.iter().map(|m| m.handle.clone()).collect::<Vec<_>>(),
-            rank_top(members, &[], 1.0)
+            rank_top(members, &[], 1.0, Config::raw())
                 .iter()
                 .map(|m| m.handle.clone())
                 .collect::<Vec<_>>(),
@@ -435,6 +444,7 @@ mod tests {
             tags: tags.iter().map(|s| s.to_string()).collect(),
             verticals: vec!["dev".into()],
             endorse: 0.0,
+        attention: clicks as f64,
         }
     }
 
@@ -560,10 +570,10 @@ mod tests {
         b.clicks = 100;
         let weights = vec![("chiptune".to_string(), 1.0)];
 
-        let plain = rank_top(vec![a.clone(), b.clone()], &[], 1.0);
+        let plain = rank_top(vec![a.clone(), b.clone()], &[], 1.0, Config::raw());
         assert_eq!(plain[0].handle, "busier", "clicks decide without a lens");
 
-        let tuned = rank_top(vec![a.clone(), b.clone()], &weights, 1.0);
+        let tuned = rank_top(vec![a.clone(), b.clone()], &weights, 1.0, Config::raw());
         assert_eq!(tuned[0].handle, "matching", "a full weight on a held tag flips a narrow lead");
 
         // ...and it cannot flip a wide one.
@@ -571,7 +581,7 @@ mod tests {
         far.clicks = 1;
         let mut loud = member("loud", 1, 40, 2, &["podcast"]);
         loud.clicks = 100;
-        let tuned = rank_top(vec![far, loud], &weights, 1.0);
+        let tuned = rank_top(vec![far, loud], &weights, 1.0, Config::raw());
         assert_eq!(tuned[0].handle, "loud", "relevance is 40%, not a veto");
     }
 
@@ -584,7 +594,7 @@ mod tests {
         b.clicks = 90;
         let mut c = member("c", 10, 9, 2, &["x"]);
         c.clicks = 5;
-        let order = rank_top(vec![a, b, c], &[], 1.0);
+        let order = rank_top(vec![a, b, c], &[], 1.0, Config::raw());
         assert_eq!(
             order.iter().map(|m| m.handle.as_str()).collect::<Vec<_>>(),
             vec!["b", "c", "a"],
@@ -606,13 +616,13 @@ mod tests {
         // Both hold the tag, so relevance is saturated for both: the endorsement is the only
         // difference, which is exactly the case the additive term exists for.
 
-        let order = rank_top(vec![plain.clone(), liked.clone()], &weights, 1.0);
+        let order = rank_top(vec![plain.clone(), liked.clone()], &weights, 1.0, Config::raw());
         assert_eq!(order[0].handle, "zzz", "an endorsed tag lifts its member");
 
         // Without the endorsement the same pair falls back to the tie-break.
         let mut liked_plain = liked.clone();
         liked_plain.endorse = 0.0;
-        let order = rank_top(vec![plain, liked_plain], &weights, 1.0);
+        let order = rank_top(vec![plain, liked_plain], &weights, 1.0, Config::raw());
         assert_eq!(order[0].handle, "aaa", "no endorsement, no lift");
     }
 
@@ -628,7 +638,7 @@ mod tests {
 
         assert_eq!(relevance(&dev, &weights), 0.0);
         assert_eq!(relevance(&muso, &weights), 1.0);
-        let order = rank_top(vec![dev, muso], &weights, 1.0);
+        let order = rank_top(vec![dev, muso], &weights, 1.0, Config::raw());
         assert_eq!(order[0].handle, "muso");
     }
 

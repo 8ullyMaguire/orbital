@@ -89,6 +89,7 @@ pub fn build(
     now: DateTime<Utc>,
     decl: &Declaration,
     lens: crate::dial::Lens,
+    attention: crate::attention::Config,
 ) -> Vec<Shelf> {
     // `lens` is the reader's dial as a fraction of this surface's declared ceiling: 1.0 is the
     // ordering the site has always served, 0.0 is no lens at all.
@@ -102,7 +103,7 @@ pub fn build(
     // The three source lists, each produced by a ranker that already exists. Reusing them is what
     // makes the ordered shelves byte-identical to the lists they replaced: the arithmetic that turns
     // clicks, visitors and age into an order is not re-implemented here.
-    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights, lens.relevance));
+    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights, lens.relevance, attention));
     let by_clicks = {
         let mut idx: Vec<usize> = (0..members.len()).collect();
         idx.sort_by(|a, b| {
@@ -295,6 +296,7 @@ mod tests {
             tags: tags.iter().map(|t| t.to_string()).collect(),
             verticals: vec!["dev".to_string()],
             endorse: 0.0,
+        attention: clicks as f64,
         }
     }
 

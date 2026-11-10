@@ -104,6 +104,7 @@ pub async fn home(
         viewer_weights(&st, &vid, user.as_ref()).await
     };
     let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Home).await;
+    let attn = st.cfg.attention;
     let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
     let mut other: Vec<SmallVertical> = Vec::new();
@@ -121,7 +122,7 @@ pub async fn home(
             });
             continue;
         }
-        let ranked = ranking::rank_top(members, &weights, lens.relevance);
+        let ranked = ranking::rank_top(members, &weights, lens.relevance, attn);
         let top = ranked
             .iter()
             .take(3)
@@ -147,7 +148,7 @@ pub async fn home(
     // at lambda 1.0, so their order is still `rank_trending`/`rank_new`'s order exactly; `For you`
     // spends a little relevance on diversity, which is the only shelf whose order is new.
     let shelves: Vec<crate::render::ShelfView> =
-        crate::shelf::build(&all, &weights, now, &crate::shelf::Declaration::default(), lens)
+        crate::shelf::build(&all, &weights, now, &crate::shelf::Declaration::default(), lens, attn)
             .into_iter()
             .map(|s| {
                 let mode = match s.key {
@@ -240,6 +241,7 @@ pub async fn vertical(
         viewer_weights(&st, &vid, user.as_ref()).await
     };
     let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Vertical).await;
+    let attn = st.cfg.attention;
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
@@ -282,7 +284,7 @@ pub async fn vertical(
                 .filter(|m| visible(m))
                 .collect()
         }
-        _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance),
+        _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance, attn),
     };
     let mode = match tab.as_str() {
         "trending" => StatMode::Trending,
@@ -867,7 +869,7 @@ pub async fn embed(
         // No weights means no lens term at all, so the dial cannot change this page's order.
         "trending" => (ranking::rank_trending(members, now, &[], 1.0), StatMode::Trending),
         "new" => (ranking::rank_new(members, now, &[], 1.0), StatMode::New),
-        _ => (ranking::rank_top(members, &[], 1.0), StatMode::Top),
+        _ => (ranking::rank_top(members, &[], 1.0, attn), StatMode::Top),
     };
     let cards: Vec<MemberCard> = ranked
         .iter()
@@ -1150,6 +1152,7 @@ mod tests {
             visitors_7d: 0,
             clicks: 0,
             endorse: 0.0,
+        attention: clicks as f64,
             tags: Vec::new(),
             verticals: verticals.iter().map(|v| v.to_string()).collect(),
         }
