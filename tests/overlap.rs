@@ -131,7 +131,7 @@ fn the_old_definitions_survive_only_in_the_adapter() {
             continue;
         }
         let text = std::fs::read_to_string(&path).expect("read");
-        for needle in ["fn cosine", "fn tag_relevance"] {
+        for needle in ["fn cosine(", "fn tag_relevance("] {
             if text.contains(needle) && !path.ends_with("overlap.rs") {
                 offenders.push(format!("{} defines `{needle}`", path.display()));
             }

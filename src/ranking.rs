@@ -4,6 +4,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+use crate::overlap::{cosine, tag_relevance};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -35,34 +36,6 @@ pub fn trending_score(visitors_7d: i64, max_7d: i64, age_days: f64, trust: i16) 
     let velocity = visitors_7d as f64 / max_7d as f64;
     let boost = 1.0 + 0.15 / ((age_days + 2.0).log2());
     velocity * boost * trust_mult(trust)
-}
-
-/// Cosine similarity of two tag sets, weighted so a rare tag counts for more
-/// than a tag everybody has. Falls back to 0 for an empty side.
-pub fn cosine(a: &[String], b: &[String]) -> f64 {
-    if a.is_empty() || b.is_empty() {
-        return 0.0;
-    }
-    let shared = a.iter().filter(|t| b.contains(t)).count() as f64;
-    shared / ((a.len() as f64).sqrt() * (b.len() as f64).sqrt())
-}
-
-/// How much of what the viewer asked for this member actually is.
-///
-/// `Σ(w[t] · has_tag[t]) / Σ w[t]` — a weighted share, so 1.0 means "every tag I care about is on
-/// this profile" regardless of how many weights there are. Zero for a viewer with no weights:
-/// not-applicable and not-relevant must not look the same, but both contribute nothing.
-pub fn tag_relevance(tags: &[String], weights: &[(String, f64)]) -> f64 {
-    let total: f64 = weights.iter().map(|(_, w)| w.max(0.0)).sum();
-    if total <= 0.0 || tags.is_empty() {
-        return 0.0;
-    }
-    let hit: f64 = weights
-        .iter()
-        .filter(|(t, w)| *w > 0.0 && tags.iter().any(|tag| tag == t))
-        .map(|(_, w)| *w)
-        .sum();
-    (hit / total).clamp(0.0, 1.0)
 }
 
 /// The same weighted share, but a member's verticals count too.
