@@ -108,6 +108,24 @@ pub struct MemberCard {
     pub why: String,
 }
 
+/// The exact number with thin thousands separators: the monument's whole promise is that the record is
+/// still there, and "10.0k" is a summary where "10,000" is the record.
+pub fn fmt_exact(n: i64) -> String {
+    let digits = n.abs().to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if n < 0 {
+        format!("-{out}")
+    } else {
+        out
+    }
+}
+
 pub fn fmt_count(n: i64) -> String {
     if n >= 1_000_000 {
         format!("{:.1}m", n as f64 / 1_000_000.0)
@@ -141,9 +159,9 @@ pub fn member_card(
             format!("{} visitors", fmt_count(m.visitors)),
         ),
         StatMode::Monument => (
-            fmt_count(m.clicks),
+            fmt_exact(m.clicks),
             "clicks, all time".to_string(),
-            format!("{} clicks, all time", fmt_count(m.clicks)),
+            format!("{} clicks, all time", fmt_exact(m.clicks)),
         ),
         StatMode::Trending => (
             fmt_count(m.visitors_7d),

@@ -1879,3 +1879,49 @@ async fn the_lens_route_answers_only_the_callers_own_lens(pool: PgPool) {
     );
     assert_eq!(leaks(&tuned.body, &[]), Vec::<String>::new(), "{}", tuned.body);
 }
+
+/// The monument tab is reachable and honest: the lifetime total, in full digits, on the tab that claims it.
+#[sqlx::test]
+async fn the_monument_tab_shows_the_lifetime_record(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "veteran", "dev").await;
+    register(&app, "newcomer", "dev").await;
+    let id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'veteran'")
+        .fetch_one(&pool)
+        .await
+        .expect("a member");
+    sqlx::query(
+        "INSERT INTO source_hits (user_id, surface, session_hash, position, created_at)
+         SELECT $1, 'profile', 'old-' || g, 1, now() - interval '600 days' FROM generate_series(1, 10000) g",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .expect("real clicks");
+
+    let monument = call(&app, get("/v/dev?tab=monument")).await;
+    assert_eq!(monument.status, StatusCode::OK, "{}", monument.body);
+    assert!(
+        monument.body.contains("10,000"),
+        "the monument tab shows the record in full: {}",
+        &monument.body[..monument.body.len().min(400)]
+    );
+    assert!(monument.body.contains("clicks, all time"));
+    assert_eq!(
+        order_of(&monument.body, &["veteran", "newcomer"]),
+        vec!["veteran", "newcomer"],
+        "the record leads the monument"
+    );
+
+    let top = call(&app, get("/v/dev?tab=top")).await;
+    assert_eq!(top.status, StatusCode::OK);
+    assert_eq!(
+        order_of(&top.body, &["veteran", "newcomer"]),
+        vec!["newcomer", "veteran"],
+        "Top is a recent list, and the stale ten thousand ranks below it"
+    );
+    assert!(
+        !top.body.contains("10,000"),
+        "Top does not claim the lifetime number"
+    );
+}
