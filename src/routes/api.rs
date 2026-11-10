@@ -52,7 +52,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/proposals/{id}/decide", post(decide_proposal))
         .route("/api/tags/{tag}/endorse", post(endorse_tag))
         .merge(super::tokens::router())
-        .route("/api/admin/curation/{slug}", post(admin_curation))
 }
 
 fn json_with_cookie(value: Value, cookie: HeaderValue) -> Response {
@@ -764,21 +763,6 @@ pub async fn admin_create_vertical(
 #[derive(Deserialize)]
 pub struct CurationInput {
     pub users: Vec<Uuid>,
-}
-
-pub async fn admin_curation(
-    State(st): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(slug): Path<String>,
-    Json(input): Json<CurationInput>,
-) -> ApiResult<Json<Value>> {
-    guard(&user)?;
-    let slug = normalise_slug(&slug)?;
-    if store::vertical_by_slug(&st.pool, &slug).await?.is_none() {
-        return Err(ApiError(AppError::NotFound));
-    }
-    store::set_curation(&st.pool, &slug, &input.users).await?;
-    Ok(Json(json!({ "ok": true, "count": input.users.len() })))
 }
 
 #[allow(dead_code)]

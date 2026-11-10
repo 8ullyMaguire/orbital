@@ -434,40 +434,6 @@ pub async fn member_stat(pool: &PgPool, id: Uuid, ctx: Option<&str>) -> Result<O
         .await?)
 }
 
-pub async fn curated(pool: &PgPool, slug: &str) -> Result<Vec<MemberStat>, AppError> {
-    let sql = format!(
-        "SELECT u.id, u.handle, u.display_name, u.bio, u.accent, u.avatar_url, u.trust_level,
-                u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at, 'primary'::text AS role, {}
-           FROM curation c
-           JOIN users u ON u.id = c.user_id
-          WHERE c.vertical_slug = $1 AND u.hidden = false
-          ORDER BY c.position, u.display_name",
-        member_stats("$1")
-    );
-    Ok(sqlx::query_as::<_, MemberStat>(&sql)
-        .bind(slug)
-        .fetch_all(pool)
-        .await?)
-}
-
-pub async fn set_curation(pool: &PgPool, slug: &str, users: &[Uuid]) -> Result<(), AppError> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("DELETE FROM curation WHERE vertical_slug = $1")
-        .bind(slug)
-        .execute(&mut *tx)
-        .await?;
-    for (i, uid) in users.iter().enumerate() {
-        sqlx::query("INSERT INTO curation (vertical_slug, user_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING")
-            .bind(slug)
-            .bind(uid)
-            .bind(i as i32)
-            .execute(&mut *tx)
-            .await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
 pub async fn create_vertical(
     pool: &PgPool,
     slug: &str,
@@ -999,33 +965,6 @@ pub async fn prune_old_events(pool: &PgPool) -> Result<u64, AppError> {
 }
 
 // ---------------------------------------------------------------- home + sitemap
-
-/// Curator's picks across every SFW vertical, in curation order.
-pub async fn curated_any(
-    pool: &PgPool,
-    include_nsfw: bool,
-    limit: i64,
-) -> Result<Vec<MemberStat>, AppError> {
-    let sql = format!(
-        "SELECT u.id, u.handle, u.display_name, u.bio, u.accent, u.avatar_url, u.trust_level,
-                u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at, 'primary'::text AS role, {}
-           FROM (SELECT DISTINCT ON (c.user_id) c.user_id, c.position
-                   FROM curation c JOIN verticals v ON v.slug = c.vertical_slug
-                  WHERE ($2 OR v.nsfw = false)
-                  ORDER BY c.user_id, c.position) c
-           JOIN users u ON u.id = c.user_id
-          WHERE u.hidden = false
-          ORDER BY c.position, u.display_name
-          LIMIT $3",
-        member_stats("NULL::text")
-    );
-    Ok(sqlx::query_as::<_, MemberStat>(&sql)
-        .bind::<Option<&str>>(None)
-        .bind(include_nsfw)
-        .bind(limit)
-        .fetch_all(pool)
-        .await?)
-}
 
 /// (listed members, outbound clicks) for the front page's honesty line.
 pub async fn totals(pool: &PgPool, include_nsfw: bool) -> Result<(i64, i64), AppError> {

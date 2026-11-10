@@ -66,17 +66,7 @@
 </section>
 {% endif %}{% endfor %}
 
-{% if picks.len() > 0 %}
-<section class="wrap section">
-  <div class="section-h">
-    <h2>Curator's picks</h2>
-    <p class="muted sm">Hand-picked, manually ordered. The editorial layer, not the ranking.</p>
-  </div>
-  <div class="mgrid">
-    {% for m in picks %}{% include "member_card.html" %}{% endfor %}
-  </div>
-</section>
-{% endif %}
+
 
 <section class="wrap cta-band">
   <div>

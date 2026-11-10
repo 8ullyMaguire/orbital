@@ -90,7 +90,6 @@ static STRINGS: &[Entry] = &[
     // ---- home
     Entry("home.trending", "Trending this week", "Tendencias esta semana"),
     Entry("home.new", "New here", "Recién llegados"),
-    Entry("home.picks", "Worth a look", "Merece la pena"),
     Entry("home.members", "people", "personas"),
     Entry("home.clicks", "visits sent", "visitas enviadas"),
 ];

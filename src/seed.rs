@@ -153,9 +153,7 @@ pub async fn seed(pool: &PgPool) -> Result<SeedReport> {
             let _ = i;
         }
 
-        // The owner's own vertical gets a curated row so the tab is not empty
         // on day one.
-        store::set_curation(pool, spec.primary, &[user.id]).await?;
     }
 
     // Handles verified out of band stay verified: nothing here touches

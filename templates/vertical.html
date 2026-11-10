@@ -45,9 +45,6 @@
     {% if tab == "trending" %}
     <h3>No traffic measured yet</h3>
     <p class="muted">Trending needs visitors in the last seven days and there are none yet, so the tab is hidden rather than padded with whoever joined last.</p>
-    {% else if tab == "curated" %}
-    <h3>Nothing curated here yet</h3>
-    <p class="muted">This is the editorial layer: someone has to choose. Check <a href="/v/{{ v.slug }}">Top</a> instead.</p>
     {% else %}
     <h3>This vertical is empty</h3>
     <p class="muted">Nobody has claimed {{ v.label }} yet. <a href="/app/#/join">Be the first</a> and the leaderboard starts with you.</p>

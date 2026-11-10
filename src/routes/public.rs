@@ -182,28 +182,6 @@ pub async fn home(
                 }
             })
             .collect();
-    // The picks rail is the same page view, so it obeys the same cross-shelf rule (D43): a member the
-    // shelves already show is not shown again here. Without this the cap would be true of three sections
-    // and false of the fourth, which is how a rule quietly stops being a rule.
-    // With the caps declared off, this filter must not run either: `slots_per_member: 0` is the escape
-    // hatch that restores the page that shipped before D43, and a page that still dropped repeats here
-    // would make that promise false by one section.
-    let already: std::collections::HashSet<String> = if st.cfg.exposure.is_off() {
-        std::collections::HashSet::new()
-    } else {
-        shelves
-            .iter()
-            .flat_map(|s| s.cards.iter().map(|c| c.handle.clone()))
-            .collect()
-    };
-    let picks: Vec<MemberCard> = store::curated_any(&st.pool, true, 6)
-        .await?
-        .iter()
-        .filter(|m| !already.contains(&m.handle))
-        .enumerate()
-        .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Top, now))
-        .collect();
-
     let (total_members, total_clicks) = store::totals(&st.pool, true).await?;
     let quick = cards
         .iter()
@@ -229,7 +207,6 @@ pub async fn home(
         verticals: cards,
         other,
         shelves,
-        picks,
         total_members,
         total_clicks,
         quick,
@@ -285,7 +262,7 @@ pub async fn vertical(
     // is a tab whose URL silently serves Top, which is how a "monument" link would quietly show the
     // recent list while its own label claimed the record.
     let tab = match tab.as_str() {
-        "trending" | "new" | "curated" | "monument" => tab,
+        "trending" | "new" | "monument" => tab,
         _ => "top".to_string(),
     };
     let active_tag = q.tag.clone().unwrap_or_default();
@@ -306,13 +283,6 @@ pub async fn vertical(
         // The monument: the lifetime record, with no lens and no decay (D42). Reachability for a member
         // whose fame has been amortised, and the honest answer to "who has ever been read here".
         "monument" => ranking::rank_monument(filtered.clone()),
-        "curated" => {
-            let curated = store::curated(&st.pool, &v.slug).await?;
-            curated
-                .into_iter()
-                .filter(|m| visible(m))
-                .collect()
-        }
         _ => ranking::rank_top(filtered.clone(), &weights, lens.relevance, attn, ranking::Window::Recent),
     };
     let mode = match tab.as_str() {
@@ -389,12 +359,6 @@ pub async fn vertical(
             href: format!("/v/{}?tab=monument", v.slug),
             active: tab == "monument",
             count: members.len() as i64,
-        },
-        Tab {
-            label: "Curated".into(),
-            href: format!("/v/{}?tab=curated", v.slug),
-            active: tab == "curated",
-            count: store::curated(&st.pool, &v.slug).await?.len() as i64,
         },
     ];
 

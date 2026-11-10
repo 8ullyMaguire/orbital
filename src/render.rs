@@ -264,7 +264,6 @@ pub struct HomeTemplate {
     pub other: Vec<SmallVertical>,
     /// The three shelves `src/shelf.rs` composes. An empty pool yields no shelves, not empty headings.
     pub shelves: Vec<ShelfView>,
-    pub picks: Vec<MemberCard>,
     pub total_members: i64,
     pub total_clicks: i64,
     pub quick: Vec<(String, String)>,
