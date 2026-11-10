@@ -15,6 +15,7 @@ pub mod prefs;
 pub mod ranking;
 pub mod render;
 pub mod routes;
+pub mod silence;
 pub mod seed;
 pub mod concentration;
 pub mod dial;
