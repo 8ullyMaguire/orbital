@@ -1,4 +1,4 @@
-<details class="tuner"{% if tuner.active %} open{% endif %}>
+<details class="tuner">
   <summary><span>What do you want to discover?</span><span class="tuner-hint">{% if tuner.active %}tuned{% else %}optional{% endif %}</span></summary>
   <form method="post" action="/prefs" class="tuner-form">
     <p class="sm muted">Drag a tag up to see more of it. This changes the order of these lists for you — not for anyone else{% if tuner.active %}. <a href="/lens">What you have said so far</a>{% endif %}.</p>
@@ -30,3 +30,17 @@
     {% endif %}
   </p>
 </details>
+<script>
+  // The fold belongs to the visitor, not to the server. The block used to be rendered `open`
+  // whenever the viewer held any weight — and passive weights are weights — so a reader who had
+  // collapsed it got it back unfolded on the next page. Nothing renders `open` now; a deliberate
+  // open is remembered per browser instead, and a deliberate fold stays folded.
+  (function () {
+    var d = document.querySelector("details.tuner");
+    if (!d) return;
+    try { if (localStorage.getItem("orbital:tuner") === "1") d.open = true; } catch (e) {}
+    d.addEventListener("toggle", function () {
+      try { localStorage.setItem("orbital:tuner", d.open ? "1" : "0"); } catch (e) {}
+    });
+  })();
+</script>

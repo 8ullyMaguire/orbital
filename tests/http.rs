@@ -1033,6 +1033,39 @@ async fn signing_up_keeps_the_lens_built_while_anonymous(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn the_tuner_arrives_folded_for_everyone_including_a_tuned_visitor(pool: PgPool) {
+    // The block used to be rendered `open` whenever the viewer held any weight — and `store::prefs`
+    // merges passive weights into the same list, so every returning reader got an unfolded panel
+    // they had collapsed. The fold is the visitor's choice; the server never renders it.
+    let app = app(pool.clone()).await;
+    register(&app, "muso", "music").await;
+
+    let cold = call(&app, get("/v/music")).await;
+    let viewer = cold.vcookie.clone().expect("visitor");
+    assert!(
+        cold.body.contains("<details class=\"tuner\">"),
+        "a cold page ships the tuner folded"
+    );
+
+    let posted = call(&app, post_form("/prefs", "tag=chiptune&w=8", &viewer)).await;
+    assert_eq!(posted.status, StatusCode::SEE_OTHER, "{}", posted.body);
+
+    let tuned = call(&app, cookie(get("/v/music"), &viewer)).await;
+    assert!(
+        tuned.body.contains("#chiptune"),
+        "the stored weight is still rendered as a row"
+    );
+    assert!(
+        tuned.body.contains("<details class=\"tuner\">"),
+        "a tuned visitor still gets the block"
+    );
+    assert!(
+        !tuned.body.contains("<details class=\"tuner\" open>"),
+        "and it is not unfolded on arrival: nothing may reopen what the visitor folded"
+    );
+}
+
+#[sqlx::test]
 async fn the_tuner_never_shows_internal_keys(pool: PgPool) {
     // `v:music` is how a vertical weight is stored. Showing the key is how this shipped once.
     let app = app(pool.clone()).await;
