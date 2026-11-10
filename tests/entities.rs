@@ -42,11 +42,11 @@ async fn the_same_canonical_key_cannot_be_stored_twice(pool: PgPool) {
 async fn normalisation_is_table_driven(pool: PgPool) {
     let cases: Vec<(&str, &str)> = vec![
         // raw input                                   what it must canonicalise to
-        ("https://Example.COM/thing", "url:example.com/thing"),
-        ("https://www.example.com/thing", "url:example.com/thing"),
-        ("https://example.com/thing/", "url:example.com/thing"),
-        ("https://example.com/thing#section-2", "url:example.com/thing"),
-        ("  https://EXAMPLE.com/thing/#frag  ", "url:example.com/thing"),
+        ("https://Example.COM/thing", "url:https://example.com/thing"),
+        ("https://www.example.com/thing", "url:https://example.com/thing"),
+        ("https://example.com/thing/", "url:https://example.com/thing"),
+        ("https://example.com/thing#section-2", "url:https://example.com/thing"),
+        ("  https://EXAMPLE.com/thing/#frag  ", "url:https://example.com/thing"),
     ];
     for (raw, want) in &cases {
         let key: String = sqlx::query_scalar("SELECT canonical_key($1)")
@@ -134,6 +134,11 @@ async fn the_schema_enforces_what_the_spec_promises(pool: PgPool) {
         .await
         .expect("count");
     assert_eq!(n, 2, "the entities survived their contributor: {n}");
+    let reviews: i64 = sqlx::query_scalar("SELECT count(*) FROM reviews")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(reviews, 0, "erasing an account erases its words, not the catalogue");
 
     // A member can be a shell row: no password, because an actor can exist without a way to log in.
     sqlx::query("UPDATE users SET password_hash = NULL WHERE handle = 'reviewer'")

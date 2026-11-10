@@ -150,7 +150,8 @@ CREATE TABLE entity_people (
 CREATE TABLE reviews (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     entity_id   uuid NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
-    user_id     uuid REFERENCES users (id) ON DELETE SET NULL,
+    -- A person erasing their account erases their words, not the catalogue: the review goes, the entity stays.
+    user_id     uuid REFERENCES users (id) ON DELETE CASCADE,
     -- The visitor who wrote it, hashed (the same instrument `source_hits` uses). A review needs an author; an
     -- account was never the requirement.
     visitor_hash text,
@@ -171,7 +172,7 @@ CREATE INDEX reviews_entity ON reviews (entity_id, created_at DESC) WHERE delete
 
 CREATE TABLE review_votes (
     review_id  uuid NOT NULL REFERENCES reviews (id) ON DELETE CASCADE,
-    user_id    uuid REFERENCES users (id) ON DELETE SET NULL,
+    user_id    uuid REFERENCES users (id) ON DELETE CASCADE,
     visitor_hash text,
     helpful    boolean NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
