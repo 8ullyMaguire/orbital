@@ -46,33 +46,51 @@ fn noise(seed: u64) -> f64 {
 }
 
 /// THE GATE, first half: `raw` must reproduce the ordering this code shipped before the declaration
-/// existed — `clicks / max_clicks`, ties by handle — over a pool big enough that a coincidental match is
-/// not plausible. The old formula is re-implemented here on purpose: comparing the new code to itself
-/// would prove nothing.
+/// existed — `clicks / max_clicks` against the lens term — over a pool big enough that a coincidental match
+/// is not plausible. The old formula is re-implemented here on purpose: comparing the new code to itself
+/// would prove nothing, and a pool with no lens would take the early-return branch and prove *less* than
+/// nothing, which is exactly the trap this fixture avoids by giving every other member the viewer's tag.
 #[test]
 fn raw_reproduces_the_old_order_over_two_hundred_seeds() {
+    let weights = vec![("x".to_string(), 0.3)];
+    let mut interesting = 0usize;
+
     for seed in 0..200u64 {
         let pool: Vec<MemberStat> = (0..12)
             .map(|i| {
                 let clicks = (noise(seed * 100 + i) * 500.0) as i64;
-                member(&format!("m{i}"), clicks, clicks as f64)
+                let mut m = member(&format!("m{i}"), clicks, clicks as f64);
+                if i % 2 == 0 {
+                    m.tags = vec!["x".to_string()];
+                }
+                m
             })
             .collect();
 
+        // The arithmetic of the version before this step, written out here so the comparison has an
+        // independent side.
         let max = pool.iter().map(|m| m.clicks).max().unwrap_or(0).max(1) as f64;
         let mut old: Vec<(f64, String)> = pool
             .iter()
-            .map(|m| (m.clicks as f64 / max, m.handle.clone()))
+            .map(|m| {
+                let clicks = m.clicks as f64 / max;
+                let rel = if m.tags.iter().any(|t| t == "x") { 1.0 } else { 0.0 };
+                (0.6 * clicks + 0.4 * 1.0 * rel * 0.3, m.handle.clone())
+            })
             .collect();
         old.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         let old_order: Vec<String> = old.into_iter().map(|(_, h)| h).collect();
+        if old_order.first() != Some(&format!("m{}", 0)) {
+            interesting += 1;
+        }
 
-        let new_order: Vec<String> = ranking::rank_top(pool, &[], 1.0, Config::raw())
+        let new_order: Vec<String> = ranking::rank_top(pool, &weights, 1.0, Config::raw())
             .into_iter()
             .map(|m| m.handle)
             .collect();
         assert_eq!(old_order, new_order, "seed {seed}: raw must not re-rank anything");
     }
+    assert!(interesting > 100, "the fixture must not be decided by the same member every time: {interesting}/200");
 }
 
 /// THE GATE, second half: on a fixture where one member leads ten to one, `damped` must land on the ratio
