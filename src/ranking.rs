@@ -524,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn cosine_is_set_overlap() {
+    fn set_overlap_matches_the_adapter() {
         let a = vec!["rust".to_string(), "cli".to_string()];
         let b = vec!["rust".to_string(), "cli".to_string()];
         assert!((cosine(&a, &b) - 1.0).abs() < 1e-9);
