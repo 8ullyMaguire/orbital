@@ -44,7 +44,7 @@ fn the_uniform_weights_are_the_formula_this_step_replaces() {
     let mut seed = 0x2545_F491_4F6C_DD1D;
     let mut pairs = 0usize;
     for round in 0..200 {
-        let pool = pool_from(&mut seed, 2 + round % 7, 2 + round % 4, 4);
+        let pool = pool_from(&mut seed, 4 + round % 9, 2 + round % 4, 6);
         let ov = Overlap::uniform();
         for a in &pool {
             for b in &pool {
