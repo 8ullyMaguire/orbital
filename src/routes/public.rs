@@ -277,33 +277,6 @@ pub async fn vertical(
             .collect()
     };
 
-    // MUTATION (reverted next): the operator's hand back in the order, to prove the gate sees it.
-    let mut filtered = filtered;
-    if let Ok(order) = sqlx::query_scalar::<_, uuid::Uuid>(
-        "SELECT user_id FROM curation WHERE vertical_slug = $1 ORDER BY position",
-    )
-    .bind(&v.slug)
-    .fetch_all(&st.pool)
-    .await
-    {
-        filtered.sort_by_key(|m| order.iter().position(|u| *u == m.id).unwrap_or(usize::MAX));
-    }
-    // MUTATION (reverted next): the operator's hand as a score bonus, which is what curation *is* once it
-    // is not a separate rail — and what the gate has to catch.
-    let mut filtered = filtered;
-    if let Ok(order) = sqlx::query_scalar::<_, uuid::Uuid>(
-        "SELECT user_id FROM curation WHERE vertical_slug = $1 ORDER BY position",
-    )
-    .bind(&v.slug)
-    .fetch_all(&st.pool)
-    .await
-    {
-        for m in filtered.iter_mut() {
-            if order.contains(&m.id) {
-                m.recent += 10_000.0;
-            }
-        }
-    }
     let ranked: Vec<MemberStat> = match tab.as_str() {
         "trending" => ranking::rank_trending(filtered.clone(), now, &weights, lens.ordered),
         "new" => ranking::rank_new(filtered.clone(), now, &weights, lens.ordered),
