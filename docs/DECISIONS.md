@@ -841,6 +841,11 @@ policy obeys one guardrail — **damped, never hidden**.
 - *Apply damping inside the prior (as a term in the taste vector).* That would make a public fairness policy
   indistinguishable from the private prior, which is the one thing D27 protects.
 
+**Estate-wide.** This is a platform-independent policy, not an orbital opinion: it is written up as the
+programme's §Wave 3D ("the fame headwind") with the arithmetic as a family component, `polaris-headwind`
+(queue row 18), and orbital is its reference adoption precisely because it measured first — 2 members,
+186 clicks, and a home page that was already three composed shelves.
+
 **Consequences.** The declaration is a config surface with a measurement attached, so "how hard should we
 damp" is an experiment (step 4's metric), not an instinct. The worst case of a mis-set number is a duller
 page, not a missing member — that is what the monotone guardrail buys. Ideas and their dispositions:
