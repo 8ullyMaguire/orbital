@@ -153,7 +153,13 @@ pub fn similarity(
 ///
 /// With no viewer weights the second term is absent and the ordering is exactly the click ranking
 /// it has always been — the regression this function is tested against.
-pub fn rank_top(members: Vec<MemberStat>, weights: &[(String, f64)]) -> Vec<MemberStat> {
+pub fn rank_top(
+    members: Vec<MemberStat>,
+    weights: &[(String, f64)],
+    lens: f64,
+) -> Vec<MemberStat> {
+    // RED: the dial is passed here and ignored — the test that names the order change is the point.
+    let _ = lens;
     if weights.is_empty() {
         let mut members = members;
         members.sort_by(|a, b| {
@@ -190,7 +196,9 @@ pub fn rank_trending(
     members: Vec<MemberStat>,
     now: DateTime<Utc>,
     weights: &[(String, f64)],
+    lens: f64,
 ) -> Vec<MemberStat> {
+    let _ = lens;
     let max_7d = members.iter().map(|m| m.visitors_7d).max().unwrap_or(0);
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
@@ -224,7 +232,9 @@ pub fn rank_new(
     members: Vec<MemberStat>,
     now: DateTime<Utc>,
     weights: &[(String, f64)],
+    lens: f64,
 ) -> Vec<MemberStat> {
+    let _ = lens;
     if weights.is_empty() {
         let mut members = members;
         members.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -287,7 +297,9 @@ pub fn ring_next<'a>(
     current: Uuid,
     weights: &[(String, f64)],
     visited: &std::collections::HashSet<Uuid>,
+    lens: f64,
 ) -> Option<&'a MemberStat> {
+    let _ = lens;
     if weights.is_empty() {
         return None;
     }
@@ -330,6 +342,71 @@ pub fn neighbours<'a>(
 mod tests {
     use super::*;
     use chrono::{Duration, TimeZone};
+
+    /// The dial's whole job: at 1.0 the ordering is the one the site has always served, and at 0.0
+    /// the lens term is gone. A dial that changes nothing is a control that lies to the reader.
+    #[test]
+    fn the_lens_term_scales_with_the_dial_and_zero_means_no_lens() {
+        let now = Utc::now();
+        let mut tagged = member("tagged", 100, 200, 1, &["rust"]);
+        tagged.clicks = 1;
+        let mut popular = member("popular", 1000, 200, 1, &["gardening"]);
+        popular.clicks = 6;
+        let members = vec![popular.clone(), tagged.clone()];
+        let weights = vec![("rust".to_string(), 1.0)];
+
+        let full = rank_top(members.clone(), &weights, 1.0);
+        assert_eq!(full[0].handle, "tagged", "the lens can lift a member four places of clicks");
+
+        let half = rank_top(members.clone(), &weights, 0.5);
+        assert_eq!(
+            half[0].handle, "popular",
+            "half a lens is not enough here — the test is measuring the dial, not decoration"
+        );
+
+        let none = rank_top(members, &weights, 0.0);
+        assert_eq!(none[0].handle, "popular", "no lens means the clicks order");
+        assert_eq!(
+            none.iter().map(|m| m.handle.clone()).collect::<Vec<_>>(),
+            rank_top(vec![popular, tagged], &[], 1.0)
+                .iter()
+                .map(|m| m.handle.clone())
+                .collect::<Vec<_>>(),
+            "a zero dial must be the unpersonalised order, not an approximation of it"
+        );
+    }
+
+    #[test]
+    fn the_ring_step_also_honours_the_dial() {
+        let mut anchor_member = member("anchor", 10, 100, 1, &["rust"]);
+        anchor_member.clicks = 1;
+        let mut attuned = member("attuned", 10, 100, 1, &["rust"]);
+        attuned.clicks = 1;
+        let mut neighbour = member("neighbour", 10, 100, 1, &["rust", "compilers"]);
+        neighbour.clicks = 1;
+        let mut stranger = member("stranger", 10, 100, 1, &["gardening"]);
+        stranger.clicks = 1;
+        let members = vec![
+            anchor_member.clone(),
+            attuned.clone(),
+            neighbour.clone(),
+            stranger.clone(),
+        ];
+        let weights = vec![("rust".to_string(), 1.0)];
+        let visited = std::collections::HashSet::new();
+
+        let full = ring_next(&members, anchor_member.id, &weights, &visited, 1.0)
+            .map(|m| m.handle.clone());
+        assert_eq!(full.as_deref(), Some("attuned"), "a lens-led ring follows the tags");
+
+        let none = ring_next(&members, anchor_member.id, &weights, &visited, 0.0)
+            .map(|m| m.handle.clone());
+        assert!(
+            none.is_some(),
+            "with no lens the ring still walks — it just stops pretending to know the reader"
+        );
+    }
+
 
     fn member(handle: &str, visitors_7d: i64, age: i64, trust: i16, tags: &[&str]) -> MemberStat {
         let now = Utc::now();

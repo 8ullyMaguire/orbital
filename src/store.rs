@@ -139,6 +139,35 @@ pub async fn create_user(pool: &PgPool, new: NewUser<'_>) -> Result<User, AppErr
     }
 }
 
+/// The reader's dial, as stored. `None` means they never chose, which is different from choosing 0
+/// — one means "the surface decides", the other means "no lens at all".
+pub async fn gravity_of(pool: &PgPool, visitor_hash: &str) -> Result<Option<f64>, AppError> {
+    let row: Option<(Option<f64>,)> =
+        sqlx::query_as("SELECT gravity FROM visitor_profiles WHERE visitor_hash = $1")
+            .bind(visitor_hash)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(g,)| g))
+}
+
+/// Store the reader's dial. `None` clears it back to the surface's own ceiling.
+pub async fn set_gravity(
+    pool: &PgPool,
+    visitor_hash: &str,
+    value: Option<f64>,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO visitor_profiles (visitor_hash, pages_visited, gravity)
+         VALUES ($1, 0, $2)
+         ON CONFLICT (visitor_hash) DO UPDATE SET gravity = EXCLUDED.gravity",
+    )
+    .bind(visitor_hash)
+    .bind(value)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn touch_login(pool: &PgPool, id: Uuid) -> Result<(), AppError> {
     sqlx::query("UPDATE users SET last_login_at = now(), last_active_at = now() WHERE id = $1")
         .bind(id)

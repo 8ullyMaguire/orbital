@@ -1640,3 +1640,55 @@ async fn the_instance_prior_has_no_public_surface(pool: PgPool) {
         );
     }
 }
+
+/// The dial rides with the tuner: inside the surface's declared ceiling it is stored and shown back,
+/// above it the request is refused rather than quietly clamped (`polaris-gravity`'s rule, D36).
+#[sqlx::test]
+async fn the_dial_is_stored_inside_the_ceiling_and_refused_above_it(pool: PgPool) {
+    let app = app(pool).await;
+
+    let ok = call(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/prefs")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from("gravity=25"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(ok.status, StatusCode::SEE_OTHER, "a legal dial is a redirect, not a page");
+    let cookie = ok.vcookie.clone();
+
+    let mut req = Request::builder().uri("/prefs?dial=1");
+    if let Some(c) = &cookie {
+        req = req.header("cookie", c);
+    }
+    let page = call(&app, req.body(Body::empty()).unwrap()).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(
+        page.body.contains("value=\"25\""),
+        "the slider must render the reader's own number"
+    );
+
+    let refused = call(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/prefs")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from("gravity=41"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        refused.status,
+        StatusCode::BAD_REQUEST,
+        "41% is above the 40% this surface declares and must be refused, not clamped"
+    );
+    assert!(
+        refused.body.contains("at most 40%"),
+        "the refusal names the ceiling the reader may choose: {}",
+        refused.body
+    );
+}

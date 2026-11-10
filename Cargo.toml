@@ -15,6 +15,9 @@ polaris-candidates = { path = "../../polaris-candidates" }
 # declaration, decay, and a fold that carries provenance and a per-source report. D30 fixes orbital's
 # sources; the arithmetic is the estate's (D31: adopt it and delete our copy).
 polaris-taste-source = { path = "../../polaris-taste-source" }
+# The reader's dial: one number per person, narrowing a declared ceiling and never widening it.
+# Extracted from darkhold; orbital adopts the arithmetic rather than writing a fourth dial (D31).
+polaris-gravity = { path = "../../polaris-gravity" }
 axum = { version = "0.8", features = ["macros"] }
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }

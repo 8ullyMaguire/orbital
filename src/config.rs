@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use crate::dial::Config as DialConfig;
 use crate::taste::TasteConfig;
 
 #[derive(Clone, Debug)]
@@ -20,6 +21,9 @@ pub struct Config {
     /// The instance's declared taste sources (D30). Loaded here, at boot, because an invalid
     /// declaration must stop the process before it serves a page — not on the first ranking call.
     pub taste: TasteConfig,
+    /// Per-surface dial ceilings (SPEC §1e, D36). Loaded at boot: a share of 40 is a typo and must
+    /// stop the process, not be clamped into service.
+    pub dial: DialConfig,
 }
 
 impl Config {
@@ -42,6 +46,7 @@ impl Config {
             bsky_pds: std::env::var("BSKY_PDS").unwrap_or_else(|_| "https://bsky.social".into()),
             hub_handle: std::env::var("HUB_HANDLE").unwrap_or_else(|_| "criticalnexus".into()),
             taste: TasteConfig::from_env()?,
+            dial: DialConfig::from_env()?,
         })
     }
 
@@ -59,6 +64,7 @@ impl Config {
             bsky_pds: "https://bsky.social".into(),
             hub_handle: "hubowner".into(),
             taste: TasteConfig::for_test(),
+            dial: DialConfig::for_test(),
         }
     }
 

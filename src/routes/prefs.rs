@@ -49,6 +49,7 @@ pub async fn apply(
     let mut weights: Vec<f64> = Vec::new();
     let mut new_tag = String::new();
     let mut new_w = String::new();
+    let mut gravity: Option<String> = None;
 
     for (k, v) in &form {
         match k.as_str() {
@@ -56,6 +57,7 @@ pub async fn apply(
             "w" => weights.push(v.parse().unwrap_or(0.0)),
             "new_tag" => new_tag = v.clone(),
             "new_w" => new_w = v.clone(),
+            "gravity" => gravity = Some(v.clone()),
             _ => {}
         }
     }
@@ -70,15 +72,48 @@ pub async fn apply(
         .zip(weights.iter())
         .map(|(t, w)| (t.clone(), *w))
         .collect();
+    // A form that carries only the dial must not be read as "the reader deleted every slider": the
+    // dial is a second control in the same form, not a replacement for the first.
+    let carries_weights = form
+        .iter()
+        .any(|(k, _)| k == "tag" || k == "new_tag");
 
-    let kept = match &user {
-        Some(u) => prefs::set_explicit(&st.pool, "user", &u.id.to_string(), &entries).await?,
-        None => {
-            let hash = prefs::visitor_hash(&vid);
-            prefs::set_explicit(&st.pool, "visitor", &hash, &entries).await?
+    // The reader's dial. It rides in the same form as the sliders because it is the same decision:
+    // how much of my own taste should reorder these lists. Refused with the number the surface allows
+    // — never clamped, because a reader who typed 100 meant 100 and serving 40 answers another question.
+    if let Some(raw) = gravity {
+        let requested = raw
+            .trim()
+            .parse::<f64>()
+            .map(|percent| percent / 100.0)
+            .unwrap_or(f64::NAN);
+        let surface = crate::dial::Surface::Home;
+        match st.cfg.dial.set(surface, requested) {
+            Ok(value) => {
+                crate::store::set_gravity(&st.pool, &prefs::visitor_hash(&vid), Some(value)).await?;
+            }
+            Err(refusal) => {
+                return Ok((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    crate::dial::refusal_sentence(refusal),
+                )
+                    .into_response());
+            }
         }
+    }
+
+    let kept = if carries_weights {
+        Some(match &user {
+            Some(u) => prefs::set_explicit(&st.pool, "user", &u.id.to_string(), &entries).await?,
+            None => {
+                let hash = prefs::visitor_hash(&vid);
+                prefs::set_explicit(&st.pool, "visitor", &hash, &entries).await?
+            }
+        })
+    } else {
+        None
     };
-    tracing::debug!(kept, "preferences applied");
+    tracing::debug!(?kept, "preferences applied");
     Ok(Redirect::to(&back_to(&headers, "/")).into_response())
 }
 
@@ -111,7 +146,16 @@ pub async fn view(st: &AppState, vid: &str, user: Option<&crate::models::User>) 
     let suggestions = crate::store::popular_tags(&st.pool, prefs::MAX_WEIGHTS as i64)
         .await
         .unwrap_or_default();
-    prefs::TunerView::new(&loaded, suggestions)
+    let surface = crate::dial::Surface::Home;
+    let ceiling = st.cfg.dial.ceiling(surface).strength;
+    let stored = crate::store::gravity_of(&st.pool, &prefs::visitor_hash(vid))
+        .await
+        .ok()
+        .flatten();
+    let share = st.cfg.dial.share(surface, stored);
+    let percent = (share * 100.0).round() as i64;
+    let max = (ceiling * 100.0).round() as i64;
+    prefs::TunerView::new(&loaded, suggestions, percent, max)
 }
 
 /// Turn personalisation off for this browser. A reordered list is unsettling to some people, and

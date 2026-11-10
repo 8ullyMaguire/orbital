@@ -103,6 +103,7 @@ pub async fn home(
     } else {
         viewer_weights(&st, &vid, user.as_ref()).await
     };
+    let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Home).await;
     let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
     let mut other: Vec<SmallVertical> = Vec::new();
@@ -120,7 +121,7 @@ pub async fn home(
             });
             continue;
         }
-        let ranked = ranking::rank_top(members, &weights);
+        let ranked = ranking::rank_top(members, &weights, lens);
         let top = ranked
             .iter()
             .take(3)
@@ -146,7 +147,7 @@ pub async fn home(
     // at lambda 1.0, so their order is still `rank_trending`/`rank_new`'s order exactly; `For you`
     // spends a little relevance on diversity, which is the only shelf whose order is new.
     let shelves: Vec<crate::render::ShelfView> =
-        crate::shelf::build(&all, &weights, now, &crate::shelf::Declaration::default())
+        crate::shelf::build(&all, &weights, now, &crate::shelf::Declaration::default(), lens)
             .into_iter()
             .map(|s| {
                 let mode = match s.key {
@@ -238,6 +239,7 @@ pub async fn vertical(
     } else {
         viewer_weights(&st, &vid, user.as_ref()).await
     };
+    let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Vertical).await;
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
@@ -271,8 +273,8 @@ pub async fn vertical(
     };
 
     let ranked: Vec<MemberStat> = match tab.as_str() {
-        "trending" => ranking::rank_trending(filtered.clone(), now, &weights),
-        "new" => ranking::rank_new(filtered.clone(), now, &weights),
+        "trending" => ranking::rank_trending(filtered.clone(), now, &weights, lens),
+        "new" => ranking::rank_new(filtered.clone(), now, &weights, lens),
         "curated" => {
             let curated = store::curated(&st.pool, &v.slug).await?;
             curated
@@ -280,7 +282,7 @@ pub async fn vertical(
                 .filter(|m| visible(m))
                 .collect()
         }
-        _ => ranking::rank_top(filtered.clone(), &weights),
+        _ => ranking::rank_top(filtered.clone(), &weights, lens),
     };
     let mode = match tab.as_str() {
         "trending" => StatMode::Trending,
@@ -342,7 +344,7 @@ pub async fn vertical(
             label: "Trending".into(),
             href: format!("/v/{}?tab=trending", v.slug),
             active: tab == "trending",
-            count: ranking::rank_trending(members.clone(), now, &weights).len() as i64,
+            count: ranking::rank_trending(members.clone(), now, &weights, lens).len() as i64,
         },
         Tab {
             label: "New".into(),
@@ -812,7 +814,9 @@ pub(crate) async fn vertical_next(
         .map(|v| v.ranking().to_vec())
         .unwrap_or_default();
     let visited = std::collections::HashSet::new();
-    let personalised = current.and_then(|id| crate::ranking::ring_next(&members, id, &weights, &visited));
+    let lens = crate::dial::lens(&st, &vid, crate::dial::Surface::Ring).await;
+    let personalised =
+        current.and_then(|id| crate::ranking::ring_next(&members, id, &weights, &visited, lens));
     let next = match (personalised, current) {
         (Some(m), _) => m,
         (None, Some(id)) => {
@@ -860,9 +864,10 @@ pub async fn embed(
     // An embed is one artefact served to somebody else's page: personalising it would mean a
     // different iframe per visitor and a cache that can never be shared. Weights stay out.
     let (ranked, mode) = match view.as_str() {
-        "trending" => (ranking::rank_trending(members, now, &[]), StatMode::Trending),
-        "new" => (ranking::rank_new(members, now, &[]), StatMode::New),
-        _ => (ranking::rank_top(members, &[]), StatMode::Top),
+        // No weights means no lens term at all, so the dial cannot change this page's order.
+        "trending" => (ranking::rank_trending(members, now, &[], 1.0), StatMode::Trending),
+        "new" => (ranking::rank_new(members, now, &[], 1.0), StatMode::New),
+        _ => (ranking::rank_top(members, &[], 1.0), StatMode::Top),
     };
     let cards: Vec<MemberCard> = ranked
         .iter()

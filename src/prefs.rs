@@ -53,10 +53,14 @@ pub struct TunerView {
     pub personalized: bool,
     /// True when this browser asked not to be personalised at all.
     pub off: bool,
+    /// The reader's dial, as a percentage of a full lens: 0 = no lens, `dial_max` = the ceiling this
+    /// surface declares. Rendered as a slider next to the tags because it is the same decision.
+    pub dial: i64,
+    pub dial_max: i64,
 }
 
 impl TunerView {
-    pub fn new(viewer: &ViewerPrefs, suggestions: Vec<String>) -> Self {
+    pub fn new(viewer: &ViewerPrefs, suggestions: Vec<String>, dial: i64, dial_max: i64) -> Self {
         let rows: Vec<TunerRow> = viewer
             .weights
             .iter()
@@ -81,6 +85,8 @@ impl TunerView {
             off: false,
             rows,
             suggestions,
+            dial: dial.clamp(0, dial_max.max(0)),
+            dial_max: dial_max.max(0),
         }
     }
 }

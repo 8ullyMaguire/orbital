@@ -14,6 +14,11 @@
       <input type="text" name="new_tag" list="tuner-tags" placeholder="add a tag…" maxlength="40" aria-label="A tag to discover">
       <input type="range" min="0" max="10" step="1" value="5" name="new_w" aria-label="Weight for the new tag">
     </label>
+    <label class="tuner-row tuner-dial">
+      <span class="tuner-tag">How strongly</span>
+      <input type="range" min="0" max="{{ tuner.dial_max }}" step="5" value="{{ tuner.dial }}" name="gravity" aria-label="How strongly your tags reorder these lists">
+      <output>{{ tuner.dial }}%</output>
+    </label>
     <datalist id="tuner-tags">
       {% for s in tuner.suggestions %}<option value="{{ s }}">{% endfor %}
     </datalist>

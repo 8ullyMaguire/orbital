@@ -88,7 +88,10 @@ pub fn build(
     weights: &[(String, f64)],
     now: DateTime<Utc>,
     decl: &Declaration,
+    lens: f64,
 ) -> Vec<Shelf> {
+    // `lens` is the reader's dial as a fraction of this surface's declared ceiling: 1.0 is the
+    // ordering the site has always served, 0.0 is no lens at all.
     if members.is_empty() {
         return Vec::new();
     }
@@ -99,7 +102,7 @@ pub fn build(
     // The three source lists, each produced by a ranker that already exists. Reusing them is what
     // makes the ordered shelves byte-identical to the lists they replaced: the arithmetic that turns
     // clicks, visitors and age into an order is not re-implemented here.
-    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights));
+    let by_relevance = ids(&position, &ranking::rank_top(members.to_vec(), weights, lens));
     let by_clicks = {
         let mut idx: Vec<usize> = (0..members.len()).collect();
         idx.sort_by(|a, b| {
@@ -110,8 +113,8 @@ pub fn build(
         });
         idx
     };
-    let by_rising = ids(&position, &ranking::rank_trending(members.to_vec(), now, weights));
-    let by_new = ids(&position, &ranking::rank_new(members.to_vec(), now, weights));
+    let by_rising = ids(&position, &ranking::rank_trending(members.to_vec(), now, weights, lens));
+    let by_new = ids(&position, &ranking::rank_new(members.to_vec(), now, weights, lens));
 
     let mut shelves = Vec::new();
 
@@ -314,10 +317,10 @@ mod tests {
             member("fresh", 2, 4, 2, &["dev"]),
             member("steady", 10, 12, 40, &["music"]),
         ];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), 1.0);
 
         let rising = shelves.iter().find(|s| s.key == "rising").unwrap();
-        let expected_rising: Vec<String> = ranking::rank_trending(members.clone(), Utc::now(), &[])
+        let expected_rising: Vec<String> = ranking::rank_trending(members.clone(), Utc::now(), &[], 1.0)
             .iter()
             .take(PER_SHELF)
             .map(|m| m.handle.clone())
@@ -325,7 +328,7 @@ mod tests {
         assert_eq!(handles(&members, rising), expected_rising, "Rising must be the Trending ranker's order");
 
         let new = shelves.iter().find(|s| s.key == "new").unwrap();
-        let expected_new: Vec<String> = ranking::rank_new(members.clone(), Utc::now(), &[])
+        let expected_new: Vec<String> = ranking::rank_new(members.clone(), Utc::now(), &[], 1.0)
             .iter()
             .take(PER_SHELF)
             .map(|m| m.handle.clone())
@@ -344,7 +347,7 @@ mod tests {
             member("odd", 1, 1, 30, &["music"]),
         ];
         let weights = vec![("rust".to_string(), 1.0)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), 1.0);
         let for_you = shelves.iter().find(|s| s.key == "for_you").unwrap();
         let order = handles(&members, for_you);
         assert_eq!(order.first().map(String::as_str), Some("a"), "the top stays the top: {order:?}");
@@ -361,7 +364,7 @@ mod tests {
             member("fresh", 0, 0, 1, &["dev"]),
         ];
         let weights = vec![("rust".to_string(), 0.9)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), 1.0);
         let forbidden = ["taste", "prior", "gravity", "curated", "editor", "operator", "orbit"];
         for shelf in &shelves {
             for item in &shelf.items {
