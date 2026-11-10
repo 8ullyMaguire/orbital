@@ -298,7 +298,10 @@ step is not done because it merged; it is done because its gate ran against the 
   `etag: W/"6e69584104ab96e5"`, `304` on `If-None-Match`, `404` for an unknown handle; the sidebar prints
   `shares bluesky, self-hosting`. **Not exercised live**: the three empty reasons — every visible member here has
   tags, and inventing an untagged member to show one would be the fabricated row the invariant forbids.
-  **195 tests**.
+  **Correction (same day)**: "`ranking::similarity` deleted with its single caller" was true of the plan and false of
+  the tree — the step removed the caller and left the function. It is deleted now, with `render::similarity_reason`
+  and the `weights`/`hub_tags` reads it alone needed; the suite was green both ways, which is why a deletion claim
+  has to be grepped, not assumed. **195 tests**.
 - **2026-11-10** `ad08c8b`…`b1635bc` — **step 1, the overlap adapter**: `src/overlap.rs` now holds the only
   `cosine`/`tag_relevance`, the IDF weighting the old comment claimed (`idf = ln(1 + N/df)`, normalised so the
   rarest tag weighs `1.0`), and a `TagSignal` implementing `polaris_candidates::Signal` where absence is `None`.

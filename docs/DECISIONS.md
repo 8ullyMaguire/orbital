@@ -1441,6 +1441,10 @@ tags, the reader's weights and recency. The promise was not the implementation.
 - **Determinism on purpose**: overlap descending, ties by handle; shared tags by rarity then alphabetically.
 - **`ranking::similarity` deleted** — one caller, and that caller now wants a different list. Adopting a module by
   leaving its predecessor behind is how two arithmetics end up disagreeing about the same word.
+  **Correction (same day):** the step removed the *caller* and left the function, so this line was true of intent and
+  false of the tree until a follow-up commit deleted `ranking::similarity`, `render::similarity_reason` and the two
+  reads they needed. The suite was green either way — dead code with a test is still green — which is exactly why the
+  claim needed checking against the tree rather than against the plan.
 - **The overlap coefficient is not in the JSON.** The shared tags are the explanation; a coefficient is a knob.
 
 **Rejected alternatives.**
