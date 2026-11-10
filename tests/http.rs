@@ -2349,3 +2349,90 @@ async fn a_home_render_records_its_impressions(pool: PgPool) {
         );
     }
 }
+
+/// THE GATE, on the page: the unexposed tail gets a shelf of its own, ordered by growth, and the flat pool
+/// gets no shelf at all rather than an empty heading.
+#[sqlx::test]
+async fn the_undiscovered_shelf_is_the_tail_and_vanishes_when_there_is_none(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    // Three visible members with heavy traffic and three barely-visible ones, one of them growing hard.
+    for (handle, recent_hits, old_hits) in [
+        ("famousone", 40, 40),
+        ("famoustwo", 30, 30),
+        ("famousthree", 20, 20),
+        ("smallgrowing", 6, 0),
+        ("smallflat", 1, 3),
+        ("smallsilent", 0, 0),
+    ] {
+        register(&app, handle, "dev").await;
+        if recent_hits > 0 {
+            sqlx::query(
+                "INSERT INTO source_hits (user_id, session_hash, created_at)
+                 SELECT u.id, $2 || '-' || g, now() - interval '1 day'
+                   FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
+            )
+            .bind(handle)
+            .bind(format!("u-{handle}"))
+            .bind(recent_hits)
+            .execute(&pool)
+            .await
+            .expect("recent hits");
+        }
+        if old_hits > 0 {
+            sqlx::query(
+                "INSERT INTO source_hits (user_id, session_hash, created_at)
+                 SELECT u.id, $2 || '-old-' || g, now() - interval '14 days'
+                   FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
+            )
+            .bind(handle)
+            .bind(format!("u-{handle}"))
+            .bind(old_hits)
+            .execute(&pool)
+            .await
+            .expect("old hits");
+        }
+    }
+
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK);
+    let start = home
+        .body
+        .find("data-shelf=\"undiscovered\"")
+        .unwrap_or_else(|| panic!("a real long tail must render the shelf: {}", &home.body[..home.body.len().min(600)]));
+    let rest = &home.body[start..];
+    let end = rest[1..].find("data-shelf=").map(|i| i + 1).unwrap_or(rest.len());
+    let block = &rest[..end];
+    for famous in ["famousone", "famoustwo", "famousthree"] {
+        assert!(!block.contains(&format!("/@{famous}")), "{famous} is not undiscovered: {block}");
+    }
+    assert!(block.contains("/@smallgrowing"), "the growing tail member is on the shelf: {block}");
+    assert!(
+        block.find("/@smallgrowing").unwrap_or(usize::MAX) < block.find("/@smallsilent").unwrap_or(0),
+        "momentum outranks stillness, and mass is not on this shelf at all"
+    );
+}
+
+/// An all-flat pool: every member at the same exposure, so nobody is below the sixtieth percentile and the
+/// shelf does not exist.
+#[sqlx::test]
+async fn a_flat_pool_has_no_undiscovered_shelf(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    for handle in ["alpha", "bravo", "charlie", "delta"] {
+        register(&app, handle, "dev").await;
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, 5) g WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("f-{handle}"))
+        .execute(&pool)
+        .await
+        .expect("real hits");
+    }
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK);
+    assert!(
+        !home.body.contains("data-shelf=\"undiscovered\""),
+        "a flat pool has no tail, so there is no shelf — not an empty heading"
+    );
+}
