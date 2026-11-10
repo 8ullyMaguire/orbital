@@ -81,3 +81,44 @@ async fn two_weeks_produce_two_rows_and_the_week_is_idempotent(pool: PgPool) {
     assert_eq!(rows[0].2, 4);
     assert_eq!(rows[1].0, NaiveDate::from_ymd_opt(2026, 11, 9).unwrap(), "keyed by the ISO week's Monday");
 }
+
+/// THE GATE, the number the step must print: the share of a window's impressions that went to members below the
+/// median exposure. Hand-computed, because a share nobody can check is a claim.
+#[test]
+fn the_long_tail_share_is_the_share_of_impressions_below_the_median() {
+    // Three members: exposure 100, 50, 10; impressions 100, 50, 10.
+    let rows = vec![(100.0, 100i64), (50.0, 50), (10.0, 10)];
+    let lt = orbital::concentration::long_tail(&rows).expect("a window with impressions");
+    // Median exposure 50, so the tail is the member at 10: 10 of 160 impressions.
+    assert_eq!(lt.total, 160, "the denominator is every impression in the window");
+    assert_eq!(lt.tail_members, 1);
+    assert!((lt.share - 10.0 / 160.0).abs() < 1e-12, "{}", lt.share);
+
+    // Half the pool below the median is a normal shape and the share is not zero.
+    let rows = vec![(100.0, 90i64), (100.0, 90), (10.0, 10), (10.0, 10)];
+    let lt = orbital::concentration::long_tail(&rows).expect("impressions");
+    assert_eq!(lt.tail_members, 2);
+    assert!((lt.share - 20.0 / 200.0).abs() < 1e-12);
+
+    // A window with no impressions has no share — not a zero, which would read as "the tail got nothing".
+    assert!(orbital::concentration::long_tail(&[(1.0, 0i64), (2.0, 0)]).is_none());
+    assert!(orbital::concentration::long_tail(&[]).is_none());
+}
+
+/// The floor, and the refusal under it: the step may not claim a result off a handful of impressions.
+#[test]
+fn below_the_floor_there_is_no_verdict() {
+    let rows = vec![(100.0, 100i64), (10.0, 10)];
+    let lt = orbital::concentration::long_tail(&rows).expect("impressions");
+    assert!(lt.total < orbital::concentration::LONG_TAIL_FLOOR);
+    assert!(
+        lt.verdict().starts_with("NO VERDICT"),
+        "under {} impressions the answer is NO VERDICT, got {:?}",
+        orbital::concentration::LONG_TAIL_FLOOR,
+        lt.verdict()
+    );
+    let big = vec![(100.0, 1000i64), (10.0, 400)];
+    let lt = orbital::concentration::long_tail(&big).expect("impressions");
+    assert!(lt.total >= orbital::concentration::LONG_TAIL_FLOOR);
+    assert!(lt.verdict().contains("long tail"), "over the floor it states the share: {}", lt.verdict());
+}
