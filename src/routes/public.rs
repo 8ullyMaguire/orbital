@@ -111,7 +111,6 @@ pub async fn home(
     let attn = st.cfg.attention.clone();
     let verticals = store::verticals(&st.pool, true).await?;
     let mut cards: Vec<VerticalCard> = Vec::new();
-    let mut other: Vec<SmallVertical> = Vec::new();
 
     for v in &verticals {
         let members = store::vertical_members(&st.pool, &v.slug).await?;
@@ -119,11 +118,9 @@ pub async fn home(
             .into_iter()
             .filter(|m| visible(m))
             .collect();
+        // A vertical nobody is in is a real page with an honest empty state, and it is not a card on the front
+        // page: "still growing" was the site advertising six rooms with nobody in them.
         if members.is_empty() {
-            other.push(SmallVertical {
-                slug: v.slug.clone(),
-                label: v.label.clone(),
-            });
             continue;
         }
         let ranked =
@@ -253,7 +250,6 @@ pub async fn home(
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         tuner,
         verticals: cards,
-        other,
         shelves,
         total_members,
         total_clicks,

@@ -353,6 +353,48 @@ pub async fn rotate_verify_token(pool: &PgPool, id: Uuid) -> Result<String, AppE
     Ok(row.get::<String, _>("verify_token"))
 }
 
+// ---------------------------------------------------------------- fixtures
+
+/// A smoke test once wrote to the live database: hidden members with `example.com` links, still counted in the
+/// verticals they joined. The pattern is deliberately narrow — **hidden and test-shaped** — so a real member who
+/// hid their profile is never swept up, and a fixture that forgets to hide itself is left for a human to see.
+const FIXTURE_HANDLE: &str = "^(test|smoke|e2e|dummy|fixture)";
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FixtureRow {
+    pub handle: String,
+    pub links: i64,
+}
+
+/// What the cleanup would remove, so a deletion can be read before it is run.
+pub async fn fixtures(pool: &PgPool) -> Result<Vec<FixtureRow>, AppError> {
+    let sql = format!(
+        "SELECT u.handle, count(l.id)::bigint AS links
+           FROM users u LEFT JOIN links l ON l.user_id = u.id
+          WHERE u.hidden AND u.handle ~ '{FIXTURE_HANDLE}'
+          GROUP BY u.handle ORDER BY u.handle"
+    );
+    Ok(sqlx::query_as::<_, FixtureRow>(&sql).fetch_all(pool).await?)
+}
+
+/// Delete them. Links cascade from `users`, and the counts are read *before* the delete so the caller can report
+/// what went. Idempotent: a second run finds nothing and says so.
+pub async fn delete_fixtures(pool: &PgPool) -> Result<(i64, i64), AppError> {
+    let links: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) FROM links l JOIN users u ON u.id = l.user_id
+          WHERE u.hidden AND u.handle ~ '{FIXTURE_HANDLE}'"
+    ))
+    .fetch_one(pool)
+    .await?;
+    let users: i64 = sqlx::query_scalar(&format!(
+        "WITH gone AS (DELETE FROM users WHERE hidden AND handle ~ '{FIXTURE_HANDLE}' RETURNING 1)
+         SELECT count(*) FROM gone"
+    ))
+    .fetch_one(pool)
+    .await?;
+    Ok((users, links))
+}
+
 // ---------------------------------------------------------------- verticals
 
 pub async fn verticals(pool: &PgPool, include_nsfw: bool) -> Result<Vec<VerticalRow>, AppError> {

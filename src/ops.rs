@@ -51,6 +51,22 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         );
     }
 
+    // 1b. Nothing a test wrote is sitting in the public catalogue. A fixture is invisible (hidden) and therefore
+    // easy to forget, which is exactly why it is a FAIL and not a note: it is still counted in a vertical.
+    match crate::store::fixtures(pool).await {
+        Ok(f) if f.is_empty() => say(true, "fixtures", "none".into()),
+        Ok(f) => say(
+            false,
+            "fixtures",
+            format!(
+                "{} hidden fixture member(s), {} link(s) — run `orbital cleanup --apply`",
+                f.len(),
+                f.iter().map(|x| x.links).sum::<i64>()
+            ),
+        ),
+        Err(e) => say(false, "fixtures", format!("{e}")),
+    }
+
     // 2. The site answers on its own bind address, not just through nginx.
     let addr = &cfg.bind_addr;
     let health = reqwest::Client::new()
@@ -583,6 +599,27 @@ fn say_line(line: &str) {
 
 /// `orbital impressions [--date YYYY-MM-DD] [--days N]`: what the ceiling sees right now, and the tail the rotation
 /// will fill on that date and the next — printed from the date alone, so two hosts can compare notes.
+/// The freeze's housekeeping: a smoke test wrote members and links into the live database on 2026-10-29 and
+/// nothing since has noticed them. This reports what it found and, with `--apply`, removes exactly that.
+pub async fn cleanup(pool: &PgPool, apply: bool) -> Result<()> {
+    let found = crate::store::fixtures(pool).await?;
+    if found.is_empty() {
+        println!("fixtures: none");
+        return Ok(());
+    }
+    let links: i64 = found.iter().map(|f| f.links).sum();
+    for f in &found {
+        println!("fixture  @{}  ({} link(s), hidden)", f.handle, f.links);
+    }
+    if !apply {
+        println!("{} member(s), {} link(s) — dry run; pass --apply to delete", found.len(), links);
+        return Ok(());
+    }
+    let (users, links) = crate::store::delete_fixtures(pool).await?;
+    println!("deleted {} member(s) and {} link(s)", users, links);
+    Ok(())
+}
+
 pub async fn impressions(
     pool: &PgPool,
     cfg: &Config,

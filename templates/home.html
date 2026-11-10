@@ -40,17 +40,9 @@
       <div class="vtop">
         {% for m in v.top %}<span class="vtop-i" title="{{ m.display_name }}">{{ m.avatar_mini|safe }}<span>{{ m.display_name }}</span></span>{% endfor %}
       </div>
-      {% else %}
-      <p class="sm empty-hint">Founding season — this vertical is open.</p>
       {% endif %}
     </a>
     {% endfor %}
-    {% if other.len() > 0 %}
-    <div class="vcard vcard-other">
-      <div class="vcard-h"><span class="vico">•</span><span class="vname">Other</span><span class="pill">{{ other.len() }}</span></div>
-      <p class="muted sm vdesc">Smaller verticals, still growing: {% for o in other %}<a href="/v/{{ o.slug }}">{{ o.label }}</a>{% if !loop.last %}, {% endif %}{% endfor %}.</p>
-    </div>
-    {% endif %}
   </div>
 </section>
 

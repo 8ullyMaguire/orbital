@@ -254,17 +254,11 @@ pub struct StatusTemplate {
     pub generated: String,
 }
 
-pub struct SmallVertical {
-    pub slug: String,
-    pub label: String,
-}
-
 #[derive(Template, WebTemplate)]
 #[template(path = "home.html")]
 pub struct HomeTemplate {
     pub layout: Layout,
     pub verticals: Vec<VerticalCard>,
-    pub other: Vec<SmallVertical>,
     /// The three shelves `src/shelf.rs` composes. An empty pool yields no shelves, not empty headings.
     pub shelves: Vec<ShelfView>,
     pub total_members: i64,

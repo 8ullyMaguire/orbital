@@ -169,11 +169,42 @@ async fn register(app: &Router, handle: &str, vertical: &str) -> Res {
 #[sqlx::test]
 async fn the_front_door_renders_with_its_verticals(pool: PgPool) {
     let app = app(pool).await;
+    register(&app, "founder", "dev").await;
     let res = call(&app, get("/")).await;
     assert_eq!(res.status, StatusCode::OK, "{}", res.body);
     assert!(res.body.contains("Verticals"), "the nav must list the verticals");
-    assert!(res.body.contains("/v/dev"), "the seeded verticals must be linked");
+    assert!(res.body.contains("/v/dev"), "a vertical with a member in it must be linked");
     assert!(res.body.contains("og:image"), "social cards need an og:image");
+}
+
+/// The freeze's rule, and it is a rule about honesty rather than layout: a vertical nobody is in is a real page
+/// with an empty state, and it is **not** advertised on the front page. The page must still answer, because hiding
+/// an empty room is different from deleting it — and a directory that hides a live page from its own index is
+/// lying in the other direction.
+#[sqlx::test]
+async fn an_empty_vertical_is_a_page_but_not_an_advert(pool: PgPool) {
+    let app = app(pool).await;
+    register(&app, "founder", "dev").await;
+
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK, "{}", home.body);
+    assert!(home.body.contains("/v/dev"), "the populated vertical is on the front page");
+    assert!(
+        !home.body.contains("/v/gaming"),
+        "an empty vertical must not be offered as a destination from the front page"
+    );
+    assert!(
+        !home.body.contains("still growing"),
+        "the front page must not describe its own emptiness"
+    );
+
+    let empty = call(&app, get("/v/gaming")).await;
+    assert_eq!(empty.status, StatusCode::OK, "an empty vertical is still a page: {}", empty.body);
+    assert!(
+        !empty.body.contains("FOUNDING SEASON") && !empty.body.contains("Founding season"),
+        "the empty state must not promise a season: {}",
+        empty.body
+    );
 }
 
 #[sqlx::test]

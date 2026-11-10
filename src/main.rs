@@ -69,6 +69,12 @@ enum Cmd {
         #[arg(long)]
         days: Option<i64>,
     },
+    /// Remove rows a smoke test left on a real database. Reports first; deletes only with `--apply`.
+    Cleanup {
+        /// Delete what the report found. Without it, this is a dry run.
+        #[arg(long)]
+        apply: bool,
+    },
     /// Apply reviewed tag aliases to existing rows.
     Retag {
         #[arg(long)]
@@ -196,6 +202,10 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(report.exit_code());
                 }
             }
+        }
+        Cmd::Cleanup { apply } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::cleanup(&pool, apply).await?;
         }
         Cmd::Impressions { date, days } => {
             let pool = db::connect(&cfg).await?;
