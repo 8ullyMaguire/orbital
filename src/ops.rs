@@ -155,7 +155,29 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
     // 9. What a click is worth (D41), stated as the ratio it promises rather than the constant it uses.
     say(true, "attention", cfg.attention.sentence());
 
-    // 10. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    // 10. Fame, in both windows it is measured in (D42): the leader `Top` would show today, and what the
+    // monument keeps. Printed together because a declaration that says "90 days" beside a page that shows a
+    // lifetime number is the exact mistake this step exists to prevent.
+    let everyone = store::all_members(&db, true).await?;
+    if let Some(lead) = everyone
+        .iter()
+        .max_by(|a, b| a.recent.partial_cmp(&b.recent).unwrap_or(std::cmp::Ordering::Equal))
+    {
+        say(
+            true,
+            "fame",
+            format!(
+                "Top reads a 90-day half-life; the monument keeps the lifetime total — leader @{} {:.1} recent / {} all time",
+                lead.handle,
+                lead.recent,
+                crate::render::fmt_exact(lead.clicks)
+            ),
+        );
+    } else {
+        say(true, "fame", "Top reads a 90-day half-life; no members yet".to_string());
+    }
+
+    // 11. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
     //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
     //    favours, which is not a sentence a page may carry.
     match crate::concentration::latest(pool).await {
