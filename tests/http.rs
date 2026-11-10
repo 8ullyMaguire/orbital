@@ -1262,14 +1262,36 @@ async fn a_token_can_add_a_link_without_a_browser(pool: PgPool) {
 
 #[sqlx::test]
 async fn the_status_page_lists_the_estate_and_says_when_it_does_not_know(pool: PgPool) {
-    // No estate file in the test tree: the page must say so, not pretend the network is empty.
+    // The page reads `static/estate.txt`, which the deploy writes from nginx's server_names. So the
+    // test must not assume either state: a clean checkout has no file (the page must say so rather
+    // than pretend the network is empty), and a host that has deployed has one (the page must list
+    // what it names). Measured 2026-11-10: the previous version asserted only the empty state and
+    // therefore passed in CI and failed on the deploy host — a gate that lies in the one direction
+    // that costs nothing to get right.
     let app = app(pool).await;
     let res = call(&app, get("/status")).await;
     assert_eq!(res.status, StatusCode::OK);
-    assert!(
-        res.body.contains("No hosts are configured yet"),
-        "an honest empty state"
-    );
+
+    let listed: Vec<String> = std::fs::read_to_string("static/estate.txt")
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| l.split_once('|').map(|(host, _)| host.trim().to_string()))
+        .filter(|h| !h.is_empty())
+        .collect();
+
+    if listed.is_empty() {
+        assert!(
+            res.body.contains("No hosts are configured yet"),
+            "an honest empty state"
+        );
+    } else {
+        for host in listed.iter().take(5) {
+            assert!(
+                res.body.contains(&format!("https://{host}/")),
+                "the page must link {host}, because the estate file names it"
+            );
+        }
+    }
 }
 
 #[sqlx::test]
