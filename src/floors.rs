@@ -124,6 +124,11 @@ impl Floors {
             if name.is_empty() || name == CATEGORY_PREFIX {
                 return Err(format!("{part:?} names nothing"));
             }
+            if name.contains(':') && !name.starts_with(CATEGORY_PREFIX) {
+                return Err(format!(
+                    "{part:?} is not a weight — a name may not contain ':' (a category is written v:<slug>)"
+                ));
+            }
             rules.push(FloorRule::checked(name, weight)?);
         }
         if rules.is_empty() {

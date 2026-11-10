@@ -120,6 +120,29 @@ pub fn rank_top(
     attention: crate::attention::Config,
     window: Window,
 ) -> Vec<MemberStat> {
+    // The no-floors case, and the only entry point that existed before D51. Kept as a call rather than a copy so
+    // there is still exactly one arithmetic: a caller with no floors gets the ordering it always got.
+    rank_top_floored(
+        members,
+        weights,
+        lens,
+        attention,
+        window,
+        &crate::floors::Floors::none(),
+    )
+}
+
+/// `rank_top` with the reader's and the instance's floors applied (D51). The floor multiplies the finished score,
+/// so it takes a share of a member's *standing* — everything the ranker weighed — rather than of one term, and the
+/// caps keep it from ever becoming a filter.
+pub fn rank_top_floored(
+    members: Vec<MemberStat>,
+    weights: &[(String, f64)],
+    lens: f64,
+    attention: crate::attention::Config,
+    window: Window,
+    floors: &crate::floors::Floors,
+) -> Vec<MemberStat> {
     // The reader's dial, as a fraction of this surface's ceiling. 1.0 is the ordering the site has
     // always served (`x * 1.0 == x` exactly), 0.0 removes the lens term entirely.
     // `raw` with no lens is the arithmetic of every version before this one: visitors, then clicks, then
@@ -127,7 +150,8 @@ pub fn rank_top(
     // `damped` with no lens still has to obey its own window — a stranger's Top is a recent list, not a
     // lifetime visitor count — so it falls through to the scored path with no relevance term.
     let raw_mode_early = attention.mode == crate::attention::Mode::Raw;
-    if weights.is_empty() && raw_mode_early {
+    // The early return is the pre-lens arithmetic; a floor is a lens, so it must not take that path.
+    if weights.is_empty() && raw_mode_early && floors.is_empty() {
         let mut members = members;
         members.sort_by(|a, b| {
             b.visitors
@@ -173,7 +197,9 @@ pub fn rank_top(
             // the members it was meant to reward. 0.4 x 0.2 is the same +0.08 the relevance term
             // would have given, and it cannot swamp clicks: 0.6 is six times its ceiling.
             let endorse = crate::governance::ENDORSE_BOOST * m.endorse.clamp(0.0, 1.0);
-            (0.6 * clicks + 0.4 * lens * rel + 0.4 * endorse, m)
+            let score = 0.6 * clicks + 0.4 * lens * rel + 0.4 * endorse;
+            // The floor multiplies the finished score: every term the ranker weighed, not one of them.
+            (floors.apply(&m, score).0, m)
         })
         .collect();
     scored.sort_by(|a, b| {
