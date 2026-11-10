@@ -252,7 +252,9 @@ pub fn build(
         }
     }
 
-    // `New`: one source, pure relevance — the New ranker's own order.    // `New`: one source, pure relevance — the New ranker's own order.
+    // `New`: one source, pure relevance — the New ranker's own order. Last, because recency is the least
+    // informative of the four and the cross-shelf rule (D43) means the last shelf gets what is left.    // `New`: one source, pure relevance — the New ranker's own order. Last, because recency is the least
+    // informative of the four and the cross-shelf rule (D43) means the last shelf gets what is left.
     shelves.push(Shelf {
         key: "new",
         title: "New to the directory",
