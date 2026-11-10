@@ -18,6 +18,9 @@ polaris-taste-source = { path = "../../polaris-taste-source" }
 # The reader's dial: one number per person, narrowing a declared ceiling and never widening it.
 # Extracted from darkhold; orbital adopts the arithmetic rather than writing a fourth dial (D31).
 polaris-gravity = { path = "../../polaris-gravity" }
+# The estate's ranking metrics and the paired bootstrap: nDCG@10, recall@50, and the decision
+# rule that refuses to call a difference a result below the sample floor (D31).
+polaris-eval = { path = "../../polaris-eval" }
 axum = { version = "0.8", features = ["macros"] }
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }

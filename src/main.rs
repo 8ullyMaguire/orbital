@@ -42,6 +42,13 @@ enum Cmd {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Replay the committed golden set and print the verdict. `--emit` writes a new seed list from the
+    /// rows this database holds (a power-user command: the output names rankings, so it cannot be a route).
+    Eval {
+        /// Emit this many seeds from the newest sessions that clicked, instead of replaying the file.
+        #[arg(long)]
+        emit: Option<i64>,
+    },
     /// Record today's rank for every member in every vertical.
     Snapshot,
     /// Apply reviewed tag aliases to existing rows.
@@ -145,6 +152,31 @@ async fn main() -> anyhow::Result<()> {
                     .await?
                 }
                 BotCmd::Maintain => bot::maintenance(&state.pool).await?,
+            }
+        }
+        Cmd::Eval { emit } => {
+            let pool = db::connect(&cfg).await?;
+            match emit {
+                Some(limit) => {
+                    let golden = orbital::eval::emit_seeds(&pool, limit).await?;
+                    let path = std::path::Path::new("eval/golden.json");
+                    std::fs::create_dir_all("eval")?;
+                    std::fs::write(path, golden.to_json())?;
+                    println!("wrote {} seeds to {}", golden.seeds.len(), path.display());
+                }
+                None => {
+                    let path = std::path::Path::new("eval/golden.json");
+                    let raw = std::fs::read_to_string(path).map_err(|e| {
+                        anyhow::anyhow!(
+                            "{}: {e}. Run `orbital eval --emit 200` against the live rows first.",
+                            path.display()
+                        )
+                    })?;
+                    let golden = orbital::eval::Golden::from_json(&raw)?;
+                    let report = orbital::eval::run(&pool, &golden).await?;
+                    println!("{}", report.sentence());
+                    std::process::exit(report.exit_code());
+                }
             }
         }
         Cmd::Doctor => {
