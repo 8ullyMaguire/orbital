@@ -2744,3 +2744,79 @@ async fn similar_members_are_shared_tags_and_do_not_move(pool: PgPool) {
     assert!(why.contains("cli") && why.contains("rust"), "the why line names the tags: {why}");
     assert!(!why.chars().any(|c| c.is_ascii_digit()), "and no number: {why}");
 }
+
+/// THE GATE (D51): a floored tag's member stays on the page and moves down by the declared amount; a floor that
+/// matches nothing is named in the response; a weight above the cap is refused by name instead of quietly becoming
+/// 0.5; and the profile is still reachable, because a floor is a position and never a filter.
+#[sqlx::test]
+async fn a_ranked_away_tag_moves_a_member_down_and_never_off_the_page(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "alfred", "dev").await;
+    register(&app, "bruno", "dev").await;
+    for (handle, tag) in [("alfred", "garden"), ("bruno", "rust")] {
+        sqlx::query("INSERT INTO tags (user_id, tag_slug) SELECT id, $2 FROM users WHERE handle = $1")
+            .bind(handle)
+            .bind(tag)
+            .execute(&pool)
+            .await
+            .expect("a real tag");
+    }
+
+    let plain = call(&app, get("/")).await;
+    assert_eq!(plain.status, StatusCode::OK);
+    let bruno_plain = plain
+        .body
+        .find("/@bruno")
+        .unwrap_or_else(|| panic!("bruno is not on the plain page"));
+    let alfred_plain = plain
+        .body
+        .find("/@alfred")
+        .unwrap_or_else(|| panic!("alfred is not on the plain page"));
+
+    let floored = call(&app, get("/?not=rust")).await;
+    assert_eq!(floored.status, StatusCode::OK, "{}", floored.body);
+    let bruno_floored = floored
+        .body
+        .find("/@bruno")
+        .unwrap_or_else(|| panic!("a floor took a member off the page: {}", floored.body));
+    let alfred_floored = floored.body.find("/@alfred").expect("alfred still there");
+    assert!(
+        bruno_floored > alfred_floored,
+        "the floored member must be after the other one: bruno {bruno_floored} vs alfred {alfred_floored}"
+    );
+    if bruno_plain < alfred_plain {
+        assert!(bruno_floored > bruno_plain, "and it must have moved down, not up");
+    }
+    // The response names what it did, in the reader's words.
+    assert!(
+        floored.body.contains("ranked away: 1 profile lower"),
+        "the page says what the floor did: {}",
+        &floored.body[..floored.body.len().min(400)]
+    );
+    assert!(!floored.body.to_lowercase().contains("floor"), "no machinery vocabulary on a page");
+
+    // A floor that matches nothing is named — a typo must not look like a preference that worked.
+    let typo = call(&app, get("/?not=nonsense")).await;
+    assert_eq!(typo.status, StatusCode::OK);
+    assert!(
+        typo.body.contains("matches nothing here"),
+        "an unapplied floor says so: {}",
+        &typo.body[..typo.body.len().min(400)]
+    );
+
+    // A weight above the cap is refused by name, and the page still renders.
+    let too_big = call(&app, get("/?not=rust:0.9")).await;
+    assert_eq!(too_big.status, StatusCode::OK);
+    assert!(
+        too_big.body.contains("rust") && too_big.body.contains("0.5"),
+        "the refusal names the rule and the cap: {}",
+        &too_big.body[..too_big.body.len().min(400)]
+    );
+
+    // Reachability is absolute: the profile and its category answer regardless of any floor.
+    let profile = call(&app, get("/@bruno")).await;
+    assert_eq!(profile.status, StatusCode::OK);
+    let vertical = call(&app, get("/v/dev?not=rust")).await;
+    assert_eq!(vertical.status, StatusCode::OK, "{}", vertical.body);
+    assert!(vertical.body.contains("ranked away"), "the category page says it too");
+}
