@@ -81,8 +81,10 @@ fn raw_reproduces_the_old_order_over_two_hundred_seeds() {
 fn damped_shrinks_a_ten_fold_lead_to_the_declared_ratio() {
     let cfg = Config::default();
     assert_eq!(cfg.mode, Mode::Damped);
-    let busiest = cfg.share(11.0, 11.0);
-    let tenth = cfg.share(1.0, 11.0);
+    // (10 of a max of 10) against (1 of a max of 10): the same additive offset on both sides, so the
+    // ratio is exactly the formula the declaration publishes.
+    let busiest = cfg.share(10.0, 10.0);
+    let tenth = cfg.share(1.0, 10.0);
     let lead = busiest / tenth;
     let declared = cfg.lead_after(10.0);
     assert!(
@@ -145,8 +147,10 @@ async fn a_second_click_from_the_same_session_does_not_move_a_score(pool: PgPool
         .await
         .expect("someone new, from far down the page");
     let after_third = attention_of(&pool, "fan").await;
+    // Session one is still worth 1.0; session two is worth 1 + ln 9. The second click in session one
+    // added nothing, which is the whole claim.
     assert!(
-        (after_third.1 - (1.0 + 9f64.ln())).abs() < 1e-6,
+        (after_third.1 - (1.0 + (1.0 + 9f64.ln()))).abs() < 1e-6,
         "two audiences: {}",
         after_third.1
     );
