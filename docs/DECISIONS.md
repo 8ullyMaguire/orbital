@@ -1281,3 +1281,46 @@ silence gate) and nobody is over the ceiling yet because two members at 50 % sit
 @criticalnexus @steeltitan` and `tail for 2026-11-11: @steeltitan @criticalnexus`, identical across two runs.
 Two mutations prove the gates: disabling the pool filter shows the capped member again, and a hash that
 ignores the day returns the same tail for both days.
+
+## D46 — An "undiscovered" shelf, ranked by momentum rather than mass
+
+**Context.** After D41–D45 the page is fair to the members it shows. It does not show the ones it never
+shows: the home page is four shelves of the same best-known faces, and a member with six visitors a week has
+no route onto it that does not involve becoming famous first.
+
+**Decision.** A fourth shelf, `undiscovered`, built from the members **below the 60th percentile of exposure**
+(D42's `recent`), ordered by momentum — this week's visitors against the member's own trailing three-week
+baseline, smoothed `(w+1)/(prev/3+1)`. A new measurement (`visitors_prev`) is added to the stats fragment
+rather than a new table: it is the same rows, read over an earlier window.
+
+- Empty is an answer: no members below the cut → no shelf, not a padded one.
+- The cross-shelf rule still applies, so on a catalogue smaller than its own page the shelf is absent. That is
+  correct, and it is why the shelf's own test uses a pool bigger than the page.
+- It sits **before** `New` in the shelf order: recency is the least informative of the four, and the dedupe
+  means whichever shelf comes last gets the leftovers.
+- The percentile is a constant, not a declaration: one surface wants this number. The day a second surface
+  wants a different one is the day it becomes a file.
+
+**Rejected alternatives.**
+
+- *Sort the undiscovored shelf by clicks ascending.* That is "who is smallest", not "who is going somewhere":
+  a member with 3 clicks from 3 visitors and one with 3 clicks from 90 are the same number and different
+  stories.
+- *Use a global baseline (the site's median momentum).* Then one viral member makes everyone look asleep, and
+  the shelf is a ranking of the same survivors. The point of "their own trailing average" is that the
+  comparison is per member.
+- *Treat a member with no history as momentum 0.* New members are exactly the ones this shelf exists for;
+  `+1` smoothing says a new member with two visitors is promising, which is the honest reading of two visitors
+  and no history.
+- *Render the shelf always, with an empty state.* An empty heading on a small site advertises a feature the
+  catalogue cannot fill. The template already hides empty shelves; the shelf simply is not pushed.
+- *Exempt the shelf from the cross-shelf rule so it always has members.* That would show a member twice on one
+  page — the exact thing D43 was written to stop, and the second appearance would be the same face under a
+  headline claiming it is undiscovered.
+
+**Consequences.** Suite: a 20-member ladder shows the shelf with momentum ahead of mass (mutating the sort to
+exposure produces `["small_silent", "small_flat", "small_growing"]` and fails); removing the percentile filter
+puts the famous members on it and fails; an all-flat pool renders no shelf. Live: the cut is real —
+`undiscovered  cut 110.0 of exposure (60th percentile), 1 of 2 member(s) below it` — and the shelf does not
+render, because the one member below the cut is already on `For you`. Named as the honest state of a
+two-member catalogue, not as a passing shelf.

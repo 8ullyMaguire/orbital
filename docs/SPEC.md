@@ -339,6 +339,34 @@ give the same slot, on any host, which is what makes the page reproducible from 
 The clock is a date, not a timestamp: `day_key(date)` is days since the epoch, so two hosts that disagree by
 minutes still agree on the rotation.
 
+### 2c-sexies. The "undiscovered" shelf (D46)
+
+The fourth home shelf is the only one that exists to show a member the *other three would not*: candidates are
+the members below the **sixtieth percentile of exposure** (`shelf::UNDISCOVERED_PERCENTILE`, a constant because
+it belongs to one surface), ordered by **momentum**:
+
+```
+momentum = (visitors_7d + 1) / (visitors_prev_21d / 3 + 1)
+```
+
+`+1` on both sides is the whole smoothing, and it is why the number is honest: a member with two visitors and
+no history scores 3.0, a member with a hundred a week for a year scores 1.0, and a member falling from three
+hundred to ten scores 0.4. Nobody's click count is rewritten to produce it — `visitors_prev` is a second
+measurement in the same stats fragment, over the three weeks *before* the last seven days.
+
+Three properties that are deliberate:
+
+* **Empty is an answer.** If no member is below the cut (an all-flat pool, a single member) the shelf is not
+  pushed and the template renders nothing. A padded "undiscovered" list would be the same faces under a new
+  heading.
+* **The cross-shelf rule still holds** (D43): a member the page already shows is not shown again here. On a
+  catalogue smaller than its own page that makes the shelf absent, which is correct — there is nothing
+  undiscovered when everything is already on the page.
+* **The cohort share is a page-level promise** (D43, amended here): each shelf takes a tail slot when one is
+  left, but only the first shelf can be held to the share exactly, because four shelves × 40 % needs more tail
+  members than a small catalogue has. The suite asserts the page-level share and the first shelf's exact
+  compliance, and says so in the assertion rather than pretending every shelf can meet it.
+
 ### 2c-quater. Exposure caps (D43)
 
 A page view has three fairness rules, all declared in `EXPOSURE_FILE`:
