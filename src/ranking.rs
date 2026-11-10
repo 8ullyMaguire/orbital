@@ -5,6 +5,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use crate::overlap::cosine;
+#[cfg(test)]
+use crate::overlap::tag_relevance;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
