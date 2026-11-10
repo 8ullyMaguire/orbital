@@ -851,3 +851,44 @@ damp" is an experiment (step 4's metric), not an instinct. The worst case of a m
 page, not a missing member — that is what the monotone guardrail buys. Ideas and their dispositions:
 `~/secondbrain/10-Projects/orbital-fame-headwind-2026-11-10.md` (20 ideas: 15 scheduled, 4 later, 1
 refused) and the Concord page carries all 20 with reasons.
+
+## D35 — The prior is folded from declared sources, and two of orbital's tables are not evidence
+
+**Context.** The ordering has an instance lean and, until this step, no mechanism behind it: no crate, no
+declaration, no report. `polaris-taste-source` is the estate's arithmetic (D31) and D30 already names the
+sources. What was undecided is where the evidence comes from — orbital has five tables that could each be
+called "a signal", and two of them would have been wrong.
+
+**Decision.** The declaration is loaded at **boot** from `TASTE_FILE` (JSON), or from the built-in
+declaration D30 fixes when the file is absent; the crate's own `validate()` decides, so an invalid rule stops
+the process naming the field and the source rather than being clamped into service. Evidence is
+`tag_endorsements` → `Kind::Like`, and nothing else.
+
+- `tags` is **not** evidence: the table has no `created_at`. A prior that cannot decay is a permanent claim
+  about a person who may have changed, and half-life decay is half of what the crate exists to do.
+- `source_hits` is **not** evidence: a click is not a statement. The crate's eight-word vocabulary omits it
+  deliberately, and mapping it to `Like` would have made "somebody scrolled past" indistinguishable from
+  "somebody endorsed".
+- `attuned` reports **absent** rather than admitting everybody at 0.0: orbital has no affinity engine yet, so
+  `Contributor::affinity` is `None` and the selector's evidence floor refuses on absence. When an affinity
+  engine exists, this selector starts working without a code change — that is the point of the floor being
+  data.
+- The report lives in `orbital doctor` and nowhere else (D27). Absence is a status with a reason, never a
+  folded zero.
+
+**Rejected alternatives.**
+
+- *Infer the prior from the operator's own tags and clicks.* Inference is how a policy becomes undiscoverable:
+  a declared source can be audited, an inferred one cannot, and the first thing a reader would recover by
+  differencing is the inference rule.
+- *Weight by trust level now.* D30 has it off; the ladder is empty on this instance, and declaring a source
+  that admits nobody teaches the operator to ignore the report.
+- *Fold at request time.* Ranking is on the hot path; the evidence set is small and changes hourly at most.
+  Folding on demand per page view would trade a boot-time cost for a per-click one.
+- *Keep the declaration in an env var.* A multi-source rule with kinds and floors is not a string, and the
+  refusal message has to name a field in a file the operator can open.
+
+**Consequences.** The declaration is a boot-time contract with a falsifiable refusal, and the report is one
+line per source so an empty profile always has an explanation. The profile is not wired into ordering yet:
+that waits for the eval (roadmap step 2, `polaris-eval`) and the per-surface policy (step 4), so no ordering
+changed in this step — the suite's 105 tests include the old ordering assertions unchanged.

@@ -246,6 +246,34 @@ Guardrails, in order of importance:
 4. **`raw` is always reachable.** Flipping the declaration to `raw` reproduces the undamped order
    byte-identically, which is what makes the damping falsifiable.
 
+## 2d. The instance's taste: declared sources and the fold
+
+The ordering has a lean — the instance's own taste — and it is *declared*, not inferred: a list of
+sources, each with a weight and a set of evidence words it may contribute. The arithmetic is
+`polaris-taste-source` (D31); orbital owns the declaration and the mapping from its own tables, nothing
+else.
+
+**Declared (D30):** `criticalnexus` 0.3, `steeltitan` 0.7 — named accounts, so a bootstrap cohort needs no
+roles; `attuned` with an evidence floor of 20 rows and a 0.5 threshold — close readers, admitted only when
+the measurement is thick enough to mean something; and `everyone` last at 0.05. Declaration order is
+semantic: the crate gives a contributor the **first** source that admits them, so a named account is never
+also read as "everyone". The trust ladder is declared nowhere — it is empty on this instance, and a source
+that admits nobody would only add a line of noise to the report.
+
+**What orbital counts as evidence**, and what it deliberately does not:
+
+| table | a statement? | timestamped? | used |
+|---|---|---|---|
+| `tag_endorsements` | yes — a person said this tag belongs here | yes | **`Like`** |
+| `tags` (a member's own tags) | yes | **no** | **no**: a row that cannot decay is a permanent claim about someone who may have changed. A migration to date them is the price of using them. |
+| `source_hits` | **no** — a click is not a statement | yes | **no**: the crate's vocabulary has no word for it, on purpose |
+
+**No evidence is an empty profile with a reason, never a row of zeros.** `orbital doctor` prints one line
+per declared source with the word `absent` when it admitted nobody or contributed nothing, followed by the
+crate's own explanation. The profile is folded at boot and read on demand; it is never exposed — there is no
+`/api/v1/taste`, no field, and no sentence (D27). `orbital doctor` is its only home, and `docs/` is the only
+place it is described.
+
 Context vertical: the vertical page being viewed, else the profile's primary.
 
 **Ring** — per vertical and global, ordered by taste-similarity to the hub owner
