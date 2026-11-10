@@ -211,3 +211,58 @@ async fn pruning_forgets_only_visitors_nobody_has_seen(pool: PgPool) {
         1
     );
 }
+
+/// The live database carried two hidden members from a smoke test, with five `example.com` links between them.
+/// A cleanup that removes "test users" must be exact: the fixtures go, and a real member whose handle merely
+/// *looks* odd stays. This is the test that makes the deletion safe to run on the live host.
+#[sqlx::test]
+async fn the_fixture_cleanup_takes_the_fixtures_and_nothing_else(pool: PgPool) {
+    for (handle, hidden) in [
+        ("testpilot1793294408", true),
+        ("smoketester", true),
+        ("criticalnexus", false),
+        ("steeltitan", false),
+    ] {
+        let id: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO users (handle, display_name, password_hash, hidden) VALUES ($1, $1, 'x', $2) RETURNING id",
+        )
+        .bind(handle)
+        .bind(hidden)
+        .fetch_one(&pool)
+        .await
+        .expect("a user");
+        if handle.starts_with("test") || handle.starts_with("smoke") {
+            sqlx::query("INSERT INTO links (user_id, url, label) VALUES ($1, 'https://example.com/end-to-end', 'E2E link')")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .expect("a fixture link");
+        } else {
+            sqlx::query("INSERT INTO links (user_id, url, label) VALUES ($1, 'https://example.com/end-to-end', 'E2E link')")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .expect("a real member's link, even at a placeholder host");
+        }
+    }
+
+    let found = orbital::store::fixtures(&pool).await.expect("the report");
+    assert_eq!(found.len(), 2, "two hidden fixture members: {found:?}");
+    assert_eq!(found.iter().map(|f| f.links).sum::<i64>(), 2);
+
+    let (users, links) = orbital::store::delete_fixtures(&pool).await.expect("the cleanup");
+    assert_eq!((users, links), (2, 2), "exactly the fixtures, and their links");
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(left, 2, "the two real members stay");
+    let orphaned: i64 = sqlx::query_scalar("SELECT count(*) FROM links WHERE user_id IS NULL")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(orphaned, 0, "no link survives its member");
+    // Running it twice is a no-op, because a cleanup that fails on a second run is a cleanup nobody schedules.
+    let (users, links) = orbital::store::delete_fixtures(&pool).await.expect("the second run");
+    assert_eq!((users, links), (0, 0));
+}
