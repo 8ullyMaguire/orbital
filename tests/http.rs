@@ -1820,7 +1820,9 @@ async fn no_surface_names_the_prior(pool: PgPool) {
         "/", "/about", "/@robi", "/v/dev", "/v/dev?tab=trending", "/v/dev?tab=new",
         "/search?q=rust", "/api/v1/members", "/api/v1/members/robi", "/api/v1/stats",
         "/api/v1/verticals", "/api/v1/search?q=rust", "/api/v1/ring/dev", "/feed.xml",
-        "/feed.json", "/sitemap.xml", "/robots.txt", "/prefs",
+        "/feed.json", "/sitemap.xml", "/robots.txt",
+        // `/prefs` is a POST-only write; the tuner it feeds is rendered inside `/v/{slug}`, which is
+        // already in this list. A surface that answers 405 has no body to read.
     ];
     for path in paths {
         let res = call(&app, get(path)).await;
