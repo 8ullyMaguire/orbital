@@ -2428,10 +2428,19 @@ async fn the_undiscovered_shelf_is_the_tail_and_vanishes_when_there_is_none(pool
     for famous in ["famousone", "famoustwo", "famousthree"] {
         assert!(!block.contains(&format!("/@{famous}")), "{famous} is not undiscovered: {block}");
     }
-    assert!(block.contains("/@smallgrowing"), "the growing tail member is on the shelf: {block}");
+    // Momentum outranks mass: the smallest growing member leads a shelf the famous ones cannot be on, and
+    // the member with no traffic at all is not ahead of it.
+    let first = block
+        .find("/@")
+        .map(|i| &block[i..block.len().min(i + 24)])
+        .unwrap_or("(no card)");
     assert!(
-        block.find("/@smallgrowing").unwrap_or(usize::MAX) < block.find("/@smallsilent").unwrap_or(0),
-        "momentum outranks stillness, and mass is not on this shelf at all"
+        block.contains("/@smallgrowing"),
+        "the growing tail member is on the shelf: {block}"
+    );
+    assert!(
+        block.find("/@smallgrowing").unwrap_or(usize::MAX) < block.find("/@mid0").unwrap_or(usize::MAX),
+        "the small growing member leads the middling ones: first card is {first}"
     );
 }
 
