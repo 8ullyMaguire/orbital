@@ -190,7 +190,11 @@ pub async fn collect(pool: &PgPool, seeds: &[String]) -> Result<(Vec<Case>, usiz
             Some(slug) => crate::store::vertical_members(pool, slug).await?,
             None => crate::store::all_members(pool, true).await?,
         };
-        let members: Vec<MemberStat> = pool_members.into_iter().filter(|m| !m.hidden).collect();
+        // The same visibility rule the pages use, so the eval judges the pool a reader was given.
+        let members: Vec<MemberStat> = pool_members
+            .into_iter()
+            .filter(crate::routes::public::visible)
+            .collect();
 
         // The lens the session carried. `viewer_hash` is the unsalted visitor id the preference table
         // is keyed by; the caveat that this is the visitor's *current* profile is in the rule text.
