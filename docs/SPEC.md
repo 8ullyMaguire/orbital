@@ -339,6 +339,42 @@ give the same slot, on any host, which is what makes the page reproducible from 
 The clock is a date, not a timestamp: `day_key(date)` is days since the epoch, so two hosts that disagree by
 minutes still agree on the rotation.
 
+### 2c-septies. The guardrail, and the one clause of its gate that is false (D47)
+
+Damping has one promise and one exemption.
+
+**The promise, as properties** (`tests/guardrail.rs`, 200 seeded pools of 2–40 members with counts spread over
+five orders of magnitude):
+
+| property | statement |
+|---|---|
+| bounded | every share is in `0.0..=1.0` |
+| leader untouched | the busiest member's share is `1.0` under both declarations |
+| monotone | a member with more clicks never scores below one with fewer |
+| compressing | for any pair, `share_i / share_j ≤ clicks_i / clicks_j` — a lead is never widened |
+| lead map | `lead_after(k) ≤ k` for every `k` |
+
+**The clause the roadmap wrote and the arithmetic that refutes it.** The gate says "for every member the damped
+score never exceeds the raw score". That is not true, and it cannot be: a member with one click of a leader's
+thousand has raw share `0.001` and damped share `0.3167` at `alpha 0.5` — three hundred times *higher*, because
+lifting the tail is what damping is for. The clause describes the opposite of the mechanism. `the_clause_as_
+written_is_false_and_the_counterexample_is_arithmetic` asserts the refutation, so the contradiction is in the
+suite rather than in a commit message, and the properties above are what the guardrail is actually held to.
+
+**The exemption.** `{"exempt": ["steeltitan"]}` in the attention declaration ranks those members exactly as
+`raw`: two normalisations (one per column), so an exemption cannot move any other member's score. The list is
+empty in production, the sentence `orbital doctor` prints names it back, and a misspelt key (`exmpt`) or a
+string where a list belongs is refused at boot with the field named.
+
+**The public sentence.** One sentence appears on `/` and nowhere else: *"Each person appears once on this page,
+and the busiest faces make room for the quieter ones."* It states the promise and no number, no vocabulary, and
+nothing about what ranks a page — `the_policy_sentence_is_on_the_home_page_exactly_once` checks both the count
+and a window of surrounding text for the machinery's words.
+
+**No per-member score is published.** Prose cannot be grepped for this (a member may write "long exposure
+photography" in a bio), so it is checked structurally: no member card carries `data-score`/`data-weight`/
+`data-attention`/`data-rank` or a decimal number, and no `/api/v1/*` response carries a score-like key.
+
 ### 2c-sexies. The "undiscovered" shelf (D46)
 
 The fourth home shelf is the only one that exists to show a member the *other three would not*: candidates are

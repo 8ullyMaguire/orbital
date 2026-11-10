@@ -1324,3 +1324,57 @@ puts the famous members on it and fails; an all-flat pool renders no shelf. Live
 `undiscovered  cut 110.0 of exposure (60th percentile), 1 of 2 member(s) below it` — and the shelf does not
 render, because the one member below the cut is already on `For you`. Named as the honest state of a
 two-member catalogue, not as a passing shelf.
+
+## D47 — The guardrail: five properties, one sentence, and a gate clause that was arithmetically false
+
+**Context.** The fame headwind (D34–D45) is a set of rules. A set of rules with no stated invariant is a set of
+knobs, and the roadmap's own gate for this step claimed something that cannot hold.
+
+**Decision.** Hold damping to five properties, state one sentence in public, and let a declaration exempt a
+member from damping entirely.
+
+- **Properties** (200 seeded pools): bounded, leader untouched, monotone, compressing (`share_i/share_j ≤
+  clicks_i/clicks_j`), and `lead_after(k) ≤ k`.
+- **One sentence on `/`**, describing the promise and not the machinery. It is the only public statement of the
+  policy, and it names no prior, no weight and no member.
+- **`exempt` list** in `ATTENTION_FILE`, empty in production, matched case-insensitively by whole handle, scored
+  on the raw column against the raw maximum so an exemption cannot move anyone else.
+- **Declarations refuse by name**: `deny_unknown_fields` plus the serde message carried into the error, so
+  `exmpt` and `"exempt": "steeltitan"` both stop the boot and say which field.
+
+**The clause that is false, named rather than met.** The roadmap's gate says "for every member the damped score
+never exceeds the raw score". It is not satisfiable and it is not what damping does: a one-click member of a
+thousand rises from `0.001` to `0.3167` at `alpha 0.5`, deliberately. I did not lower the gate to something
+achievable and call it passed: I asserted the refutation as a test
+(`the_clause_as_written_is_false_and_the_counterexample_is_arithmetic`), asserted the five properties that the
+guardrail is actually for, and left the false wording visible in `docs/ROADMAP.md` §3 so the owner can amend it.
+The step is marked done on the properties, the sentence, the exemption and the structural no-score check — not on
+the clause that cannot hold.
+
+**Rejected alternatives.**
+
+- *Make the clause true by dividing the damped share by the raw share's maximum.* That normalises away the very
+  lift the tail needs: every member back to raw, damping decorative.
+- *Cap the damped score at the raw score pointwise (`min(raw, damped)`).* Then the tail keeps its raw share and
+  only the leader is damped — the opposite of the intent, and it would make the leader's share fall below 1.0
+  while the tail stays flat.
+- *Skip the sentence to avoid explaining anything.* Then the fairness rules are a behaviour nobody can read,
+  which is exactly the shape the operator-authors-nothing rule exists to prevent: an unexplained hand.
+- *Put the sentence in `/about`.* The page whose order it explains is `/`. A promise filed two clicks away is
+  not a promise made.
+- *Exempt by id or by trust level.* Ids change when a member re-registers, and a trust-level exemption would tie
+  a ranking rule to an account system this site does not require (D8). Handles are what a reader sees.
+
+**Consequences.** **181 tests** (75 unit, 64 HTTP, 7 store, 5 taste, 5 ceiling, 4 eval, 4 concentration, 4 dial,
+4 silence, 4 attention, 3 guardrail, 2 fame). Live: `PASS attention  damped: a lead of 10 times becomes 1.86
+times (alpha 0.50)`; with a declaration, `…; 1 exempt: steeltitan`; with `{"exmpt":[…]}`,
+`the attention declaration is not JSON in the declared shape: unknown field `exmpt`, expected one of `exempt`,
+`attention`, `alpha``. The sentence appears once on `/`; no card carries a score attribute or a decimal.
+
+**A bug the gate's own byte test found.** `the_same_vertical_twice_is_the_same_bytes` failed once in three runs,
+on the tuner's `in dev weight` line: `value="1"` in one render and `value="0"` in the next. The passive signal is
+`0.05` per page view, decayed on read, then multiplied by ten and rounded — which puts it within a hair of the
+`0.5` rounding boundary, so microseconds of elapsed time decided the step. A weight below three quarters of a
+step is now not a step (`the removes-flicker` tests: `row_weight(0.05) == 0`, and `0.3` still shows as `3`
+despite `0.3 * 10` being `2.9999999999999996`). It was also a lie to the visitor: one page read is not a
+preference they expressed.
