@@ -573,7 +573,7 @@ pub async fn impressions(
     date: Option<String>,
     days: Option<i64>,
 ) -> Result<()> {
-    let hours = days.unwrap_or(1).max(1) * 24;
+    let hours: i64 = days.unwrap_or(1).max(1) * 24;
     let day = match date {
         Some(raw) => chrono::NaiveDate::parse_from_str(&raw, "%Y-%m-%d")
             .with_context(|| format!("`{raw}` is not a date (YYYY-MM-DD)"))?,
@@ -581,7 +581,7 @@ pub async fn impressions(
     };
 
     for surface in ["home"] {
-        let window = store::impressions_window(pool, surface, hours).await?;
+        let window = store::impressions_window(pool, surface, hours as i32).await?;
         let total: i64 = window.values().sum();
         println!(
             "{surface}: {total} impression(s) in the last {hours}h, {} member(s)",
