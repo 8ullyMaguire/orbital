@@ -152,7 +152,10 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         );
     }
 
-    // 9. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
+    // 9. What a click is worth (D41), stated as the ratio it promises rather than the constant it uses.
+    say(true, "attention", cfg.attention.sentence());
+
+    // 10. How concentrated each surface's attention is (D34, SPEC §2c). The number the fame headwind is
     //    judged by, printed here and nowhere else: a public concentration figure says whose work the site
     //    favours, which is not a sentence a page may carry.
     match crate::concentration::latest(pool).await {
