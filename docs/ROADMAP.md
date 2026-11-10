@@ -154,7 +154,7 @@ Ideas:
 The guardrail every step here shares: **damped, never hidden** — attenuation may cost position and may
 never cost reachability, and no damped score may exceed its raw score.
 
-### The open list — 14 steps, in the owner's order
+### The open list — 13 steps, in the owner's order
 
 **Rewritten 2026-11-10, the freeze.** The per-phase headings are gone from this list, because the order is now the
 owner's freeze order and not the phase order: the housekeeping, then the contributor and the seed, then the claim,
@@ -162,69 +162,66 @@ then the work that needs no entity at all. The prose above still says *how* the 
 product steps are **Parked** below and are not counted in this number. The loop's rule is the first step that is
 neither Done nor Parked.
 
-1. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
-    *Gate:* `links` drops by 5 (24 → 19) and `/` and `/v/dev` still render 200 with content.
-
-2. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an `import_runs`
+1. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an `import_runs`
     receipt.
     *Gate:* run twice — the second inserts 0 and updates 0; a run killed mid-way resumes and the receipt
     says so.
 
-3. **[OPS] First sources**: 5,200 adult rows (facts only) plus a non-adult seed so the catalogue is not
+2. **[OPS] First sources**: 5,200 adult rows (facts only) plus a non-adult seed so the catalogue is not
     99% one category; health and metadata backfill with the existing checker, 500/day made proportional.
     *Gate:* every imported row has `last_checked`/`last_status`; the dead share is quoted per source; one
     full pass fits in a stated number of days.
 
-4. **[BE] Entity claims** through `polaris-ledger`: page proof, Bluesky token or DNS TXT, with
+3. **[BE] Entity claims** through `polaris-ledger`: page proof, Bluesky token or DNS TXT, with
     merge-on-claim.
     *Gate:* a claim with no proof is refused; a claim whose proof disappears within 24h is reversed and the
     reversal is a ledger entry.
 
-5. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row with
+4. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row with
     no password, no email, no handle; `contribute = open` is what authorises a write.
     *Gate:* two writes from one cookie jar land on one row and a second jar on a second; a request with no
     cookie is refused `400 contributor_required`, not 401.
 
-6. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's own
+5. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's own
     filters and its `/api/v1/search` shape.
     *Gate:* a committed golden set records `nDCG@10` + `recall@50` against the local search it replaces; a
     zero-result query returns the labelled cross-site fallback; `/api/v1/search` keeps its contract.
 
-7. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and weights, per-surface gravity,
+6. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and weights, per-surface gravity,
     capability gates, which shelves run, limits, importer pacing. No policy in code.
     *Gate:* two config files over one dataset produce two orderings and two shelf sets; `orbital config
     check` exits non-zero on an unknown key or invalid weight.
 
-8. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
+7. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
     `polaris-authz`; all four declared `open` today.
     *Gate:* a capability declared `open` accepts an anonymous write; flipped to `login` the same request
     answers 401 and an authenticated one 200, with no code change.
 
-9. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
+8. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
     `config check`, with one exit-code table (0 ok, 2 bad input, 3 refused, 4 not found, 5 unavailable).
     *Gate:* each subcommand runs against the live host; the exit table is a test; `--help` is honest about
     which subcommands need a token.
 
-10. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
+9. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
     *Gate:* a bundle restores into a scratch database with matching per-table row counts; a corrupted byte
     is caught by the checksum; a webhook delivery is logged with its response code.
 
-11. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
+10. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
     `http_signature`) and publish one actor + WebFinger for the instance.
     *Gate:* `curl -H 'Accept: application/activity+json'` on the actor returns a valid document; a real
     Mastodon instance resolves the handle.
 
-12. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
+11. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
     followers, with the `Note`+schema.org fallback.
     *Gate:* a review appears in a Mastodon timeline with its rating visible, and the `ap_id` is the same
     object on re-delivery.
 
-13. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
+12. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
     entity, unseen domain quarantined.
     *Gate:* a review from a second local instance lands on the right entity page and stays out of search
     until approved.
 
-14. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
+13. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
     federation, staffed by the operator only as an exception path.
     *Gate:* an unseen domain is quarantined by default; the monthly review page renders with real counts and
     names what it cannot decide.
