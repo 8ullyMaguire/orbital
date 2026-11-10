@@ -167,7 +167,7 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
             true,
             "fame",
             format!(
-                "Top reads a 90-day half-life; the monument keeps the lifetime total — leader @{} {:.1} recent / {} all time",
+                "Top reads a 90-day half-life; the monument keeps the lifetime total — leader @{} {:.1} weighted over 90 days / {} clicks all time",
                 lead.handle,
                 lead.recent,
                 crate::render::fmt_exact(lead.clicks)
