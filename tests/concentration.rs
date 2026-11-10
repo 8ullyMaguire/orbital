@@ -9,18 +9,19 @@ use orbital::concentration::{self, TOP_K};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// One member holding 900 impressions while nine hold 10 each: real numbers, arithmetic with an answer
-/// anyone can check by hand — 900/990 = 0.909 of the impressions, and
-/// 2·9·890 / (2·10²·99) = 0.809 of the coefficient.
+/// The shape the fame headwind exists for: one member with 900 impressions and ninety-nine with one each.
+/// Both numbers are hand-checkable — top-10 share (900 + 9·1)/999 = 0.9099, and
+/// 2·99·899 / (2·100²·9.99) = 0.8909.
 #[test]
 fn one_member_with_nine_tenths_of_impressions_reads_as_concentrated() {
     let mut v: Vec<f64> = vec![900.0];
-    v.extend(std::iter::repeat(10.0).take(9));
+    v.extend(std::iter::repeat(1.0).take(99));
 
     let g = concentration::gini(&v);
     let t = concentration::top_share(&v, TOP_K);
-    assert!((g - 0.8091).abs() < 0.001, "the coefficient has a hand-computable value, got {g}");
-    assert!((t - 0.9091).abs() < 0.001, "top-10 share should be 900/990, got {t}");
+    assert!((g - 0.8909).abs() < 0.001, "the coefficient has a hand-computable value, got {g}");
+    assert!(g > 0.8, "one member holding nine tenths of the impressions is concentrated, got {g}");
+    assert!((t - 0.9099).abs() < 0.001, "top-10 share should be 909/999, got {t}");
 }
 
 /// A pool where everybody was seen equally often has no concentration, whatever its size.
