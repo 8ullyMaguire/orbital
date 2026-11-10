@@ -198,64 +198,6 @@ pub fn build(
         },
     });
 
-    // `Undiscovered` (D46): only the members below the sixtieth percentile of exposure — the part of the
-    // catalogue a page is least likely to show — ranked by momentum, which is this week against their own
-    // trailing three-week average. A shelf of the already-visible would be a fourth copy of the first three;
-    // a shelf of the invisible, ordered by growth, is the only one that can surprise a regular reader.
-    //
-    // Empty is a legitimate answer: when every member sits at or above the cut (an all-flat pool, or one
-    // member on its own) the shelf is not pushed at all, and the template renders nothing rather than a
-    // padded list. The percentile is a constant here on purpose: it is one surface's threshold, and a second
-    // surface wanting a different number is the moment it becomes a declaration.
-    let cut = crate::exposure::percentile(&exposure, UNDISCOVERED_PERCENTILE);
-    let mut tail: Vec<usize> = (0..members.len()).filter(|i| exposure[*i] < cut).collect();
-    tail.sort_by(|a, b| {
-        ranking::momentum(&members[*b])
-            .partial_cmp(&ranking::momentum(&members[*a]))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                exposure[*a]
-                    .partial_cmp(&exposure[*b])
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .then_with(|| members[*a].handle.cmp(&members[*b].handle))
-    });
-    if !tail.is_empty() {
-        let chosen = crate::exposure::enforce(&tail, decl.per_shelf, &mut used, &exposure, caps);
-        let chosen = crate::ceiling::rotate(
-            &chosen,
-            &tail,
-            &member_ids(members),
-            crate::ceiling::day_key(crate::ceiling::day_of(now)),
-            ceiling,
-        );
-        if !chosen.is_empty() {
-            let items = chosen
-                .into_iter()
-                .map(|index| {
-                    let m = &members[index];
-                    let base = (m.visitors_prev as f64 / 3.0).round() as i64;
-                    let why = if m.visitors_7d == 0 {
-                        "quiet this week".to_string()
-                    } else if base == 0 {
-                        format!("{} visitors this week, none the three before", m.visitors_7d)
-                    } else if m.visitors_7d > base {
-                        format!("{} visitors this week, up from {}", m.visitors_7d, base)
-                    } else {
-                        format!("{} visitors this week, level with {}", m.visitors_7d, base)
-                    };
-                    Ranked { index, why }
-                })
-                .collect();
-            shelves.push(Shelf {
-                key: "undiscovered",
-                title: "Undiscovered",
-                subtitle: "Below the sixtieth percentile of exposure, ranked by how fast they are growing.",
-                items,
-            });
-        }
-    }
-
     // `Hidden gems` (D50): ranked *against* clicks — the members the click count has overlooked, ordered by how
     // well they convert the visitors they do get. A gem is not "small" (that is `undiscovered`) and not "old" (that
     // is the monument): it is a profile people click through when they land on it, that the leaderboards rarely
@@ -272,7 +214,7 @@ pub fn build(
         let median_clicks = click_counts[click_counts.len() / 2];
         let mut gems: Vec<usize> = eligible
             .into_iter()
-            .filter(|i| members[*i].clicks <= median_clicks)
+            .filter(|i| members[*i].clicks < median_clicks)
             .collect();
         gems.sort_by(|a, b| {
             let ca = members[*a].clicks as f64 / members[*a].visitors.max(1) as f64;
@@ -329,6 +271,64 @@ pub fn build(
                     items,
                 });
             }
+        }
+    }
+
+    // `Undiscovered` (D46): only the members below the sixtieth percentile of exposure — the part of the
+    // catalogue a page is least likely to show — ranked by momentum, which is this week against their own
+    // trailing three-week average. A shelf of the already-visible would be a fourth copy of the first three;
+    // a shelf of the invisible, ordered by growth, is the only one that can surprise a regular reader.
+    //
+    // Empty is a legitimate answer: when every member sits at or above the cut (an all-flat pool, or one
+    // member on its own) the shelf is not pushed at all, and the template renders nothing rather than a
+    // padded list. The percentile is a constant here on purpose: it is one surface's threshold, and a second
+    // surface wanting a different number is the moment it becomes a declaration.
+    let cut = crate::exposure::percentile(&exposure, UNDISCOVERED_PERCENTILE);
+    let mut tail: Vec<usize> = (0..members.len()).filter(|i| exposure[*i] < cut).collect();
+    tail.sort_by(|a, b| {
+        ranking::momentum(&members[*b])
+            .partial_cmp(&ranking::momentum(&members[*a]))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                exposure[*a]
+                    .partial_cmp(&exposure[*b])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| members[*a].handle.cmp(&members[*b].handle))
+    });
+    if !tail.is_empty() {
+        let chosen = crate::exposure::enforce(&tail, decl.per_shelf, &mut used, &exposure, caps);
+        let chosen = crate::ceiling::rotate(
+            &chosen,
+            &tail,
+            &member_ids(members),
+            crate::ceiling::day_key(crate::ceiling::day_of(now)),
+            ceiling,
+        );
+        if !chosen.is_empty() {
+            let items = chosen
+                .into_iter()
+                .map(|index| {
+                    let m = &members[index];
+                    let base = (m.visitors_prev as f64 / 3.0).round() as i64;
+                    let why = if m.visitors_7d == 0 {
+                        "quiet this week".to_string()
+                    } else if base == 0 {
+                        format!("{} visitors this week, none the three before", m.visitors_7d)
+                    } else if m.visitors_7d > base {
+                        format!("{} visitors this week, up from {}", m.visitors_7d, base)
+                    } else {
+                        format!("{} visitors this week, level with {}", m.visitors_7d, base)
+                    };
+                    Ranked { index, why }
+                })
+                .collect();
+            shelves.push(Shelf {
+                key: "undiscovered",
+                title: "Undiscovered",
+                subtitle: "Below the sixtieth percentile of exposure, ranked by how fast they are growing.",
+                items,
+            });
         }
     }
 
