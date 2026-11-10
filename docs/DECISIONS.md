@@ -1161,3 +1161,41 @@ place, which is both unfair and dishonest about what happened.
 so the decay factor is 0.91 and no gap crosses — and that is reported as the result, not dressed up. The
 gate's sentence is proved on a fixture with a hand-checkable answer (10,000 at 600 days < 200 at 3 days) and
 by a mutation that removes the half-life, which kills both gate tests.
+
+## D43 — Exposure is capped per member and shared out to the tail, as a declaration
+
+**Context.** Attention weighting (D41) and the half-life (D42) make the *number* fair. They do not stop one
+member from holding every slot on every shelf — and on 2026-11-10 the live home page did exactly that: two
+members, eight cards, each member four times. A page that is eight copies of two people is not a catalogue,
+it is a portrait of the loudest thing the site has.
+
+**Decision.** Three declared numbers in `EXPOSURE_FILE`: `slots_per_member` (default 1), `cohort_share`
+(default 0.40), `below_percentile` (default 0.50). Applied as a composition over the order a ranker produced:
+count per member, skip members already on the page view, then fill the declared share of slots from members
+below the exposure percentile — replacing from the end of the shelf. `0`/`0.0` is the escape hatch and
+restores the previous page byte-for-byte.
+
+- **The page, not the shelf, is the unit of the cross-shelf rule**: every rail on `/` shares one `used` set,
+  including the picks rail. A rule three sections obey and a fourth ignores is not a rule.
+- **`slots_per_member: 0` turns off the cross-shelf rule too.** Anything else would make the escape hatch
+  partial, and a partial escape hatch cannot be used to prove what changed.
+- Exposure is the existing `recent` column. No new instrument, no new table, no impression log.
+
+**Rejected alternatives.**
+
+- *A hard filter on the pool* (`WHERE clicks > x`). That hides people rather than sharing slots, and it makes
+  a member disappear from the catalogue entirely — D34 and D39 both refuse hiding.
+- *Quota by rank position* (`everyone after #6 gets a slot`). Position is a property of one shelf's order; a
+  member at #7 on Rising may be #2 on New, so the rule would be a different rule on every shelf and nobody
+  could state it in one sentence.
+- *Randomising the tail*. Determinism is worth more than novelty here: the same page must be reproducible for
+  a postmortem, and the cohort rule is about *who*, not *which of them*.
+- *Per-shelf caps only, no page rule.* This was the first shape, and the live page showed why it fails: three
+  shelves each correctly capped to one slot per member still showed each member three times.
+- *A separate "quota" surface for the tail.* A ghetto tab is the thing D34's rejected list already names: the
+  tail belongs inside the shelves, not beside them.
+
+**Consequences.** On the live two-member site the home page is now one shelf with two cards — reported as the
+result, not smoothed over: the caps did not create the shortage, they stopped the page from hiding it. With
+the declaration off, `/` is `cmp`-identical to the pre-step capture. Live: each member appears exactly once
+where it appeared four times before.
