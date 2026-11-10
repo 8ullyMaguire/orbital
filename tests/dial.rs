@@ -40,3 +40,50 @@ async fn a_stored_dial_narrows_the_ceiling_and_is_clamped_after_the_operator_low
         "no choice means the surface's own number"
     );
 }
+
+/// A declared weight is applied against the share the ranker already uses, so declaring the number the
+/// code already applies changes no ordering — and declaring a smaller one scales exactly.
+#[test]
+fn a_declared_weight_scales_the_factor_from_a_default_of_one() {
+    let built_in = Config::default();
+    assert!(
+        (built_in.factor(Surface::Home, None) - 1.0).abs() < 1e-12,
+        "the defaults are a multiplication by one, byte for byte"
+    );
+
+    let quarter = Config::from_json(r#"{"surfaces":[{"name":"vertical","strength":0.40,"weight":0.10}]}"#)
+        .expect("a valid declaration");
+    assert!((quarter.factor(Surface::Vertical, None) - 0.25).abs() < 1e-12);
+    assert!(
+        (quarter.factor_ordered(Surface::Vertical, None) - 1.0).abs() < 1e-12,
+        "a relevance weight must not move the velocity order"
+    );
+
+    let silent = Config::from_json(r#"{"surfaces":[{"name":"vertical","strength":0.40,"weight":0.0}]}"#)
+        .expect("zero is a legal weight, not a typo");
+    assert_eq!(silent.factor(Surface::Vertical, None), 0.0, "weight 0 removes the lens term");
+}
+
+/// The declaration is per surface, and a surface that was not named keeps its own number.
+#[test]
+fn a_surface_reads_only_its_own_line_of_the_file() {
+    let cfg = Config::from_json(r#"{"surfaces":[{"name":"vertical","strength":0.40,"weight":0.10}]}"#)
+        .expect("a valid declaration");
+    for other in [Surface::Home, Surface::Entity, Surface::Ring] {
+        assert!(
+            (cfg.factor(other, None) - 1.0).abs() < 1e-12,
+            "{} must not read the vertical's line",
+            other.name()
+        );
+    }
+}
+
+/// A weight is a share: 1.5 is a typo, and clamping it would hide the typo forever.
+#[test]
+fn a_weight_outside_zero_and_one_is_refused_by_name() {
+    let err = Config::from_json(r#"{"surfaces":[{"name":"vertical","strength":0.40,"weight":1.5}]}"#)
+        .expect_err("1.5 is not a share");
+    let text = format!("{err:#}");
+    assert!(text.contains("weight"), "the refusal names the field: {text}");
+    assert!(text.contains("vertical"), "and the surface: {text}");
+}
