@@ -17,6 +17,7 @@ pub mod render;
 pub mod routes;
 pub mod seed;
 pub mod shelf;
+pub mod taste;
 pub mod store;
 pub mod text;
 
