@@ -25,7 +25,9 @@ BEGIN
 
     -- An identifier key (`isbn:`, `imdb:`, `tmdb:`, `musicbrainz:`, `atproto:`) is not a URL: only the scheme word
     -- is lowercased, because the value's own canonical form belongs to the identifier's standard, not to this site.
-    IF work !~* '^[a-z][a-z0-9+.-]*://' AND work ~ '^[A-Za-z][A-Za-z0-9]*:(?![0-9])' THEN
+    -- No lookahead here: PostgreSQL's ARE engine is not PCRE, and `(?!…)` silently failed to match rather than
+    -- refusing the pattern — the tests caught it as `raw:isbn:…`.
+    IF work !~ '://' AND work ~ '^[A-Za-z][A-Za-z0-9+.-]*:' THEN
         scheme := lower(split_part(work, ':', 1));
         RETURN scheme || ':' || substr(work, length(split_part(work, ':', 1)) + 2);
     END IF;
