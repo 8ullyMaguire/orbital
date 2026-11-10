@@ -48,6 +48,9 @@ enum Cmd {
         /// Emit this many seeds from the newest sessions that clicked, instead of replaying the file.
         #[arg(long)]
         emit: Option<i64>,
+        /// Which golden set to replay. Defaults to the committed one.
+        #[arg(long, default_value = "eval/golden.json")]
+        file: std::path::PathBuf,
     },
     /// Record today's rank for every member in every vertical.
     Snapshot,
@@ -154,22 +157,22 @@ async fn main() -> anyhow::Result<()> {
                 BotCmd::Maintain => bot::maintenance(&state.pool).await?,
             }
         }
-        Cmd::Eval { emit } => {
+        Cmd::Eval { emit, file } => {
             let pool = db::connect(&cfg).await?;
             match emit {
                 Some(limit) => {
                     let golden = orbital::eval::emit_seeds(&pool, limit).await?;
-                    let path = std::path::Path::new("eval/golden.json");
-                    std::fs::create_dir_all("eval")?;
-                    std::fs::write(path, golden.to_json())?;
-                    println!("wrote {} seeds to {}", golden.seeds.len(), path.display());
+                    if let Some(parent) = file.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(&file, golden.to_json())?;
+                    println!("wrote {} seeds to {}", golden.seeds.len(), file.display());
                 }
                 None => {
-                    let path = std::path::Path::new("eval/golden.json");
-                    let raw = std::fs::read_to_string(path).map_err(|e| {
+                    let raw = std::fs::read_to_string(&file).map_err(|e| {
                         anyhow::anyhow!(
                             "{}: {e}. Run `orbital eval --emit 200` against the live rows first.",
-                            path.display()
+                            file.display()
                         )
                     })?;
                     let golden = orbital::eval::Golden::from_json(&raw)?;
