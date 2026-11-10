@@ -1063,8 +1063,8 @@ pub async fn standing(
             .filter(|m| if v.nsfw { m.nsfw_enabled } else { m.verticals.first().map(|p| p != "nsfw").unwrap_or(true) })
             .collect();
         let total = members.len() as i64;
-        let top = crate::ranking::rank_top(members.clone(), &[]);
-        let trending = crate::ranking::rank_trending(members.clone(), now, &[]);
+        let top = crate::ranking::rank_top(members.clone(), &[], 1.0);
+        let trending = crate::ranking::rank_trending(members.clone(), now, &[], 1.0);
         let me = members.iter().find(|m| m.id == user_id);
         out.push(crate::models::Standing {
             label: v.label.clone(),

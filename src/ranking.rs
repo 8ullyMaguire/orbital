@@ -633,13 +633,14 @@ mod tests {
         let all = vec![start.clone(), podcast.clone(), chiptune.clone()];
 
         // No weights: no opinion, and the caller keeps its ring order.
-        assert!(ring_next(&all, start.id, &[], &Default::default()).is_none());
+        assert!(ring_next(&all, start.id, &[], &Default::default(), 1.0).is_none());
 
         let next = ring_next(
             &all,
             start.id,
             &[("chiptune".to_string(), 1.0)],
             &Default::default(),
+            1.0,
         )
         .expect("a personalised step");
         assert_eq!(next.handle, "chiptune-person");

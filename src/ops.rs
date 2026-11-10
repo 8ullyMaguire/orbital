@@ -189,7 +189,7 @@ pub async fn snapshot(pool: &PgPool) -> Result<usize> {
     let mut written = 0usize;
     for (slug,) in &verticals {
         let members = store::vertical_members(pool, slug).await?;
-        let ranked: Vec<_> = crate::ranking::rank_top(members, &[])
+        let ranked: Vec<_> = crate::ranking::rank_top(members, &[], 1.0)
             .into_iter()
             .take(100)
             .collect();
