@@ -1698,8 +1698,20 @@ async fn the_dial_is_stored_inside_the_ceiling_and_refused_above_it(pool: PgPool
 #[sqlx::test]
 async fn the_concentration_numbers_are_not_served(pool: PgPool) {
     let app = app(pool.clone()).await;
-    for path in ["/api/v1/concentration", "/api/v1/stats", "/stats"] {
-        let res = app.clone().oneshot(get(path)).await.expect("router responded");
-        assert_eq!(res.status(), StatusCode::NOT_FOUND, "{path} must not exist");
+    let res = call(&app, get("/api/v1/concentration")).await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND, "there is no concentration route");
+
+    // And the surface that does exist does not grow the number: a public Gini is a sentence about whose
+    // work the site favours, which no response may carry.
+    let stats = call(&app, get("/api/v1/stats")).await;
+    assert_eq!(stats.status, StatusCode::OK, "the stats route is unchanged");
+    let body = stats.body.to_lowercase();
+    for word in ["gini", "concentration", "top10", "top_10"] {
+        assert!(!body.contains(word), "/api/v1/stats must not carry {word}");
+    }
+    let home = call(&app, get("/")).await;
+    let page = home.body.to_lowercase();
+    for word in ["gini", "concentration"] {
+        assert!(!page.contains(word), "the home page must not carry {word}");
     }
 }
