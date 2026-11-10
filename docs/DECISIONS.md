@@ -1238,3 +1238,46 @@ holds two rows (dev and nsfw); the pages are byte-identical with and without the
 by mutating the handler to give curated members a score bonus (the page order changes, the test fails). Live:
 two curation rows exist in the database, five public surfaces carry no hand-word, and `grep -i curated
 templates/` is empty.
+
+## D45 — A ceiling on exposures, and a tail that rotates from the date alone
+
+**Context.** D41–D44 fix what a click is worth, how fame decays, how many slots one member may hold, and who
+may author a list. None of them looks at the other side of the ledger: how many *times* a member was put in
+front of someone. A page that shows the same face every hour is a loop the score-side rules cannot see, and
+the last slots of every shelf were as fixed as the first.
+
+**Decision.** Record impressions and spend two rules on them.
+
+- **Record**: `impressions(surface, user_id, bucket, count)`, one increment per member per hour per render,
+  written *after* the page is chosen. No visitor identity, no per-request row: the table is bounded by
+  members × hours × surfaces.
+- **Ceiling**: a member holding more than `share` (0.50) of a surface's 24-hour impressions is left out of
+  that surface, once the surface has `min_impressions` (8) to make a share meaningful. Applied to the pool
+  before composition, skipped if it would empty the page.
+- **Rotation**: the last `tail_slots` (2) slots are refilled daily by `hash64(day, member)` (FNV-1a,
+  hand-written), keeping the ranker's top in place.
+- Both declared in `CEILING_FILE`; `orbital impressions` prints the window and the tail for a date and the
+  day after, so the rule is checkable from a shell.
+
+**Rejected alternatives.**
+
+- *Infer exposure from clicks.* Clicks are the rare event; a card can be shown a thousand times and clicked
+  twice. Building a ceiling on clicks measures the outcome instead of the exposure, which is the thing being
+  capped.
+- *Row per impression.* Unbounded, and it would let the table answer "who saw this" — the point of counting
+  per hour per member is that it cannot.
+- *A rolling window to the second.* Two hosts minutes apart would then disagree about the tail, and the page
+  would change under a reader mid-request. The day is the unit; `day_key` is days since the epoch.
+- *`std::collections::hash_map::DefaultHasher`.* Its seed is not guaranteed stable across releases, so the
+  rotation would change when the compiler changed — the opposite of reproducible from the date alone.
+- *Randomising the tail per request.* Unreproducible, uncacheable, and impossible to test: the gate is a
+  comparison of two days, which needs a pure function of (date, member).
+- *Capping by removing slots instead of narrowing the pool.* That would shorten the page and make a big
+  catalogue look small; narrowing the pool keeps the shelf full with the members who have not had their turn.
+
+**Consequences.** The live site records real impressions (home 6 → 8 after two fetches, `v:dev` 2 from the
+silence gate) and nobody is over the ceiling yet because two members at 50 % sit exactly at it — named as
+"not exercised on live", not claimed as passing. The rotation is: `tail for 2026-11-10:
+@criticalnexus @steeltitan` and `tail for 2026-11-11: @steeltitan @criticalnexus`, identical across two runs.
+Two mutations prove the gates: disabling the pool filter shows the capped member again, and a hash that
+ignores the day returns the same tail for both days.

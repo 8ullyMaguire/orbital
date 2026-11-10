@@ -316,6 +316,29 @@ candidate, so a positive verdict bounds how much *worse* the candidate is than r
 somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
 block so it travels with the numbers.
 
+### 2c-quinquies. The impression ceiling and the daily rotation (D45)
+
+Exposure is measured, not inferred: every render records one impression per member per hour
+(`impressions(surface, user_id, bucket, count)`), with no visitor identity in the row. Two rules read it.
+
+| field | default | what it does |
+|---|---|---|
+| `share` | `0.50` | a member may hold at most this share of a surface's impressions in the last 24 h |
+| `min_impressions` | `8` | below this many impressions the share is not applied — a two-member page has no ratio worth enforcing |
+| `tail_slots` | `2` | how many trailing slots of a shelf are refilled daily |
+
+**The ceiling** narrows the *pool* before composition, so no ranker has to know it exists, and it is skipped
+if applying it would empty the page: the rule is a way of sharing a surface, not of blanking it. Reachability
+is never lost — a capped member is still on its profile, its vertical's other tabs, and the monument (D42).
+
+**The rotation** keeps the top of a shelf and refills the last `tail_slots` from the same candidate order,
+sorted by `hash64(day, member)` — FNV-1a over the day and the member's bytes, written out because
+`DefaultHasher`'s seed is not guaranteed stable across releases. The same date and the same member always
+give the same slot, on any host, which is what makes the page reproducible from the date alone.
+
+The clock is a date, not a timestamp: `day_key(date)` is days since the epoch, so two hosts that disagree by
+minutes still agree on the rotation.
+
 ### 2c-quater. Exposure caps (D43)
 
 A page view has three fairness rules, all declared in `EXPOSURE_FILE`:
