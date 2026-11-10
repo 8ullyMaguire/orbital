@@ -468,6 +468,7 @@ echo -n "adult profile:     "; curl -s -o /dev/null -w '%{http_code}\n' "http://
 # means the vhost does not include the estate snippet; a route that 404s means the document drifted.
 echo "capabilities:"
 bash $APP/scripts/check-capabilities.sh "http://127.0.0.1:$PUBLIC_PORT" orbital.polarisocial.xyz
+bash $APP/scripts/check-silence.sh "https://orbital.polarisocial.xyz"
 REMOTE
 
 say "done"

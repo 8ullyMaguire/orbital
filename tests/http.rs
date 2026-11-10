@@ -1838,16 +1838,9 @@ async fn no_surface_names_the_prior(pool: PgPool) {
         );
     }
 
-    // The one exemption, and it is written down: the estate's capabilities document is generated from a
-    // spec every site in the family shares, and its `taste` field is the family's word for a capability
-    // declared `off`. It says the site does not do this; it does not say what the site does instead.
-    let caps = call(&app, get("/api/v1/capabilities")).await;
-    assert_eq!(caps.status, StatusCode::OK, "{}", caps.body);
-    assert_eq!(
-        leaks(&caps.body, &extra),
-        vec!["taste".to_string()],
-        "capabilities may say `taste: off` and nothing else about it"
-    );
+    // `/api/v1/capabilities` is not in this router: nginx serves it from the estate-generated file (D32),
+    // so a test of the app cannot see it. It is covered where it actually lives — `scripts/check-silence.sh`
+    // runs against the deployed host, and it is the one surface allowed to say the word, as `taste: off`.
 }
 
 /// `/api/v1/taste` is the **reader's own** lens: their tag weights and their dial, and not one field of the
