@@ -1562,14 +1562,24 @@ async fn the_home_page_carries_three_shelves_and_says_why_each_card_is_there(poo
     // Before this change the page carried one "Trending this week" list and an untruncated "New" list:
     // `data-shelf` appeared zero times on the live home page (measured 2026-11-10).
     let app = app(pool.clone()).await;
-    for (handle, vertical) in [("alpha", "dev"), ("beta", "dev"), ("gamma", "music")] {
+    // Nine members, because since D43 a page view shows each member once: three shelves of up to six
+    // slots cannot be filled from three people, and a fixture that pretended otherwise would be
+    // asserting the very duplication the cap removes.
+    for (handle, vertical) in [
+        ("alpha", "dev"), ("beta", "dev"), ("gamma", "music"),
+        ("delta", "dev"), ("epsilon", "music"), ("zeta", "dev"),
+        ("eta", "music"), ("theta", "dev"), ("iota", "music"),
+    ] {
         register(&app, handle, vertical).await;
     }
     // `Rising` is `rank_trending`, which drops every member with zero visitors in the last seven days
     // (`trending_score` returns 0.0 when `max_7d` is 0). So the fixture has to produce the thing the
     // shelf is a claim about: real `source_hits` rows. A test that skipped this would be asserting an
     // empty shelf renders, which is not what the step says.
-    for (i, handle) in ["alpha", "beta", "gamma"].iter().enumerate() {
+    for (i, handle) in ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota"]
+        .iter()
+        .enumerate()
+    {
         sqlx::query(
             "INSERT INTO source_hits (user_id, session_hash, created_at)
              SELECT id, $2, now() - make_interval(hours => $3::int) FROM users WHERE handle = $1",
@@ -1957,4 +1967,158 @@ async fn the_monument_tab_shows_the_lifetime_record(pool: PgPool) {
         !top.body.contains("10,000"),
         "Top does not claim the lifetime number"
     );
+}
+
+/// THE GATE, first clause: one member a hundred times ahead holds exactly one slot on the home page, and
+/// never two shelves of it.
+#[sqlx::test]
+async fn one_member_a_hundred_times_ahead_holds_exactly_one_home_slot(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    for handle in ["leader", "second", "third", "fourth", "fifth"] {
+        register(&app, handle, "dev").await;
+    }
+    // The leader is a hundred times ahead of everyone else, in real rows: 1000 sessions against ten.
+    for (handle, n) in [("leader", 1000), ("second", 10), ("third", 9), ("fourth", 8), ("fifth", 7)] {
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT id, $2 FROM users WHERE handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("s-{handle}"))
+        .execute(&pool)
+        .await
+        .expect("a real hit");
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("s-{handle}"))
+        .bind(n - 1)
+        .execute(&pool)
+        .await
+        .expect("real hits");
+    }
+
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK);
+    let appearances = home.body.matches("/@leader").count();
+    assert_eq!(
+        appearances, 1,
+        "a member a hundred times ahead is still one face on the page: {appearances}"
+    );
+}
+
+/// THE GATE, second clause: every shelf meets the declared cohort share, measured on the rendered page by
+/// reading each card's click count against the pool's median exposure. The rule is a number, so the test
+/// computes it rather than trusting a comment.
+#[sqlx::test]
+async fn every_shelf_meets_the_cohort_share(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    // Six members: three loud, three quiet. A shelf of three at a 40 % share needs one quiet card.
+    let rows = [
+        ("loud_one", 400), ("loud_two", 300), ("loud_three", 200),
+        ("quiet_one", 3), ("quiet_two", 2), ("quiet_three", 1),
+    ];
+    for (handle, n) in rows {
+        register(&app, handle, "dev").await;
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("c-{handle}"))
+        .bind(n)
+        .execute(&pool)
+        .await
+        .expect("real hits");
+    }
+
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK);
+    let floor = orbital::exposure::percentile(&[400.0, 300.0, 200.0, 3.0, 2.0, 1.0], 0.5);
+    let want = ((0.40 * 3.0f64).ceil()) as usize;
+
+    for shelf in ["for_you", "rising", "new"] {
+        let start = match home.body.find(&format!("data-shelf=\"{shelf}\"")) {
+            Some(i) => i,
+            None => continue,
+        };
+        let rest = &home.body[start..];
+        let end = rest[1..].find("data-shelf=").map(|i| i + 1).unwrap_or(rest.len());
+        let block = &rest[..end];
+        let quiet = ["quiet_one", "quiet_two", "quiet_three"]
+            .iter()
+            .filter(|h| block.contains(&format!("/@{h}")))
+            .count();
+        assert!(
+            quiet >= want,
+            "shelf {shelf} must carry at least {want} card(s) below the median exposure ({floor:.1}): {block}"
+        );
+    }
+}
+
+/// THE GATE, third clause: a quota of 0 restores the previous page — the rankers' own prefixes, duplicates
+/// and all. Asserted as arithmetic over the shelves (the composition is where the caps live) and as a page
+/// that really is different from the capped one, so the test cannot pass by the cap doing nothing.
+#[sqlx::test]
+async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
+    let mut cfg = test_config();
+    cfg.exposure = orbital::exposure::Config::off();
+    let capped = app(pool.clone()).await;
+    let uncapped = app_with(pool.clone(), cfg).await;
+    for handle in ["leader", "second", "third"] {
+        register(&capped, handle, "dev").await;
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
+        )
+        .bind(handle)
+        .bind(format!("q-{handle}"))
+        .bind(if handle == "leader" { 300 } else { 5 })
+        .execute(&pool)
+        .await
+        .expect("real hits");
+    }
+
+    let with_caps = call(&capped, get("/")).await;
+    let without = call(&uncapped, get("/")).await;
+    assert_eq!(without.status, StatusCode::OK);
+
+    assert_eq!(
+        with_caps.body.matches("/@leader").count(),
+        1,
+        "the default cap holds a hundred-times lead to one slot"
+    );
+    assert!(
+        without.body.matches("/@leader").count() > 1,
+        "with the quota at 0 the leader is on more than one shelf again, which is the page this step \
+         replaced — if this assertion fails the cap is not what changed the page"
+    );
+
+    // And the composition with the caps off is exactly the rankers' prefixes, which is the arithmetic the
+    // page served before this step.
+    let members = orbital::store::all_members(&pool, true).await.expect("the pool");
+    let shelves = orbital::shelf::build(
+        &members,
+        &[],
+        chrono::Utc::now(),
+        &orbital::shelf::Declaration::default(),
+        orbital::dial::Lens::full(),
+        cfg.attention,
+        &orbital::exposure::Config::off(),
+    );
+    let rising = shelves.iter().find(|s| s.key == "rising").expect("rising");
+    let expected: Vec<String> = orbital::ranking::rank_trending(
+        members.clone(),
+        chrono::Utc::now(),
+        &[],
+        1.0,
+    )
+    .iter()
+    .take(rising.items.len())
+    .map(|m| m.handle.clone())
+    .collect();
+    let got: Vec<String> = rising.items.iter().map(|r| members[r.index].handle.clone()).collect();
+    assert_eq!(got, expected, "with the caps off, Rising is the Trending ranker's prefix");
 }
