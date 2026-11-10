@@ -141,30 +141,59 @@ fn twenty_samples_are_stable_across_a_rebuild() {
     }
 }
 
-/// IDF is live on this surface: sharing a tag only two members carry beats sharing one everybody has.
+/// IDF is live on this surface, and this is the case that proves it: the member who shares the *rare* tag leads
+/// under pool weights and loses under uniform ones. A test that only asserted "the rare sharer is first" would pass
+/// with the weighting switched off, which is how a weighting quietly stops existing.
 #[test]
 fn a_rare_shared_tag_outranks_a_common_one() {
-    let mut pool: Vec<MemberStat> = (0..8)
-        .map(|i| {
-            if i == 0 {
-                member("me", &["common", "rare"])
-            } else {
-                member(&format!("c{i}"), &["common", "filler"])
-            }
-        })
-        .collect();
-    pool.push(member("rare_peer", &["common", "rare"]));
+    let mut pool: Vec<MemberStat> = vec![
+        // `common` is on everyone, `rare` on two, `filler` on three.
+        member("me", &["common", "rare"]),
+        member("common_sharer", &["common", "filler"]),
+        member("rare_sharer", &["rare", "filler"]),
+    ];
+    for i in 0..7 {
+        pool.push(member(&format!("c{i}"), &["common"]));
+    }
+    pool.push(member("filler_extra", &["filler"]));
+
     let hood = similar(&pool, &pool[0], 5);
+    let order: Vec<(&str, f64)> = hood.members.iter().map(|n| (n.handle.as_str(), n.overlap)).collect();
     assert_eq!(
-        hood.members.first().map(|n| n.handle.as_str()),
-        Some("rare_peer"),
-        "the member who shares the rare tag comes first: {:?}",
-        hood.members.iter().map(|n| (&n.handle, n.overlap)).collect::<Vec<_>>()
+        order.first().map(|(h, _)| *h),
+        Some("rare_sharer"),
+        "the rare tag is the reason: {order:?}"
     );
-    assert!(hood.members[0].shared_tags.contains(&"rare".to_string()));
-    // The common tag is shared with everybody, and everybody else is ranked below.
-    assert!(hood.members.len() > 1);
-    assert!(hood.members[1].overlap < hood.members[0].overlap);
+    let rare = &hood.members[0];
+    assert!(rare.shared_tags.contains(&"rare".to_string()));
+    assert!(!rare.shared_tags.contains(&"common".to_string()));
+
+    // The same two candidates, unweighted: the common sharer wins. That is the difference this surface's
+    // weighting makes, and it is asserted so the weighting cannot be removed silently.
+    let uniform = orbital::overlap::Overlap::uniform();
+    let common = uniform.pair_or_zero(&pool[0].tags, &pool[1].tags);
+    let rare_uniform = uniform.pair_or_zero(&pool[0].tags, &pool[2].tags);
+    assert!(
+        common > rare_uniform,
+        "unweighted, sharing the common tag beats sharing the rare one: {common} vs {rare_uniform}"
+    );
+}
+
+/// Ties are broken by handle, and the test says which order it expects — a determinism test that only compares two
+/// runs of the same code passes with any tiebreak at all, including one that would look arbitrary to a reader.
+#[test]
+fn ties_are_broken_by_handle() {
+    let pool = vec![
+        member("target", &["rust"]),
+        member("zulu", &["rust"]),
+        member("alpha", &["rust"]),
+        member("mike", &["rust"]),
+    ];
+    let hood = similar(&pool, &pool[0], 5);
+    let order: Vec<&str> = hood.members.iter().map(|n| n.handle.as_str()).collect();
+    assert_eq!(order, vec!["alpha", "mike", "zulu"], "identical overlap, alphabetical: {order:?}");
+    // ...and the shared tags of identical sets are in alphabetical order too, since neither outranks the other.
+    assert_eq!(hood.members[0].shared_tags, vec!["rust".to_string()]);
 }
 
 /// The target never lists itself, and the count is capped.
