@@ -335,6 +335,32 @@ favours. The first numbers on the live site are `profile 0.39 / vertical 0.30` o
 which is three and two members respectively: **the metric is honest and the sample is not yet a trend**, and
 the report says so by printing the counts beside the coefficient.
 
+## 2e-ter. The silence gate (D40)
+
+D27 says the prior is applied and never named. That promise is kept by a **program**, not by care:
+`src/silence.rs` holds the vocabulary, and two tests use it.
+
+| what counts | where it is checked |
+|---|---|
+| the prior's words — `gravity`, `prior`, `taste`, `attuned`, `affinity`, `taste-source`, `instance lens` — in any case, as whole words | every public surface in the suite (18 paths: pages, feeds, sitemap, the read API) and, live, `scripts/check-silence.sh` |
+| a **declared source's own name**, whatever the operator called it ("the regulars" is a decision a reader can read) | the same walk, with a declaration that names one |
+| a **field** that offers to report the prior | the same matcher, because a key is text |
+
+Whole-word matching is deliberate: `priority` is not `prior`, and a gate that fires on ordinary English is a
+gate somebody switches off. The one word left out on purpose is `folded` — it is UI language for a closed
+panel, and it is what the gate's first live run caught in an inline script comment.
+
+**One exemption, written into the script rather than into a list:** the estate's capabilities document says
+`"taste": "off"` — the family's name for a capability this instance does not offer, generated from a spec
+every site shares (D32). The check strips exactly that field and fails on any other occurrence, with
+whitespace tolerance, because an exemption that matches one formatting stops being checked the day the
+renderer is re-run.
+
+**`/api/v1/taste` is the reader's, not the instance's.** It answers two fields and no more —
+`tags`, the weights the reader set, and `dial`, the number they own per surface — with
+`cache-control: private, no-store` (a per-reader answer must never come out of a shared cache). The handler
+never reads the declaration. The path's word is the reader's taste; nothing in the body names a source.
+
 ## 2e. The reader's dial (`polaris-gravity`, D36)
 
 The instance's taste is not the only pull. A reader may say **how much of their own lens to apply** — and

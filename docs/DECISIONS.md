@@ -1046,3 +1046,45 @@ so the recorded 0.39 is structure, not fame).
 the direction. The recorded baseline (home n/a, profile 0.39, vertical 0.30 over 3 and 2 members) is
 explicitly not evidence of fame, and the report prints the counts beside the coefficient so it cannot be
 quoted as if it were.
+
+## D40 — Silence is a gate with a vocabulary, and `/api/v1/taste` is the reader's
+
+**Context.** D27 forbids naming the prior, and the roadmap asks for a test that fails when a ranked answer
+or a page names it. Two turns of this project have already produced the failure modes: a form field called
+`gravity` was served to every reader, and an inline script comment on `/` shipped the word "folded". Care
+did not catch either; a test did.
+
+**Decision.** Silence is a program with a vocabulary, and the one route that may use the word answers the
+caller about themselves.
+
+- `src/silence.rs` holds seven words and a whole-word, case-insensitive matcher. Anything in `body` — HTML,
+  JSON, a key — is a leak.
+- The suite walks eighteen surfaces a stranger can reach with a declaration that names a source "the
+  regulars", and requires every one silent. Planted leaks prove the matcher can fail before it is trusted to
+  pass (`priority`, `gravityfed` and `Reprioritise` must stay clean, or the gate is noise).
+- `scripts/check-silence.sh` runs the same vocabulary against the **deployed** host inside the deploy script,
+  because `/api/v1/capabilities` is served by nginx from the estate-generated file and no test of the router
+  can see it.
+- **One exemption, in the script, with a whitespace-tolerant pattern**: `"taste": "off"` in the capabilities
+  document — the family's capability name, declaring that this instance does not offer it (D32). Everything
+  else about the word fails.
+- **`/api/v1/taste`** answers `{"tags": …, "dial": …}`: the reader's own weights and their own dial, with
+  `private, no-store` and a weak ETag, and the handler never reads `cfg.taste`.
+
+**Rejected alternatives.**
+
+- *A regex over the templates at build time.* Half the words arrive from Rust (`serde` keys, a `doctor` line
+  would be caught, a `Json` field would not), and the feed and sitemap are generated, not templated.
+- *Keeping the 404 on `/api/v1/taste`.* It was the previous turn's guard, and the roadmap now gives the path
+  to the reader's lens. Keeping it would have made the roadmap's own gate unreachable; the old assertion was
+  replaced deliberately, and the new test pins the *shape* (two fields, both the caller's) rather than the
+  absence of a route.
+- *Putting `folded` in the vocabulary.* It is UI language for a closed panel. A gate that fires on it is a
+  gate somebody disables — which is worse than a narrow gate that survives.
+- *Exempting capabilities by skipping it entirely.* Then the day the document grows a `prior` field, nothing
+  notices. Stripping one field and re-scanning keeps the rest of the document under the gate.
+
+**Consequences.** The suite and the deploy both fail on a leak, and the live run is a pasteable line:
+`OK silence: every public surface is silent` — 14 surfaces silent, `capabilities silent but for taste:off`,
+`/api/v1/taste caller's lens only`. The gate found two real leaks the moment it ran, which is the only
+evidence that a gate is worth its lines.
