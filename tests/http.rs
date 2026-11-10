@@ -2009,35 +2009,44 @@ async fn one_member_a_hundred_times_ahead_holds_exactly_one_home_slot(pool: PgPo
 }
 
 /// THE GATE, second clause: every shelf meets the declared cohort share, measured on the rendered page by
-/// reading each card's click count against the pool's median exposure. The rule is a number, so the test
-/// computes it rather than trusting a comment.
+/// counting the cards below the pool's median exposure. The pool is deliberately **larger than the page**
+/// (twenty members against three shelves of six), because a pool that fits on the page would satisfy the
+/// quota by accident and the test could not fail.
 #[sqlx::test]
 async fn every_shelf_meets_the_cohort_share(pool: PgPool) {
     let app = app(pool.clone()).await;
-    // Six members: three loud, three quiet. A shelf of three at a 40 % share needs one quiet card.
-    let rows = [
-        ("loud_one", 400), ("loud_two", 300), ("loud_three", 200),
-        ("quiet_one", 3), ("quiet_two", 2), ("quiet_three", 1),
-    ];
-    for (handle, n) in rows {
-        register(&app, handle, "dev").await;
+    // Twenty members on a smooth ladder: the top six are all above the median, so without the quota every
+    // shelf would be six of them.
+    let mut exposures = Vec::new();
+    for i in 0..20 {
+        let handle = format!("m{i:02}");
+        let clicks = 100 - 5 * i;
+        register(&app, &handle, "dev").await;
         sqlx::query(
             "INSERT INTO source_hits (user_id, session_hash)
              SELECT u.id, $2 || '-' || g FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
         )
-        .bind(handle)
+        .bind(&handle)
         .bind(format!("c-{handle}"))
-        .bind(n)
+        .bind(clicks)
         .execute(&pool)
         .await
         .expect("real hits");
+        exposures.push(clicks as f64);
     }
 
     let home = call(&app, get("/")).await;
     assert_eq!(home.status, StatusCode::OK);
-    let floor = orbital::exposure::percentile(&[400.0, 300.0, 200.0, 3.0, 2.0, 1.0], 0.5);
-    let want = ((0.40 * 3.0f64).ceil()) as usize;
 
+    let median = orbital::exposure::percentile(&exposures, 0.5);
+    // Which handles are below it, so the page can be read against the definition rather than a guess.
+    let tail: Vec<String> = (0..20)
+        .map(|i| (format!("m{i:02}"), (100 - 5 * i) as f64))
+        .filter(|(_, e)| *e < median)
+        .map(|(h, _)| h)
+        .collect();
+
+    let mut shelves_seen = 0;
     for shelf in ["for_you", "rising", "new"] {
         let start = match home.body.find(&format!("data-shelf=\"{shelf}\"")) {
             Some(i) => i,
@@ -2046,15 +2055,17 @@ async fn every_shelf_meets_the_cohort_share(pool: PgPool) {
         let rest = &home.body[start..];
         let end = rest[1..].find("data-shelf=").map(|i| i + 1).unwrap_or(rest.len());
         let block = &rest[..end];
-        let quiet = ["quiet_one", "quiet_two", "quiet_three"]
-            .iter()
-            .filter(|h| block.contains(&format!("/@{h}")))
-            .count();
+        let cards = orbital::shelf::PER_SHELF.min(block.matches("mcard").count().max(1));
+        let want = ((0.40 * cards as f64).ceil() as usize).max(1);
+        let found = tail.iter().filter(|h| block.contains(&format!("/@{h}"))).count();
         assert!(
-            quiet >= want,
-            "shelf {shelf} must carry at least {want} card(s) below the median exposure ({floor:.1}): {block}"
+            found >= want,
+            "shelf {shelf}: {found} card(s) below the median exposure ({median:.1}), needs {want} of \
+             {cards}: {block}"
         );
+        shelves_seen += 1;
     }
+    assert_eq!(shelves_seen, 3, "all three shelves must be on the page to be judged");
 }
 
 /// THE GATE, third clause: a quota of 0 restores the previous page — the rankers' own prefixes, duplicates
