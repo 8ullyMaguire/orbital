@@ -402,6 +402,43 @@ pub async fn vertical_members(pool: &PgPool, slug: &str) -> Result<Vec<MemberSta
         .await?)
 }
 
+/// What a surface has shown in the last `hours`, per member (D45). One query, one shape: the ceiling needs
+/// both halves of the ratio, so they are read together or not at all.
+pub async fn impressions_window(
+    pool: &PgPool,
+    surface: &str,
+    hours: i32,
+) -> Result<std::collections::HashMap<Uuid, i64>, AppError> {
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT user_id, sum(count)::bigint FROM impressions
+          WHERE surface = $1 AND bucket >= date_trunc('hour', now() - make_interval(hours => $2))
+          GROUP BY user_id",
+    )
+    .bind(surface)
+    .bind(hours)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Record what a render actually showed: one increment per member per hour, never per card and never per
+/// visitor. An impression is "this card was on a page someone loaded", which is the whole measurement.
+pub async fn record_impressions(pool: &PgPool, surface: &str, ids: &[Uuid]) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO impressions (surface, user_id, bucket, count)
+         SELECT $1, unnest($2::uuid[]), date_trunc('hour', now()), 1
+         ON CONFLICT (surface, user_id, bucket) DO UPDATE SET count = impressions.count + 1",
+    )
+    .bind(surface)
+    .bind(ids)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Every listed member, with stats over their whole click history.
 pub async fn all_members(pool: &PgPool, include_nsfw: bool) -> Result<Vec<MemberStat>, AppError> {
     let sql = format!(

@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::attention::Config as AttentionConfig;
 use crate::dial::Config as DialConfig;
+use crate::ceiling::Config as CeilingConfig;
 use crate::exposure::Config as ExposureConfig;
 use crate::taste::TasteConfig;
 
@@ -31,6 +32,8 @@ pub struct Config {
     /// How many slots one member may hold, and how much of each shelf is the long tail (SPEC §2c-quater,
     /// D43). Loaded at boot: a share of 40 is a typo and must fail there, not in a page.
     pub exposure: ExposureConfig,
+    /// The impression ceiling and the daily tail rotation (SPEC §2c-quinquies, D45).
+    pub ceiling: CeilingConfig,
 }
 
 impl Config {
@@ -56,6 +59,7 @@ impl Config {
             dial: DialConfig::from_env()?,
             attention: AttentionConfig::from_env()?,
             exposure: ExposureConfig::from_env()?,
+            ceiling: CeilingConfig::from_env()?,
         })
     }
 
@@ -76,6 +80,7 @@ impl Config {
             dial: DialConfig::for_test(),
             attention: AttentionConfig::for_test(),
             exposure: ExposureConfig::for_test(),
+            ceiling: CeilingConfig::for_test(),
         }
     }
 
