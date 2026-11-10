@@ -307,6 +307,24 @@ candidate, so a positive verdict bounds how much *worse* the candidate is than r
 somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
 block so it travels with the numbers.
 
+**The band, and why it is a band.** The coefficient is a **guardrail, not a target**: a ranking change may
+not *increase* concentration on a discovery surface without a recorded decision, and the level is read
+against a band rather than aimed at a bullseye.
+
+| surface | aim | band | why |
+|---|---|---|---|
+| home, vertical | **~0.35** | 0.30–0.45 | concentrated enough that quality and engagement visibly move a member, damped enough that a newcomer joining a vertical still has a path to being seen |
+| ring | ~0.25 | 0.20–0.30 | it exists to circulate; a ring that concentrates has stopped being a ring |
+| monument (`Top`, no decay) | higher, expected | — | a monument is the point of a monument; it does not drag the default surface |
+
+Companion number, because Gini and the top-10 share answer different halves of the question: **top-10
+members should take 30–50 % of impressions** on discovery surfaces. Above 60 % is a red flag; below 25 %
+means the ranking has stopped doing work. Below a Gini of 0.25 the `Top` tab has no signal left and the
+leaderboard is decoration; above 0.50 it is the 1 % problem §2c exists to solve. **A stable or falling
+trend is the evidence that damping works; a rising one is the investigation, whatever the level.** With
+three members the maximum attainable Gini is 0.667, so today's recorded numbers describe the pool's shape,
+not anybody's fame — they are not tuned against.
+
 **The measurement.** `concentration_snapshots` holds one row per surface per ISO week — Gini and the
 top-10 share of impressions, over the members that received any. Two properties are load-bearing: it is
 **per surface** (home, a vertical, a profile and the ring have different pools and different lifetimes, and
@@ -322,12 +340,23 @@ the report says so by printing the counts beside the coefficient.
 The instance's taste is not the only pull. A reader may say **how much of their own lens to apply** — and
 that control is theirs, visible, and named in their words.
 
-| surface | ceiling | what applies it |
-|---|---|---|
-| home | 0.40 | `rank_top` 0.4, `rank_trending`/`rank_new` 0.3, the `for_you` shelf |
-| vertical | 0.40 | the same rankers on `/v/{slug}` |
-| entity | 0.25 | declared; no lens term on the profile sidebar yet (SPEC §1e's quarter-cap) |
-| ring | 0.60 | `ring_next`'s relevance term |
+Every surface declares **three** numbers and reads no other surface's: its `weight` (the share its
+relevance-led order gives the lens), its `ordered` weight (the share its velocity-led order gives it —
+trending, new, rising), and its `ceiling` (the most a reader may dial up to). They live in one JSON file
+named by `GRAVITY_FILE`; absent, the built-in numbers below are in force, and every one of them equals the
+share the ranker already applies, so a fresh checkout ranks exactly as yesterday.
+
+| surface | weight | ordered | ceiling | what reads it |
+|---|---|---|---|---|
+| home | 0.40 | 0.30 | 0.40 | `rank_top`, the `for_you` shelf / `rank_trending`, `rank_new`, the `rising` shelf |
+| vertical | 0.40 | 0.30 | 0.40 | the same rankers on `/v/{slug}` |
+| entity | 0.25 | 0.25 | 0.25 | declared; no lens term on the profile sidebar yet (SPEC §1e's quarter-cap) |
+| ring | 0.60 | 0.60 | 0.60 | `ring_next`'s relevance term |
+
+A declared weight is applied **against the share in this table**, not in place of it: declaring `0.10` where
+the reference is `0.40` multiplies the lens term by a quarter, and declaring `0.40` where it already was
+`0.40` multiplies by exactly `1.0`. Without that normalisation the act of writing down what the code already
+did would re-rank every page. `orbital doctor` prints the four resolved policies, one line each.
 
 The ceilings are the shares the rankers **already** applied, which is why the default (a reader who never
 touched the dial) is byte-identical to the ordering the site served before the dial existed: a full lens is

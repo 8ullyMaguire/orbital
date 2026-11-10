@@ -1010,3 +1010,39 @@ mechanism D27 keeps silent.
 impressions over 2 members`, recorded for 2026-11-02 and 2026-11-09. With three and two members the top-10
 share is 100% by arithmetic, not by fame, and the printed counts make that obvious. A later step that claims
 "damping reduced concentration" must show the same surfaces moving against this series.
+
+## D39 — Concentration is a guardrail with a band, never a target
+
+**Context.** D38 gave the headwind an instrument; the obvious next temptation is to give it a bullseye and
+tune toward it. Two failure modes follow immediately: flattening the ranking until `Top` means nothing
+(below ~0.25 the ordering carries no signal, so members have no reason to invest in a profile), and calling
+any number acceptable because it is the one we have (with three members the maximum possible Gini is 0.667,
+so the recorded 0.39 is structure, not fame).
+
+**Decision.** The concentration series is read as a **band**, and the guardrail is a direction of travel.
+
+- Home and vertical: aim **~0.35**, accept **0.30–0.45**. Ring: **0.20–0.30**, because it exists to
+  circulate. The monument view (`Top` with no decay) is exempt and expected to run higher.
+- Companion: **top-10 members take 30–50 % of impressions** on discovery surfaces; above 60 % is a red
+  flag, below 25 % suggests over-flattening.
+- The rule that binds a change is not the level but the **sign**: a ranking change that raises the
+  coefficient on a discovery surface needs a recorded decision (this file), and a rising trend is
+  investigated whatever the absolute number.
+- Numbers below a meaningful sample (tens of members) are recorded and **not tuned against**: N=3 makes
+  0.667 the ceiling, and 187 impressions can be one person refreshing.
+
+**Rejected alternatives.**
+
+- *A single target of 0.0 ("everyone equal").* That is the failure the product exists to avoid: discovery
+  requires that being good at something moves you. The route to "no concentration" is a random shuffle.
+- *A target of 0.6–0.7 ("80/20 is natural").* That is the 1 % problem §2c was written for; the long-tail
+  cohort would be permanently overrun.
+- *Judging per release instead of per week.* A single week's coefficient moves with one refresh; the
+  series is what distinguishes damping from noise.
+- *Folding the monument view into the same number.* It would make every damping step look like a
+  regression, and the exemption would become a permanently red line rather than a deliberate one.
+
+**Consequences.** Phase B has an acceptance band rather than an aspiration, and step 8's guardrail asserts
+the direction. The recorded baseline (home n/a, profile 0.39, vertical 0.30 over 3 and 2 members) is
+explicitly not evidence of fame, and the report prints the counts beside the coefficient so it cannot be
+quoted as if it were.
