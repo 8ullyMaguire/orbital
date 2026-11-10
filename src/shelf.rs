@@ -384,3 +384,45 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod probe {
+    use super::*;
+    use chrono::Duration;
+
+    #[test]
+    fn two_members_never_fill_two_slots_each() {
+        let mk = |h: &str, clicks: i64, v7: i64| MemberStat {
+            id: uuid::Uuid::new_v4(),
+            handle: h.to_string(),
+            display_name: h.to_string(),
+            bio: String::new(),
+            accent: String::new(),
+            avatar_url: None,
+            trust_level: 0,
+            bsky_handle: None,
+            nsfw_enabled: false,
+            created_at: Utc::now() - Duration::days(30),
+            last_active_at: Utc::now(),
+            role: "member".to_string(),
+            visitors: clicks,
+            visitors_7d: v7,
+            clicks,
+            tags: vec![],
+            verticals: vec!["dev".to_string()],
+            endorse: 0.0,
+            attention: clicks as f64,
+            recent: clicks as f64,
+        };
+        let members = vec![mk("a", 76, 5), mk("b", 110, 5)];
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::default(), &crate::exposure::Config::default());
+        for s in &shelves {
+            let hs: Vec<&str> = s.items.iter().map(|r| members[r.index].handle.as_str()).collect();
+            println!("{} -> {:?}", s.key, hs);
+            let mut uniq = hs.clone();
+            uniq.sort();
+            uniq.dedup();
+            assert_eq!(uniq.len(), hs.len(), "{} repeats a member: {:?}", s.key, hs);
+        }
+    }
+}
