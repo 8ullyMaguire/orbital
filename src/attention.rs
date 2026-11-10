@@ -39,6 +39,10 @@ pub enum Mode {
 pub struct Config {
     pub mode: Mode,
     pub alpha: f64,
+    /// Members ranked exactly as `raw`, whatever the declaration says (D47). Empty by default and empty in
+    /// production: the list exists so an operator *can* say "this one is measured, not compressed", and the
+    /// gate proves that with it non-empty the member's attention is the raw share again.
+    pub exempt: Vec<String>,
 }
 
 impl Default for Config {
@@ -46,6 +50,7 @@ impl Default for Config {
         Self {
             mode: Mode::Damped,
             alpha: 0.5,
+            exempt: Vec::new(),
         }
     }
 }
@@ -61,6 +66,7 @@ impl Config {
         Self {
             mode: Mode::Raw,
             alpha: 1.0,
+            exempt: Vec::new(),
         }
     }
 
@@ -93,7 +99,13 @@ impl Config {
         Ok(Self {
             mode: spec.attention.unwrap_or(Mode::Damped),
             alpha,
+            exempt: spec.exempt.unwrap_or_default(),
         })
+    }
+
+    /// Is this member ranked as `raw` regardless of the declaration?
+    pub fn is_exempt(&self, handle: &str) -> bool {
+        self.exempt.iter().any(|h| h.eq_ignore_ascii_case(handle))
     }
 
     /// What a member's corrected count is worth as a share of the pool's busiest, in `0.0..=1.0`.
@@ -149,6 +161,8 @@ pub fn exposure(position: Option<i32>) -> f64 {
 
 #[derive(Deserialize)]
 struct Spec {
+    #[serde(default)]
+    exempt: Option<Vec<String>>,
     #[serde(default)]
     attention: Option<Mode>,
     #[serde(default)]

@@ -194,20 +194,27 @@ pub fn rank_top(
         Window::Recent => m.recent,
         Window::Lifetime => m.attention,
     };
-    let max_attention = if raw_mode {
-        members
-            .iter()
-            .map(|m| m.clicks as f64)
-            .fold(0.0f64, f64::max)
-            .max(1.0)
-    } else {
-        members.iter().map(fame).fold(0.0f64, f64::max).max(1.0)
-    };
+    // Two normalisations, one per column, because an exempt member (D47) is scored on the raw count against
+    // the raw maximum and everybody else on the corrected column against its own. Mixing them under one
+    // maximum would make an exemption change every other member's score, which is not what a list of names is
+    // for.
+    let max_raw = members
+        .iter()
+        .map(|m| m.clicks as f64)
+        .fold(0.0f64, f64::max)
+        .max(1.0);
+    let max_fame = members.iter().map(fame).fold(0.0f64, f64::max).max(1.0);
+
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
         .map(|m| {
-            let worth = if raw_mode { m.clicks as f64 } else { fame(&m) };
-            let clicks = attention.share(worth, max_attention);
+            // The guardrail's property, in one place: a member is scored by one declaration or the other,
+            // never by a mixture, and never by a number that is not in the table.
+            let clicks = if raw_mode || attention.is_exempt(&m.handle) {
+                m.clicks as f64 / max_raw
+            } else {
+                attention.share(fame(&m), max_fame)
+            };
             let rel = if weights.is_empty() { 0.0 } else { relevance(&m, weights) };
             // Endorsements are a separate term, not a bigger `rel`: relevance saturates at 1.0 for a
             // member who holds every tag in the lens, so adding inside it did nothing for exactly
