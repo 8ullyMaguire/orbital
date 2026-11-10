@@ -1754,13 +1754,17 @@ async fn each_surface_declares_its_own_weight_and_reads_no_other(pool: PgPool) {
     // Clicks are normalised by the busiest member, so the fixture is chosen where the margin is real:
     // robi 3 impressions of 4 (0.45) plus the lens, zara 4 of 4 (0.60). At full weight the lens wins,
     // at a quarter of it the traffic does.
+    // One session per impression: since D41 a repeat visit is the same person, and a fixture that reuses
+    // one session hash would be counting one visitor four times — the cap would flatten it to a tie and
+    // this test would be measuring the cap instead of the weight.
     for (handle, times) in [("robi", 3), ("zara", 4)] {
-        for _ in 0..times {
+        for n in 0..times {
             sqlx::query(
-                "INSERT INTO source_hits (user_id, surface, session_hash)
-                 SELECT id, 'profile', 'gate-session' FROM users WHERE handle = $1",
+                "INSERT INTO source_hits (user_id, surface, session_hash, position)
+                 SELECT id, 'profile', $2, 1 FROM users WHERE handle = $1",
             )
             .bind(handle)
+            .bind(format!("gate-{handle}-{n}"))
             .execute(&pool)
             .await
             .expect("a real impression");
