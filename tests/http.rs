@@ -2372,23 +2372,29 @@ async fn a_home_render_records_its_impressions(pool: PgPool) {
 #[sqlx::test]
 async fn the_undiscovered_shelf_is_the_tail_and_vanishes_when_there_is_none(pool: PgPool) {
     let app = app(pool.clone()).await;
-    // Three visible members with heavy traffic and three barely-visible ones, one of them growing hard.
-    for (handle, recent_hits, old_hits) in [
-        ("famousone", 40, 40),
-        ("famoustwo", 30, 30),
-        ("famousthree", 20, 20),
-        ("smallgrowing", 6, 0),
-        ("smallflat", 1, 3),
-        ("smallsilent", 0, 0),
-    ] {
-        register(&app, handle, "dev").await;
+    // A pool bigger than the page, because the cross-shelf rule (D43) gives each member one slot: with
+    // twenty-four people the fourth shelf still has candidates, which is exactly the situation the shelf is
+    // for. Three visible members with heavy traffic, three barely-visible ones, and eighteen middling.
+    let mut roster: Vec<(String, i64, i64)> = vec![
+        ("famousone".into(), 40, 40),
+        ("famoustwo".into(), 30, 30),
+        ("famousthree".into(), 20, 20),
+        ("smallgrowing".into(), 6, 0),
+        ("smallflat".into(), 1, 3),
+        ("smallsilent".into(), 0, 0),
+    ];
+    for i in 0..18 {
+        roster.push((format!("mid{i:02}"), 12 - (i as i64 % 8), 8));
+    }
+    for (handle, recent_hits, old_hits) in roster {
+        register(&app, &handle, "dev").await;
         if recent_hits > 0 {
             sqlx::query(
                 "INSERT INTO source_hits (user_id, session_hash, created_at)
                  SELECT u.id, $2 || '-' || g, now() - interval '1 day'
                    FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
             )
-            .bind(handle)
+            .bind(&handle)
             .bind(format!("u-{handle}"))
             .bind(recent_hits)
             .execute(&pool)
@@ -2401,7 +2407,7 @@ async fn the_undiscovered_shelf_is_the_tail_and_vanishes_when_there_is_none(pool
                  SELECT u.id, $2 || '-old-' || g, now() - interval '14 days'
                    FROM users u, generate_series(1, $3) g WHERE u.handle = $1",
             )
-            .bind(handle)
+            .bind(&handle)
             .bind(format!("u-{handle}"))
             .bind(old_hits)
             .execute(&pool)
