@@ -88,8 +88,11 @@ impl Config {
     /// every member to the same score, and one above 1 sharpens the lead instead of damping it — both are
     /// typos or policy, and neither belongs in a file that also accepts `damped`.
     pub fn from_json(raw: &str) -> Result<Self> {
-        let spec: Spec =
-            serde_json::from_str(raw).context("the attention declaration is not JSON in the declared shape")?;
+        // The serde message is carried, not swallowed: "unknown field `exmpt`" is the whole value of refusing
+        // by name, and a bare "not JSON in the declared shape" would hide which line to fix.
+        let spec: Spec = serde_json::from_str(raw).map_err(|e| {
+            anyhow::anyhow!("the attention declaration is not JSON in the declared shape: {e}")
+        })?;
         let alpha = spec.alpha.unwrap_or(0.5);
         if !alpha.is_finite() || alpha <= 0.0 || alpha > 1.0 {
             return Err(anyhow::anyhow!(
