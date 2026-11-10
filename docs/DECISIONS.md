@@ -1629,3 +1629,50 @@ version **9**, all **11** tables present and **empty** (`entities 0, categories 
 `isbn:978-0-306-40615-7`, the three indexes and the self-merge constraint present, `links.entity_id` added,
 `users.password_hash` nullable and `users.claimed_at` present. Every public surface still 200, the word *entity* appears
 nowhere on the home page, and `/entities` is 404 — a substrate step changes no surface, and the gate says so.
+
+## D53 — Phase D is parked: keep the substrate, stop building the product
+
+**Context.** The entity substrate shipped (D52, schema v9) and is empty. The roadmap's next ten steps build a product on
+it — an entity page, micro-reviews, ballots, entity shelves, a TUI. The owner, on 2026-11-10, said he was already happy
+with the site as it was, asked whether entities were worth it at all, and then chose: *freeze Phase D — junk links,
+empty verticals, then seed and claim.*
+
+**What the numbers said, measured before the decision.**
+
+| Measure | Value |
+|---|---|
+| Visible members | **2** (one is the operator) |
+| Links / distinct URLs | 24 / 20, of which **5 were a smoke test's `example.com` rows** |
+| Verticals | 10 configured, **4** with a member, **6** empty and advertised in the nav |
+| Outbound clicks, all time | **195** |
+| Answers to "who else is on this thing" | **1**, and the URL was the test fixture |
+
+**Decision.**
+
+- **The substrate stays.** It is schema, it is empty, it is reversible, and it is the join that dedupe, an honest
+  import and a claim all need. Deleting it would be spending a migration to undo a migration.
+- **The product is parked**, with the roadmap's own text preserved verbatim under `### Parked` and the number that
+  brings it back: **≥ 20 entities contributed by strangers, or ≥ 25 visible members**. The loop's rule becomes "the
+  first step that is neither Done nor Parked", so a parked step cannot be picked up by momentum.
+- **The order that replaces it** is the owner's: housekeeping, then the contributor and the seed, then the claim, then
+  the work that needs no entity at all (estate search, one config file, capability gates, the CLI, the export, the
+  federation spike).
+- **The two housekeeping items shipped with this decision**, because they were the visible defects: the fixture rows
+  are deleted and a repeat becomes a `doctor` FAIL, and a vertical with nobody in it is no longer offered on the front
+  page or in the nav (its page still answers 200 — hiding a live page from its own index lies in the other direction).
+
+**Rejected alternatives.**
+
+- *Build the entity page anyway, because it is already designed.* The roadmap's order was written before the numbers
+  were this clear; a page per thing when there are two things is a page per nobody.
+- *Delete the entity tables to "freeze" honestly.* A parked, empty schema costs nothing and deleting it costs a
+  migration plus the guarantee that the next attempt re-finds the same shape. Freezing is a decision about the *next
+  step*, not about the schema.
+- *Hide empty verticals by deleting them.* They are real rows the owner configured, several will have members later,
+  and `/v/<slug>` is a URL that may already have been shared. Hidden from the index, live as a page.
+- *Keep the fixture rows and only hide them.* They were already hidden and still counted in `user_verticals` and in the
+  link-health totals, which is exactly the kind of invisible falsehood a ledger is supposed to prevent.
+
+**Consequences.** Open steps **14** (was 24); parked **10**; shipped **27**. `doctor` gains a `fixtures` line that FAILs
+if a hidden test-shaped member ever exists again. The front page and the nav offer only populated verticals; the API
+keeps the full taxonomy, because publishing a count of zero is honest and offering a door with nobody behind it is not.

@@ -1,8 +1,7 @@
 # Orbital — roadmap
 
-State at the time of writing: **schema v5**, **95 tests** (45 unit, 43 HTTP, 7 store), `orbital doctor`
-green, seven timers, 2 visible members, 24 links across 19 domains, capabilities document served and
-gate-checked. Last rewrite **2026-11-10** (v5): the order below is the owner's — **stack first, then
+State at the time of writing: **schema v9**, **210 tests**, `orbital doctor` green, seven timers, 2 visible
+members, 19 links across 16 domains, capabilities document served and gate-checked. Last rewrite **2026-11-10** (v5): the order below is the owner's — **stack first, then
 shared recommendations, then frictionless contribution, then federation**.
 
 This file is the honest list **and the ledger**: every open step carries its gate on the same line, and
@@ -59,13 +58,13 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Measure | Value, 2026-11-10 |
 |---|---|
 | Visible members | 2 (one is the operator) |
-| Verticals configured | 10; 7 hold nothing |
-| Links | 24, across **19 distinct domains**, 5 failing 3+ checks |
-| Outbound clicks recorded | 186 |
+| Verticals configured | 10; **6** hold nothing — and the nav no longer offers them (D53) |
+| Links | **19**, across **16 distinct domains**, 0 failing — the five `example.com` rows a smoke test wrote are deleted (D53) |
+| Outbound clicks recorded | **195** |
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **209** (78 unit, 68 HTTP, 7 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
+| Tests | **210** (78 unit, 69 HTTP, 8 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema v7, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Concentration | weekly snapshots exist: profile **gini 0.39 / top-10 100 %** over 3 members, vertical **0.30 / 100 %** over 2 — N is far too small for a trend, recorded as such |
@@ -131,7 +130,7 @@ test rather than a convention.
 Each step ships alone, is verified against the live host, and carries its gate on the same line. Tags:
 **[DB] [BE] [FE] [OPS] [CFG]**. Order encodes dependency *and* the owner's priority order.
 
-### Phase A — the same stack, the same arithmetic (1 step)
+### Phase A — how it was judged (shipped)
 
 Adopt, don't write. Every step here ends with less code in this repo than it started with, and the gate
 is always the same shape: the ordering is byte-identical before and after, and `git grep` cannot find the
@@ -155,9 +154,91 @@ Ideas:
 The guardrail every step here shares: **damped, never hidden** — attenuation may cost position and may
 never cost reachability, and no damped score may exceed its raw score.
 
-### Phase C — shared recommendation depth (4 steps)
+### The open list — 14 steps, in the owner's order
 
-### Phase D — the entity substrate and frictionless contribution (10 steps)
+**Rewritten 2026-11-10, the freeze.** The per-phase headings are gone from this list, because the order is now the
+owner's freeze order and not the phase order: the housekeeping, then the contributor and the seed, then the claim,
+then the work that needs no entity at all. The prose above still says *how* the phases are judged; the ten Phase D
+product steps are **Parked** below and are not counted in this number. The loop's rule is the first step that is
+neither Done nor Parked.
+
+1. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
+    *Gate:* `links` drops by 5 (24 → 19) and `/` and `/v/dev` still render 200 with content.
+
+2. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an `import_runs`
+    receipt.
+    *Gate:* run twice — the second inserts 0 and updates 0; a run killed mid-way resumes and the receipt
+    says so.
+
+3. **[OPS] First sources**: 5,200 adult rows (facts only) plus a non-adult seed so the catalogue is not
+    99% one category; health and metadata backfill with the existing checker, 500/day made proportional.
+    *Gate:* every imported row has `last_checked`/`last_status`; the dead share is quoted per source; one
+    full pass fits in a stated number of days.
+
+4. **[BE] Entity claims** through `polaris-ledger`: page proof, Bluesky token or DNS TXT, with
+    merge-on-claim.
+    *Gate:* a claim with no proof is refused; a claim whose proof disappears within 24h is reversed and the
+    reversal is a ledger entry.
+
+5. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row with
+    no password, no email, no handle; `contribute = open` is what authorises a write.
+    *Gate:* two writes from one cookie jar land on one row and a second jar on a second; a request with no
+    cookie is refused `400 contributor_required`, not 401.
+
+6. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's own
+    filters and its `/api/v1/search` shape.
+    *Gate:* a committed golden set records `nDCG@10` + `recall@50` against the local search it replaces; a
+    zero-result query returns the labelled cross-site fallback; `/api/v1/search` keeps its contract.
+
+7. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and weights, per-surface gravity,
+    capability gates, which shelves run, limits, importer pacing. No policy in code.
+    *Gate:* two config files over one dataset produce two orderings and two shelf sets; `orbital config
+    check` exits non-zero on an unknown key or invalid weight.
+
+8. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
+    `polaris-authz`; all four declared `open` today.
+    *Gate:* a capability declared `open` accepts an anonymous write; flipped to `login` the same request
+    answers 401 and an authenticated one 200, with no code change.
+
+9. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
+    `config check`, with one exit-code table (0 ok, 2 bad input, 3 refused, 4 not found, 5 unavailable).
+    *Gate:* each subcommand runs against the live host; the exit table is a test; `--help` is honest about
+    which subcommands need a token.
+
+10. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
+    *Gate:* a bundle restores into a scratch database with matching per-table row counts; a corrupted byte
+    is caught by the checksum; a webhook delivery is logged with its response code.
+
+11. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
+    `http_signature`) and publish one actor + WebFinger for the instance.
+    *Gate:* `curl -H 'Accept: application/activity+json'` on the actor returns a valid document; a real
+    Mastodon instance resolves the handle.
+
+12. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
+    followers, with the `Note`+schema.org fallback.
+    *Gate:* a review appears in a Mastodon timeline with its rating visible, and the `ap_id` is the same
+    object on re-delivery.
+
+13. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
+    entity, unseen domain quarantined.
+    *Gate:* a review from a second local instance lands on the right entity page and stays out of search
+    until approved.
+
+14. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
+    federation, staffed by the operator only as an exception path.
+    *Gate:* an unseen domain is quarantined by default; the monthly review page renders with real counts and
+    names what it cannot decide.
+
+### Parked — Phase D, the entity product
+
+**Parked 2026-11-10 by the owner, until the site has something to be a catalogue of** (D53). The substrate shipped
+(schema v9, migration 0009) and sits empty; what is parked is everything that would build a *product* on top of it
+before there is a catalogue. A parked step is not next — it is waiting, and the condition below is the only way it
+comes back. The text is the roadmap's own, kept verbatim with its original numbering, so unparking is a move rather
+than a rewrite.
+
+**Unpark when either holds:** the catalogue has **≥ 20 entities contributed by strangers**, or **≥ 25 visible
+members**. Below that, a page per thing is a page per nobody.
 
 1. **[BE] Adopt `commons-identify` for the half it actually covers.** Measured against the shipped crate on
     2026-11-10 (D52): it knows `isbn`, `tmdb`, `musicbrainz`, `isrc`, `wikidata` — **no URL scheme, no `imdb:`,
@@ -170,110 +251,59 @@ never cost reachability, and no damped score may exceed its raw score.
     *Gate:* `cargo tree -i commons-identify` names orbital; a round-trip over 20 sample identifiers through the crate
     and `canonical_key()` agreeing on the value; an ISBN with a wrong check digit refused by name at the write path;
     and `git grep -n "fn canonical_key" src/` finding nothing, because the one implementation is the migration.
-2. **[BE] Anonymous contributor identity**: a signed visitor cookie resolves to a `contributors` row with
-    no password, no email, no handle; `contribute = open` is what authorises a write.
-    *Gate:* two writes from one cookie jar land on one row and a second jar on a second; a request with no
-    cookie is refused `400 contributor_required`, not 401.
+
 3. **[BE] Entity from a URL**: paste a URL, resolve its key, create or return the entity with a fetched
     title and one tag.
     *Gate:* three pastes create three entities; a `www.`/trailing-slash variant of the first returns the
     same id and creates no row.
+
 4. **[BE] Micro-review, no account**: one sentence plus 1–5, one per contributor per entity, editable for
     15 minutes, tombstoned after.
     *Gate:* a second submission by the same cookie updates rather than duplicates; a deleted review is
     invisible to anonymous readers and still present for its author.
+
 5. **[BE] Ballot**: "which of these two?", one vote per pair per contributor, feeding the voter's vector
     only.
     *Gate:* 10 ballots from one cookie change that contributor's vector and no other visitor's ordering.
+
 6. **[BE] Abuse bounds without accounts**: per-cookie and per-IP limits, a first-N moderation queue, a 429
     with `Retry-After`.
     *Gate:* the 11th write inside a minute answers 429; a queued write is absent from anonymous HTML and
     present for the operator; the queue self-resolves after 72h.
-7. **[BE] Importer**: resumable, idempotent on `canonical_key`, provenance on every row, an `import_runs`
-    receipt.
-    *Gate:* run twice — the second inserts 0 and updates 0; a run killed mid-way resumes and the receipt
-    says so.
-8. **[OPS] First sources**: 5,200 adult rows (facts only) plus a non-adult seed so the catalogue is not
-    99% one category; health and metadata backfill with the existing checker, 500/day made proportional.
-    *Gate:* every imported row has `last_checked`/`last_status`; the dead share is quoted per source; one
-    full pass fits in a stated number of days.
-9. **[OPS] Delete the smoke fixture's rows** and assert the hidden user owns nothing.
-    *Gate:* `links` drops by 5 (24 → 19) and `/` and `/v/dev` still render 200 with content.
-
-### Phase E — the entity page and reading depth (3 steps)
 
 10. **[FE] `/e/{slug}`**: kind, title, description, image, category, tags, health, people, similar
     entities, rating summary, reviews ordered by helpfulness.
     *Gate:* a dead site says so; a film and a site render from the same template with no `if kind ==`; the
     page carries JSON-LD `Review`/`AggregateRating` and a canonical URL.
-11. **[BE] Search on the estate index** through `polaris-search-client`, site-scoped, keeping orbital's own
-    filters and its `/api/v1/search` shape.
-    *Gate:* a committed golden set records `nDCG@10` + `recall@50` against the local search it replaces; a
-    zero-result query returns the labelled cross-site fallback; `/api/v1/search` keeps its contract.
+
 12. **[FE] Home shelves over entities**, not members — the same three shelves, a bigger catalogue.
     *Gate:* the shelves fill from imported entities and an entity-free vertical says why it is empty.
 
-### Phase F — configuration and modularity (4 steps)
-
-13. **[CFG] One config file** (`orbital.toml`) plus env overlay: sources and weights, per-surface gravity,
-    capability gates, which shelves run, limits, importer pacing. No policy in code.
-    *Gate:* two config files over one dataset produce two orderings and two shelf sets; `orbital config
-    check` exits non-zero on an unknown key or invalid weight.
-14. **[BE] Capability gates per capability** (`open` / `login` / `trust(n)` / `grant`) through
-    `polaris-authz`; all four declared `open` today.
-    *Gate:* a capability declared `open` accepts an anonymous write; flipped to `login` the same request
-    answers 401 and an authenticated one 200, with no code change.
 15. **[FE] Admin settings page** that edits the config and cannot display the prior.
     *Gate:* the page's HTML and its API contain no prior values (asserted); saving a weight changes the
     live ordering after restart.
+
 16. **[BE] User-written metadata edits** with diff and revert, plus the report/quarantine queue with
     structured reasons, a 72-hour self-resolution and a public modlog.
     *Gate:* a revert restores the previous text byte for byte; a quarantined review is 404 to anonymous and
     200 to its author; an unreported item self-resolves inside its window with the action logged.
 
-### Phase G — power users (3 steps)
-
-17. **[BE] `orbital` CLI**: `add <url>`, `review`, `ballot`, `search`, `import`, `export`, `doctor`,
-    `config check`, with one exit-code table (0 ok, 2 bad input, 3 refused, 4 not found, 5 unavailable).
-    *Gate:* each subcommand runs against the live host; the exit table is a test; `--help` is honest about
-    which subcommands need a token.
 18. **[FE] TUI** (`ratatui`): verticals → entities → review, keyboard-first.
     *Gate:* a scripted session renders three screens to a snapshot and completes a review end to end.
-19. **[OPS] Export bundle** in the estate's `polaris-export` format plus outbound webhooks on create.
-    *Gate:* a bundle restores into a scratch database with matching per-table row counts; a corrupted byte
-    is caught by the checksum; a webhook delivery is logged with its response code.
-
-### Phase H — claims (1 step)
-
-20. **[BE] Entity claims** through `polaris-ledger`: page proof, Bluesky token or DNS TXT, with
-    merge-on-claim.
-    *Gate:* a claim with no proof is refused; a claim whose proof disappears within 24h is reversed and the
-    reversal is a ledger entry.
-
-### Phase I — federation (4 steps)
-
-21. **[BE] Spike, timeboxed**: depend on gravity's AP layer (`activitystreams`, `webfinger`,
-    `http_signature`) and publish one actor + WebFinger for the instance.
-    *Gate:* `curl -H 'Accept: application/activity+json'` on the actor returns a valid document; a real
-    Mastodon instance resolves the handle.
-22. **[BE] Per-user actors and outbound reviews**: `Create`/`Update`/`Delete` of a `Review` delivered to
-    followers, with the `Note`+schema.org fallback.
-    *Gate:* a review appears in a Mastodon timeline with its rating visible, and the `ap_id` is the same
-    object on re-delivery.
-23. **[BE] Inbound**: `Follow`, `Create` for reviews, canonical-key resolution, unknown key creates the
-    entity, unseen domain quarantined.
-    *Gate:* a review from a second local instance lands on the right entity page and stays out of search
-    until approved.
-24. **[OPS] Domain allowlist, blocklist and a monthly moderation review** — the permanent cost of
-    federation, staffed by the operator only as an exception path.
-    *Gate:* an unseen domain is quarantined by default; the monthly review page renders with real counts and
-    names what it cannot decide.
 
 ### Done
 
 Shipped steps move here, newest last, with the commit and the one line of gate output that proved them. A
 step is not done because it merged; it is done because its gate ran against the live host.
 
+- **2026-11-10** `3938b0b`…`69684a7` — **step 1, the fixture rows (and the freeze's two housekeeping items)**: the
+  smoke test that wrote to the live database left two hidden members and five `example.com` links, which the vertical
+  counters counted and the link checker checked. `orbital cleanup [--apply]` reports and removes exactly
+  *hidden + test-shaped* handles (`^(test|smoke|e2e|dummy|fixture)`), `orbital doctor` FAILs if one ever comes back, and
+  a vertical with nobody in it is no longer offered by the front page or the nav (its page still answers 200).
+  **Gate**: cleanup exact and idempotent — 2 members and 2 links removed in the test, second run `(0, 0)`, a real
+  member's link left alone; front page shows `/v/dev` and not `/v/gaming`, has no "still growing" line, `/v/gaming` is
+  still 200; live `links` 24 → 19, `doctor` `PASS fixtures — none`. 210 tests. D53 records the parking itself.
 - **2026-11-10** `bc94645`…`5fc8000` — **step 1, migration 0009 (the ledger's "0006")**: the entity substrate —
   `entities`, `categories`, `entity_tags`, `entity_edges`, `entity_people`, `reviews`, `review_votes`,
   `entity_edits`, `entity_scores`, `ballots`, `import_runs`; `links.entity_id`; nullable `users.password_hash` and a
