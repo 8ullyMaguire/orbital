@@ -83,8 +83,19 @@ pub async fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-async fn healthz() -> &'static str {
-    "ok"
+/// The estate health answer: `{status, version, checks}`, with the status code chosen by the same call that builds it.
+///
+/// This route has regressed **four** times, and the fourth is instructive: the fix was committed here, deployed, and then
+/// another session's history rewrite on this same tree dropped the commit and rebuilt from a tree without it (ledger 363).
+/// The body comes from `polaris-healthz` rather than being typed here so the shape cannot drift per product, and `version()`
+/// reads `ESTATE_VERSION` — the same string nginx puts in `x-estate-version` — so the two halves of one response agree.
+async fn healthz() -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+
+    let body = polaris_healthz::healthy();
+    let code = axum::http::StatusCode::from_u16(polaris_healthz::code(&body))
+        .unwrap_or(axum::http::StatusCode::OK);
+    (code, axum::Json(body)).into_response()
 }
 
 /// Mints the visitor id on a read but writes NO row: the id only becomes a

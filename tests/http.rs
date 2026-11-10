@@ -2468,3 +2468,39 @@ async fn a_flat_pool_has_no_undiscovered_shelf(pool: PgPool) {
         "a flat pool has no tail, so there is no shelf — not an empty heading"
     );
 }
+
+/// The estate health contract, on the real router.
+///
+/// A monitor reads `status`; a person comparing two answers reads `version`, and it must be the same string nginx puts in
+/// `x-estate-version` — the release, not the crate. The route has regressed four times (ledger 307/363), so the test pins the
+/// shape and the version's source, not just the status code. No database: a health answer that needs one cannot report that
+/// the database is down (and the `sqlx::test` arms need CREATEDB, which the app role does not have).
+#[tokio::test]
+async fn health_is_the_estate_shape_with_the_release_version() {
+    std::env::set_var("ESTATE_VERSION", "2026.11.3");
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://nobody@127.0.0.1/none")
+        .expect("a lazy pool needs no server");
+    let state = AppState {
+        pool,
+        cfg: std::sync::Arc::new(test_config()),
+        http: reqwest::Client::new(),
+    };
+    let router = orbital::build_router(state).await;
+
+    let res = router
+        .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).expect("the health body is JSON");
+    assert_eq!(body["status"], "ok");
+    assert_eq!(
+        body["version"], "2026.11.3",
+        "the body must carry ESTATE_VERSION — the same string nginx reports in x-estate-version"
+    );
+    assert!(body["checks"].is_array(), "checks is the third field of the shared shape");
+}
