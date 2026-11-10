@@ -307,6 +307,31 @@ candidate, so a positive verdict bounds how much *worse* the candidate is than r
 somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
 block so it travels with the numbers.
 
+### 2c-ter. Two windows of fame (D42)
+
+Fame is one measurement read through two windows, computed in the same stats fragment so a surface cannot
+read the wrong one by accident:
+
+| surface | column | unit | lens | damping |
+|---|---|---|---|---|
+| `Top`, For You, embeds | `recent` | attention × 0.5^(age / 90 days) | yes | yes |
+| monument tab (`?tab=monument`) | `attention` | lifetime attention, undamped | no | exempt |
+
+Why a half-life. `Top` is a claim about who is being read *now*, and with a lifetime total the first members
+hold the first rows for as long as the site exists — a permanent incumbency that no amount of new quality
+can displace. Ninety days is long enough that a member's week off costs nothing and short enough that a year
+of inertia costs almost everything: a stale 10,000 is worth 98 at 600 days, which is below 200 recent.
+
+Why a monument. Amortising fame must cost a member *position*, never *reachability* — so the lifetime total
+stays one tab away, in full digits (`10,000`, not `10.0k`), and D39's damping band exempts it: a monument is
+the point of a monument. The tab is part of every vertical page's tab list, so it is reachable from the
+ranking it amends, in one click, without an account.
+
+What the two numbers mean. `clicks, all time` is a raw count and can only grow. The 90-day number is
+*weighted* attention (D41's `1 + ln position` per session), so it can exceed the raw count when a member's
+clicks were seen lower down a page — `doctor` prints both, and the labels say which is which because a
+weighted count and a click count are different numbers.
+
 ### 2c-bis. What a click is worth (D41)
 
 Attention is the score every discovery surface starts from, so it gets a declaration of its own:

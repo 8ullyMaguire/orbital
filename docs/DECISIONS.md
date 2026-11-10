@@ -1125,3 +1125,39 @@ number has to be a declaration with a stated consequence, not a constant someone
 from a 0.076 gap to 0.047, which the lens term still decides — and that is reported as the result rather than
 dressed up. The compression is proved on a fixture with a known answer, the session cap on real rows, and
 the identity over 200 seeds plus the live eval.
+
+## D42 — Fame is read through two windows: a 90-day half-life, and a monument that keeps the record
+
+**Context.** `Top` was a lifetime click count. On a catalogue that is meant to keep growing, that is a
+permanent incumbency: whoever arrives first holds the first row forever, and the fame headwind (D34) is doing
+arithmetic on a number that cannot fall. But simply expiring fame would delete the members who built the
+place, which is both unfair and dishonest about what happened.
+
+**Decision.** Two windows over the same clicks, both computed in the stats fragment.
+
+- **`recent`** weights each hit by `0.5^(age_days / 90)` on top of D41's session cap and position weight.
+  `Top`, For You and embeds rank by it. A stale 10,000 is worth 98 at 600 days.
+- **`attention`** stays the lifetime total, undamped, latest-lens off. The monument tab (`?tab=monument`)
+  ranks by clicks and shows the figure in full digits.
+- Both numbers are labelled on their own page (`visitors` / `clicks, all time`), and `orbital doctor` prints
+  both for the leader, because a declaration that says "90 days" beside a page showing a lifetime number is
+  the exact confusion this step exists to prevent.
+- `rank_monument` is lensless and undamped by design and is exempt from D39's band.
+
+**Rejected alternatives.**
+
+- *Decay the `clicks` column itself.* Then the honest count on every page becomes a fiction, and the
+  monument has nothing left to show. Two columns, one truth.
+- *Half-life of 30 days.* Twelve days of latency is still 0.76 at 30 days, so a member's quiet fortnight
+  would look like abandonment; 90 days is the shortest window where a week off costs nothing.
+- *A separate "all time" page outside the tabs.* A monument nobody can reach from the ranking it corrects is
+  not reachability, it is a URL. It sits in the tab list of the vertical it belongs to.
+- *Expiring members entirely (drop at zero recent).* That is a fairness policy pretending to be arithmetic:
+  it hides people rather than ranking them lower, which D34 and D39 both refuse.
+- *Keeping one number and calling it both.* The 90-day number is weighted and can exceed the click count, so
+  one label would have to lie about one of them.
+
+**Consequences.** Ordering on today's live pool is unchanged — every real click is at most twelve days old,
+so the decay factor is 0.91 and no gap crosses — and that is reported as the result, not dressed up. The
+gate's sentence is proved on a fixture with a hand-checkable answer (10,000 at 600 days < 200 at 3 days) and
+by a mutation that removes the half-life, which kills both gate tests.
