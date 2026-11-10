@@ -561,9 +561,19 @@ fn which(bin: &str) -> Option<PathBuf> {
 }
 
 
-/// `orbital impressions [--date YYYY-MM-DD]`: what the ceiling sees right now, and the tail the rotation
+fn say_line(line: &str) {
+    println!("  {line}");
+}
+
+/// `orbital impressions [--date YYYY-MM-DD] [--days N]`: what the ceiling sees right now, and the tail the rotation
 /// will fill on that date and the next — printed from the date alone, so two hosts can compare notes.
-pub async fn impressions(pool: &PgPool, cfg: &Config, date: Option<String>) -> Result<()> {
+pub async fn impressions(
+    pool: &PgPool,
+    cfg: &Config,
+    date: Option<String>,
+    days: Option<i64>,
+) -> Result<()> {
+    let hours = days.unwrap_or(1).max(1) * 24;
     let day = match date {
         Some(raw) => chrono::NaiveDate::parse_from_str(&raw, "%Y-%m-%d")
             .with_context(|| format!("`{raw}` is not a date (YYYY-MM-DD)"))?,
@@ -571,9 +581,12 @@ pub async fn impressions(pool: &PgPool, cfg: &Config, date: Option<String>) -> R
     };
 
     for surface in ["home"] {
-        let window = store::impressions_window(pool, surface, 24).await?;
+        let window = store::impressions_window(pool, surface, hours).await?;
         let total: i64 = window.values().sum();
-        println!("{surface}: {total} impression(s) in the last 24h, {} member(s)", window.len());
+        println!(
+            "{surface}: {total} impression(s) in the last {hours}h, {} member(s)",
+            window.len()
+        );
         let members = store::all_members(pool, true).await?;
         for m in &members {
             let mine = window.get(&m.id).copied().unwrap_or(0);
@@ -592,6 +605,22 @@ pub async fn impressions(pool: &PgPool, cfg: &Config, date: Option<String>) -> R
                     ""
                 }
             );
+        }
+
+        // The long-tail share (D50): how much of the surface went to the members below the median exposure.
+        // Printed with the floor attached, because the number is worthless and misleading under it.
+        if days.is_some() {
+            let rows: Vec<(f64, i64)> = members
+                .iter()
+                .map(|m| (m.recent, window.get(&m.id).copied().unwrap_or(0)))
+                .collect();
+            match crate::concentration::long_tail(&rows) {
+                Some(mut lt) => {
+                    lt.window_hours = hours;
+                    say_line(&lt.verdict());
+                }
+                None => say_line("no impressions in the window, so there is no share to print"),
+            }
         }
 
         let ids: Vec<uuid::Uuid> = members.iter().map(|m| m.id).collect();

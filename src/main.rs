@@ -65,6 +65,9 @@ enum Cmd {
         /// The date to print the rotation for. Defaults to today.
         #[arg(long)]
         date: Option<String>,
+        /// Window for the long-tail share, in days (prints the share and the floor under it).
+        #[arg(long)]
+        days: Option<i64>,
     },
     /// Apply reviewed tag aliases to existing rows.
     Retag {
@@ -194,9 +197,9 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Cmd::Impressions { date } => {
+        Cmd::Impressions { date, days } => {
             let pool = db::connect(&cfg).await?;
-            orbital::ops::impressions(&pool, &cfg, date).await?;
+            orbital::ops::impressions(&pool, &cfg, date, days).await?;
         }
         Cmd::Doctor => {
             let pool = db::connect(&cfg).await?;

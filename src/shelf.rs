@@ -35,6 +35,10 @@ use crate::ranking;
 /// different number is the day it moves into a config file.
 pub const UNDISCOVERED_PERCENTILE: f64 = 0.60;
 
+/// The smallest audience a member needs before a conversion rate means anything (D50). Five visitors is not
+/// statistics; it is the point below which the rate is 0, 1/2, 1/3 — a coin toss dressed as a ratio.
+pub const GEM_MIN_VISITORS: i64 = 5;
+
 /// How many cards one shelf shows.
 pub const PER_SHELF: usize = 6;
 
@@ -252,7 +256,83 @@ pub fn build(
         }
     }
 
-    // `New`: one source, pure relevance — the New ranker's own order. Last, because recency is the least
+    // `Hidden gems` (D50): ranked *against* clicks — the members the click count has overlooked, ordered by how
+    // well they convert the visitors they do get. A gem is not "small" (that is `undiscovered`) and not "old" (that
+    // is the monument): it is a profile people click through when they land on it, that the leaderboards rarely
+    // surface. Every number is already in the stats fragment; nothing here is a judgement.
+    //
+    // Two rules keep it from being a list of one-page wonders: a minimum sample (`visitors >= 5`), and eligibility
+    // only for members *below* the median clicks — a page that already ranks high by clicks is not overlooked.
+    let eligible: Vec<usize> = (0..members.len())
+        .filter(|i| members[*i].visitors >= GEM_MIN_VISITORS)
+        .collect();
+    if !eligible.is_empty() {
+        let mut click_counts: Vec<i64> = eligible.iter().map(|i| members[*i].clicks).collect();
+        click_counts.sort_unstable();
+        let median_clicks = click_counts[click_counts.len() / 2];
+        let mut gems: Vec<usize> = eligible
+            .into_iter()
+            .filter(|i| members[*i].clicks <= median_clicks)
+            .collect();
+        gems.sort_by(|a, b| {
+            let ca = members[*a].clicks as f64 / members[*a].visitors.max(1) as f64;
+            let cb = members[*b].clicks as f64 / members[*b].visitors.max(1) as f64;
+            cb.partial_cmp(&ca)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| members[*a].handle.cmp(&members[*b].handle))
+        });
+        if !gems.is_empty() {
+            let chosen = crate::exposure::enforce(&gems, decl.per_shelf, &mut used, &exposure, caps);
+            // The novelty slot fills what the cohort rule would leave empty (ROADMAP: "filled by the novelty
+            // slot"): the same daily rotation the other shelves use, drawn from the gems order, so an eligible
+            // member is not permanently off the page because the caps filled up first.
+            let mut chosen = chosen;
+            if chosen.len() < decl.per_shelf {
+                let rotated = crate::ceiling::rotate(
+                    &gems,
+                    &gems,
+                    &member_ids(members),
+                    crate::ceiling::day_key(crate::ceiling::day_of(now)),
+                    ceiling,
+                );
+                for i in rotated {
+                    if chosen.len() >= decl.per_shelf {
+                        break;
+                    }
+                    if !chosen.contains(&i) && !used.contains(&i) {
+                        used.insert(i);
+                        chosen.push(i);
+                    }
+                }
+            }
+            if !chosen.is_empty() {
+                let items = chosen
+                    .into_iter()
+                    .map(|index| {
+                        let m = &members[index];
+                        let rate = m.clicks as f64 / m.visitors.max(1) as f64;
+                        let why = format!(
+                            "{} click{} from {} visitor{}",
+                            m.clicks,
+                            if m.clicks == 1 { "" } else { "s" },
+                            m.visitors,
+                            if m.visitors == 1 { "" } else { "s" }
+                        );
+                        let _ = rate;
+                        Ranked { index, why }
+                    })
+                    .collect();
+                shelves.push(Shelf {
+                    key: "gems",
+                    title: "Hidden gems",
+                    subtitle: "Read to the end when people find them, and rarely on the leaderboards.",
+                    items,
+                });
+            }
+        }
+    }
+
+    // `New`: one source, pure relevance — the New ranker's own order. Last, because recency is the least    // `New`: one source, pure relevance — the New ranker's own order. Last, because recency is the least
     // informative of the four and the cross-shelf rule (D43) means the last shelf gets what is left.    // `New`: one source, pure relevance — the New ranker's own order. Last, because recency is the least
     // informative of the four and the cross-shelf rule (D43) means the last shelf gets what is left.
     shelves.push(Shelf {
