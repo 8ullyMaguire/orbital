@@ -2722,9 +2722,13 @@ async fn similar_members_are_shared_tags_and_do_not_move(pool: PgPool) {
     // The page renders the same people, in the same order, with the shared tags as the why line.
     let page = call(&app, get("/@anchor")).await;
     assert_eq!(page.status, StatusCode::OK);
-    let page_twins = page.body.find("/@twins").unwrap_or(usize::MAX);
-    let page_commoner = page.body.find("/@commoner").unwrap_or(usize::MAX);
-    assert!(page_twins != usize::MAX && page_commoner != usize::MAX, "the sidebar lists both");
-    assert!(page_twins < page_commoner, "and in the same order as the API");
-    assert!(page.body.contains("shares rust, cli"), "the why line names the tags");
+    // Scoped to the sidebar: the ring nav above it also links members, and comparing positions across the whole
+    // page would compare the ring to the list.
+    let at = page.body.find("People like").expect("the sidebar heading");
+    let sidebar = &page.body[at..page.body.len().min(at + 4000)];
+    let page_twins = sidebar.find("/@twins").unwrap_or(usize::MAX);
+    let page_commoner = sidebar.find("/@commoner").unwrap_or(usize::MAX);
+    assert!(page_twins != usize::MAX && page_commoner != usize::MAX, "the sidebar lists both: {sidebar}");
+    assert!(page_twins < page_commoner, "and in the same order as the API: {sidebar}");
+    assert!(sidebar.contains("shares rust, cli"), "the why line names the tags: {sidebar}");
 }
