@@ -2133,3 +2133,80 @@ async fn a_quota_of_zero_restores_the_previous_page(pool: PgPool) {
     let got: Vec<String> = rising.items.iter().map(|r| members[r.index].handle.clone()).collect();
     assert_eq!(got, expected, "with the caps off, Rising is the Trending ranker's prefix");
 }
+
+/// THE GATE: a curation row changes no page, and no surface is labelled with a hand.
+///
+/// The operator authors nothing. Before this step the home page carried a rail headed "Curator's picks —
+/// hand-picked, manually ordered. The editorial layer, not the ranking", and every vertical carried a
+/// "Curated" tab — both read from `curation`, both written by one person. That is the operator authoring a
+/// list *and* announcing it, which the invariants forbid twice over.
+#[sqlx::test]
+async fn a_curation_row_changes_no_page(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    for (handle, vertical) in [("alpha", "dev"), ("beta", "dev"), ("gamma", "music")] {
+        register(&app, handle, vertical).await;
+    }
+    for (i, handle) in ["alpha", "beta", "gamma"].iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO source_hits (user_id, session_hash)
+             SELECT id, $2 FROM users WHERE handle = $1",
+        )
+        .bind(*handle)
+        .bind(format!("cur-{i}"))
+        .execute(&pool)
+        .await
+        .expect("a real hit");
+    }
+
+    let home_before = call(&app, get("/")).await.body;
+    let vertical_before = call(&app, get("/v/dev")).await.body;
+
+    // The exact rows that used to drive the rail and the tab: the operator's three picks, in order.
+    for (position, handle) in ["alpha", "gamma", "beta"].iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO curation (vertical_slug, user_id, position)
+             SELECT 'dev', id, $2 FROM users WHERE handle = $1",
+        )
+        .bind(*handle)
+        .bind(position as i32)
+        .execute(&pool)
+        .await
+        .expect("a curation row");
+    }
+
+    let home_after = call(&app, get("/")).await.body;
+    let vertical_after = call(&app, get("/v/dev")).await.body;
+    assert_eq!(home_before, home_after, "a curation row must change nothing on /");
+    assert_eq!(
+        vertical_before, vertical_after,
+        "a curation row must change nothing on a vertical page"
+    );
+
+    for (name, body) in [("/", &home_after), ("/v/dev", &vertical_after)] {
+        for word in ["Curator", "curated", "Curated", "Hand-picked", "editorial"] {
+            assert!(
+                !body.contains(word),
+                "{name} still names a hand ({word}) — the operator authors nothing and never says so"
+            );
+        }
+    }
+
+    // The URL goes too: a tab that exists only to serve the old bookmark would keep the word alive.
+    let old = call(&app, get("/v/dev?tab=curated")).await;
+    assert_eq!(old.status, StatusCode::OK);
+    assert!(
+        !old.body.contains("Curated"),
+        "?tab=curated must not resurrect a curated surface"
+    );
+
+    // And the templates themselves: a surface removed from the code but left in a template comes back.
+    let mut offenders = Vec::new();
+    for entry in std::fs::read_dir("templates").expect("the templates directory") {
+        let path = entry.expect("a template").path();
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        if text.to_lowercase().contains("curat") || text.to_lowercase().contains("hand-picked") {
+            offenders.push(path.display().to_string());
+        }
+    }
+    assert!(offenders.is_empty(), "templates still carry a hand: {offenders:?}");
+}
