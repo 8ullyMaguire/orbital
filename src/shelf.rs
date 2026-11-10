@@ -126,7 +126,9 @@ pub fn build(
         (Source::Related, as_rows(&by_clicks)),
     ];
     if let Ok(pool) = compose(-1, &lists, &budget, CANDIDATE_CAP) {
-        let candidates = pool.ids();
+        // `compose` speaks in `Id` (i64); the shelf speaks in pool indices. The cast is the boundary
+        // between the crate's vocabulary and this repo's, and it stays in one place.
+        let candidates: Vec<usize> = pool.ids().iter().map(|id| *id as usize).collect();
         let items = to_items(&candidates, &tag_ids);
         let chosen = select(items, decl.per_shelf, decl.for_you_lambda, |a, b| {
             polaris_candidates::jaccard(a, b)
