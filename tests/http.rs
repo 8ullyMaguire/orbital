@@ -2177,10 +2177,19 @@ async fn a_curation_row_changes_no_page(pool: PgPool) {
     let home_after = call(&app, get("/")).await.body;
     let vertical_after = call(&app, get("/v/dev")).await.body;
     assert_eq!(home_before, home_after, "a curation row must change nothing on /");
-    assert_eq!(
-        vertical_before, vertical_after,
-        "a curation row must change nothing on a vertical page"
-    );
+    if vertical_before != vertical_after {
+        let at = vertical_before
+            .chars()
+            .zip(vertical_after.chars())
+            .position(|(a, b)| a != b)
+            .unwrap_or_else(|| vertical_before.len().min(vertical_after.len()));
+        let lo = at.saturating_sub(220);
+        panic!(
+            "a curation row must change nothing on a vertical page; first difference at {at}:\n--- before\n{}\n--- after\n{}",
+            &vertical_before[lo..(at + 220).min(vertical_before.len())],
+            &vertical_after[lo..(at + 220).min(vertical_after.len())]
+        );
+    }
 
     for (name, body) in [("/", &home_after), ("/v/dev", &vertical_after)] {
         for word in ["Curator", "curated", "Curated", "Hand-picked", "editorial"] {
