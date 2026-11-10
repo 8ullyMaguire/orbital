@@ -2504,3 +2504,48 @@ async fn health_is_the_estate_shape_with_the_release_version() {
     );
     assert!(body["checks"].is_array(), "checks is the third field of the shared shape");
 }
+
+/// THE GATE, the sentence: the policy is stated once on the home page, in words that describe the promise and
+/// not the machinery — no count, no per-member number, nothing that names what ranks a page.
+#[sqlx::test]
+async fn the_policy_sentence_is_on_the_home_page_exactly_once(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "sentenceone", "dev").await;
+    let home = call(&app, get("/")).await;
+    assert_eq!(home.status, StatusCode::OK);
+    let sentence = "the busiest faces make room for the quieter ones";
+    assert_eq!(
+        home.body.matches(sentence).count(),
+        1,
+        "the promise is stated once, not once per shelf"
+    );
+    // It describes a promise, not the rule that keeps it: no number, no vocabulary from the machinery.
+    let at = home.body.find(sentence).expect("the sentence");
+    let window = &home.body[at.saturating_sub(120)..home.body.len().min(at + 260)];
+    for word in ["damp", "expos", "impression", "percentile", "weight", "gravity", "prior", "taste"] {
+        assert!(!window.to_lowercase().contains(word), "the sentence explains itself with `{word}`: {window}");
+    }
+}
+
+/// THE GATE, reachability: nothing the page gained in this phase took a route away. Profile, a search hit, a
+/// vertical page and the sitemap all still answer 200 — a guardrail that hides people would show up here first.
+#[sqlx::test]
+async fn every_surface_still_answers_after_the_guardrail(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "reachable", "dev").await;
+    let home = call(&app, get("/")).await;
+    let profile = home.body.split("/@reachable").nth(1).is_some();
+    assert!(profile, "the member is linked from the home page");
+    for (path, label) in [
+        ("/@reachable".to_string(), "profile"),
+        ("/v/dev".to_string(), "vertical"),
+        ("/search?q=reachable".to_string(), "search hit"),
+        ("/sitemap.xml".to_string(), "sitemap"),
+        ("/ring/dev".to_string(), "ring"),
+    ] {
+        let r = call(&app, get(&path)).await;
+        assert_eq!(r.status, StatusCode::OK, "{label} ({path}) must still answer: {}", r.status);
+    }
+    let sitemap = call(&app, get("/sitemap.xml")).await;
+    assert!(sitemap.body.contains("/@reachable"), "the sitemap still lists the member");
+}

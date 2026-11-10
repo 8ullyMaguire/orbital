@@ -22,6 +22,10 @@
 /// that nothing but the prior's implementation would ever say in public.
 pub const PRIOR_WORDS: [&str; 7] = [
     "gravity",
+    "damped",
+    "exposure",
+    "impression",
+    "percentile",
     "prior",
     "taste",
     "attuned",
