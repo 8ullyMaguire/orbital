@@ -94,7 +94,7 @@ fn raw_reproduces_the_old_order_over_two_hundred_seeds() {
             interesting += 1;
         }
 
-        let new_order: Vec<String> = ranking::rank_top(pool, &weights, 1.0, Config::raw())
+        let new_order: Vec<String> = ranking::rank_top(pool, &weights, 1.0, Config::raw(), ranking::Window::Lifetime)
             .into_iter()
             .map(|m| m.handle)
             .collect();
