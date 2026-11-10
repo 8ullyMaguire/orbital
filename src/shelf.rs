@@ -181,7 +181,7 @@ pub fn build(
             key: "for_you",
             title: "For you",
             subtitle: "Your tags and what people actually click. The last slots make room for something new.",
-            items: why_lines(members, weights, now, chosen),
+            items: why_lines(members, weights, now, apply_floor_order(members, floors, chosen)),
         });
     }
 
@@ -205,7 +205,7 @@ pub fn build(
             crate::ceiling::day_key(crate::ceiling::day_of(now)),
             ceiling,
         );
-            why_lines(members, weights, now, chosen)
+            why_lines(members, weights, now, apply_floor_order(members, floors, chosen))
         },
     });
 
@@ -259,6 +259,7 @@ pub fn build(
                 }
             }
             if !chosen.is_empty() {
+                let chosen = apply_floor_order(members, floors, chosen);
                 let items = chosen
                     .into_iter()
                     .map(|index| {
@@ -317,6 +318,7 @@ pub fn build(
             ceiling,
         );
         if !chosen.is_empty() {
+            let chosen = apply_floor_order(members, floors, chosen);
             let items = chosen
                 .into_iter()
                 .map(|index| {
@@ -365,7 +367,7 @@ pub fn build(
             crate::ceiling::day_key(crate::ceiling::day_of(now)),
             ceiling,
         );
-            why_lines(members, weights, now, chosen)
+            why_lines(members, weights, now, apply_floor_order(members, floors, chosen))
         },
     });
 
@@ -431,6 +433,27 @@ fn to_items(order: &[usize], tag_ids: &HashMap<usize, Vec<i64>>) -> Vec<(usize, 
 
 /// The observable facts a card may cite. Never the prior: D27 forbids a surface from naming it, and a
 /// `why` that differed between two visitors beyond their own tags would be a leak with a sentence on it.
+/// The reader's floors are the *last* word on a shelf (D51). Every composition step — the budget, the diversity
+/// pass, the exposure caps, the cohort promote — runs on its own logic, and any of them can lift a member back over
+/// one the reader ranked away: the cohort rule is the one that actually does it, because the member being floored is
+/// usually the one with less exposure. A stated preference outranks an automatic quota, so the floor is re-applied
+/// at the end, stably: members it matched keep their relative order among themselves and sit below everyone else.
+///
+/// This is a reordering, never a removal — the shelf is shorter only if the page is, and the member is still at its
+/// URL, in its category and in the sitemap.
+fn apply_floor_order(
+    members: &[MemberStat],
+    floors: &crate::floors::Floors,
+    chosen: Vec<usize>,
+) -> Vec<usize> {
+    if floors.is_empty() {
+        return chosen;
+    }
+    let floored = |i: usize| !floors.apply(&members[i], 1.0).1.is_empty();
+    let (kept, away): (Vec<usize>, Vec<usize>) = chosen.into_iter().partition(|i| !floored(*i));
+    kept.into_iter().chain(away).collect()
+}
+
 fn why_lines(
     members: &[MemberStat],
     weights: &[(String, f64)],
@@ -818,5 +841,62 @@ mod gems {
             shelves.iter().all(|s| s.key != "gems"),
             "nobody has a big enough audience for the shelf to exist"
         );
+    }
+}
+
+#[cfg(test)]
+mod floor_order {
+    use super::*;
+    use chrono::Duration;
+
+    fn m(handle: &str, clicks: i64, visitors: i64, recent: f64, tags: &[&str]) -> MemberStat {
+        MemberStat {
+            id: uuid::Uuid::new_v4(),
+            handle: handle.to_string(),
+            display_name: handle.to_string(),
+            bio: String::new(),
+            accent: String::new(),
+            avatar_url: None,
+            trust_level: 1,
+            bsky_handle: None,
+            nsfw_enabled: false,
+            created_at: Utc::now() - Duration::days(40),
+            last_active_at: Utc::now(),
+            role: "member".to_string(),
+            visitors,
+            visitors_7d: 0,
+            visitors_prev: 0,
+            clicks,
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            verticals: vec!["dev".to_string()],
+            endorse: 0.0,
+            attention: recent,
+            recent,
+        }
+    }
+
+    /// THE GATE at the shelf, where the caps are: the cohort rule promotes the member with less exposure, and that
+    /// is usually the member the reader ranked away. The floor has to survive it.
+    #[test]
+    fn the_cohort_promote_cannot_lift_a_floored_member_back_over_one() {
+        let members = vec![
+            m("loud", 400, 800, 400.0, &["rust"]),
+            m("quiet", 2, 9, 2.0, &["garden"]),
+            m("middle", 20, 60, 20.0, &["cli"]),
+        ];
+        let floors = crate::floors::Floors::parse_list("rust:0.5").expect("a valid list");
+        // Composition put the floored member first; the caps would happily promote it there too.
+        let promoted = apply_floor_order(&members, &floors, vec![0, 1, 2]);
+        assert_eq!(
+            promoted,
+            vec![1, 2, 0],
+            "the floored member is last, and the others keep their own order"
+        );
+        // And with no floors the order is untouched, byte for byte.
+        let none = apply_floor_order(&members, &crate::floors::Floors::none(), vec![0, 1, 2]);
+        assert_eq!(none, vec![0, 1, 2]);
+        // Among two floored members the composition order survives: a floor is not a second ranking.
+        let both = crate::floors::Floors::parse_list("rust,garden").expect("a valid list");
+        assert_eq!(apply_floor_order(&members, &both, vec![0, 1, 2]), vec![2, 0, 1]);
     }
 }
