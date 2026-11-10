@@ -180,6 +180,22 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
     // 11. How many slots one member may hold, and how much of a shelf is the tail (D43).
     say(true, "exposure", cfg.exposure.sentence());
 
+    // 12. The instance's declared floors (D51). "Declared" and "declared and applied" are different facts, and
+    // only the second changes a page — so each declared name is printed with what it matched.
+    let every_member = store::all_members(pool, true).await?;
+    let notes = cfg.floors.report(&every_member);
+    if notes.is_empty() {
+        say(true, "floors", "none declared (FLOORS_FILE absent)".to_string());
+    } else {
+        for n in &notes {
+            say(
+                n.matched > 0,
+                "floors",
+                format!("{} {} · {}", n.name, n.weight, n.sentence(&every_member)),
+            );
+        }
+    }
+
     // 12. What the ceiling sees, and where the tail will point today (D45). Printed because a rule about
     // exposure that nobody can read is a rule nobody can check.
     let window = store::impressions_window(pool, "home", 24).await?;
@@ -640,21 +656,6 @@ pub async fn impressions(
                 .map(|i| format!("@{}", members[*i].handle))
                 .collect();
             println!("  tail for {d}: {}", if names.is_empty() { "(nobody yet)".to_string() } else { names.join(" ") });
-        }
-    }
-    // Floors (D51). Printed with the members they match, because "declared" and "declared and applied" are
-    // different facts and only the second one changes a page.
-    let all_members = crate::store::all_members(pool, true).await?;
-    let notes = cfg.floors.report(&all_members);
-    if notes.is_empty() {
-        say(true, "floors", "none declared (FLOORS_FILE absent)".to_string());
-    } else {
-        for n in &notes {
-            say(
-                n.matched > 0,
-                "floors",
-                format!("{} {} · {}", n.name, n.weight, n.sentence(&all_members)),
-            );
         }
     }
 
