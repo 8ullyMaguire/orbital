@@ -59,7 +59,9 @@ fn raw_reproduces_the_old_order_over_two_hundred_seeds() {
         let pool: Vec<MemberStat> = (0..12)
             .map(|i| {
                 let clicks = (noise(seed * 100 + i) * 500.0) as i64;
-                let mut m = member(&format!("m{i}"), clicks, clicks as f64);
+                // The corrected column is deliberately NOT the click count here: `raw` must ignore it,
+                // and a fixture where the two agree could not tell the difference.
+                let mut m = member(&format!("m{i}"), clicks, clicks as f64 * 3.0 + 7.0);
                 if i % 2 == 0 {
                     m.tags = vec!["x".to_string()];
                 }

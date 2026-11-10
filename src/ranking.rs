@@ -171,18 +171,29 @@ pub fn rank_top(
         });
         return members;
     }
-    // What a click is worth is a declaration (D41): `raw` is `clicks / max`, byte for byte the arithmetic
-    // this function shipped before the declaration existed; `damped` is the log-normalised, compressed
-    // share of an audience that is counted once per session and credited by where it was seen.
-    let max_attention = members
-        .iter()
-        .map(|m| m.attention)
-        .fold(0.0f64, f64::max)
-        .max(1.0);
+    // What a click is worth is a declaration (D41). `raw` reads the **raw count** and nothing else — the
+    // corrected column is not even consulted, which is what makes it byte-for-byte the arithmetic this
+    // function shipped before the declaration existed. `damped` reads the corrected column: an audience
+    // counted once per session, credited by where each click was seen, and compressed by `alpha`.
+    let raw_mode = attention.mode == crate::attention::Mode::Raw;
+    let max_attention = if raw_mode {
+        members
+            .iter()
+            .map(|m| m.clicks as f64)
+            .fold(0.0f64, f64::max)
+            .max(1.0)
+    } else {
+        members
+            .iter()
+            .map(|m| m.attention)
+            .fold(0.0f64, f64::max)
+            .max(1.0)
+    };
     let mut scored: Vec<(f64, MemberStat)> = members
         .into_iter()
         .map(|m| {
-            let clicks = attention.share(m.attention, max_attention);
+            let worth = if raw_mode { m.clicks as f64 } else { m.attention };
+            let clicks = attention.share(worth, max_attention);
             let rel = relevance(&m, weights);
             // Endorsements are a separate term, not a bigger `rel`: relevance saturates at 1.0 for a
             // member who holds every tag in the lens, so adding inside it did nothing for exactly
