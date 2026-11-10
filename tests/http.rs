@@ -1732,7 +1732,11 @@ async fn the_concentration_numbers_are_not_served(pool: PgPool) {
 /// One dataset, four surfaces, one number changed at a time.
 #[sqlx::test]
 async fn each_surface_declares_its_own_weight_and_reads_no_other(pool: PgPool) {
-    let base = test_config();
+    // This test is about the surface weight and nothing else, so attention is pinned to `raw` here: the
+    // damped default is a different step's subject (tests/attention.rs) and mixing them would make a
+    // failure name two causes.
+    let mut base = test_config();
+    base.attention = orbital::attention::Config::raw();
     let declare = |surface: &str, key: &str, value: f64| {
         let raw = format!(
             r#"{{"surfaces":[{{"name":"{surface}","strength":0.40,"{key}":{value}}}]}}"#
@@ -1742,7 +1746,7 @@ async fn each_surface_declares_its_own_weight_and_reads_no_other(pool: PgPool) {
         cfg
     };
 
-    let plain = app(pool.clone()).await;
+    let plain = app_with(pool.clone(), base.clone()).await;
     register(&plain, "robi", "music").await;
     register(&plain, "zara", "music").await;
     give_tags(&pool, "robi", &["chiptune"]).await;
