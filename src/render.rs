@@ -548,27 +548,9 @@ pub fn profile_jsonld(
     serde_json::to_string(&doc).unwrap_or_else(|_| "{}".to_string())
 }
 
-/// "3 shared tags" or "same vertical" — a reason, so the sidebar is not a
-/// mystery list.
-pub fn similarity_reason(candidate: &MemberStat, viewer_tags: &[String], ctx: Option<&str>) -> String {
-    let shared = candidate
-        .tags
-        .iter()
-        .filter(|t| viewer_tags.contains(t))
-        .count();
-    if shared > 0 {
-        return format!("{shared} shared tag{}", if shared == 1 { "" } else { "s" });
-    }
-    if let Some(ctx) = ctx {
-        if candidate.verticals.first().map(|s| s.as_str()) == Some(ctx) {
-            return "same vertical".to_string();
-        }
-        if candidate.verticals.iter().any(|v| v == ctx) {
-            return "shares a vertical".to_string();
-        }
-    }
-    String::new()
-}
+// `similarity_reason` lived here: "3 shared tags" or "same vertical", written for the sidebar blend that D49
+// replaced with the tag-overlap neighbourhood. The neighbourhood names the actual tags ("shares rust, cli"), so
+// this became a second, quieter way to explain the same list — deleted rather than kept as a fallback nobody calls.
 
 #[cfg(test)]
 mod tests {
