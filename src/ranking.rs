@@ -170,7 +170,12 @@ pub fn rank_top(
 ) -> Vec<MemberStat> {
     // The reader's dial, as a fraction of this surface's ceiling. 1.0 is the ordering the site has
     // always served (`x * 1.0 == x` exactly), 0.0 removes the lens term entirely.
-    if weights.is_empty() {
+    // `raw` with no lens is the arithmetic of every version before this one: visitors, then clicks, then
+    // the older account. It is kept exactly, because that is what the identity gate compares against.
+    // `damped` with no lens still has to obey its own window — a stranger's Top is a recent list, not a
+    // lifetime visitor count — so it falls through to the scored path with no relevance term.
+    let raw_mode_early = attention.mode == crate::attention::Mode::Raw;
+    if weights.is_empty() && raw_mode_early {
         let mut members = members;
         members.sort_by(|a, b| {
             b.visitors
@@ -203,7 +208,7 @@ pub fn rank_top(
         .map(|m| {
             let worth = if raw_mode { m.clicks as f64 } else { fame(&m) };
             let clicks = attention.share(worth, max_attention);
-            let rel = relevance(&m, weights);
+            let rel = if weights.is_empty() { 0.0 } else { relevance(&m, weights) };
             // Endorsements are a separate term, not a bigger `rel`: relevance saturates at 1.0 for a
             // member who holds every tag in the lens, so adding inside it did nothing for exactly
             // the members it was meant to reward. 0.4 x 0.2 is the same +0.08 the relevance term
