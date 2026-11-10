@@ -515,7 +515,7 @@ mod tests {
             member("fresh", 2, 4, 2, &["dev"]),
             member("steady", 10, 12, 40, &["music"]),
         ];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::off(), &crate::ceiling::Config::off());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::off(), &crate::ceiling::Config::off(), &crate::floors::Floors::none());
 
         let rising = shelves.iter().find(|s| s.key == "rising").unwrap();
         let expected_rising: Vec<String> = ranking::rank_trending(members.clone(), Utc::now(), &[], 1.0)
@@ -545,7 +545,7 @@ mod tests {
             member("odd", 1, 1, 30, &["music"]),
         ];
         let weights = vec![("rust".to_string(), 1.0)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default(), &crate::ceiling::Config::off());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default(), &crate::ceiling::Config::off(), &crate::floors::Floors::none());
         let for_you = shelves.iter().find(|s| s.key == "for_you").unwrap();
         let order = handles(&members, for_you);
         assert_eq!(order.first().map(String::as_str), Some("a"), "the top stays the top: {order:?}");
@@ -562,7 +562,7 @@ mod tests {
             member("fresh", 0, 0, 1, &["dev"]),
         ];
         let weights = vec![("rust".to_string(), 0.9)];
-        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default(), &crate::ceiling::Config::off());
+        let shelves = build(&members, &weights, Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::default(), &crate::ceiling::Config::off(), &crate::floors::Floors::none());
         let forbidden = ["taste", "prior", "gravity", "curated", "editor", "operator", "orbit"];
         for shelf in &shelves {
             for item in &shelf.items {
@@ -607,7 +607,7 @@ mod probe {
             recent: clicks as f64,
         };
         let members = vec![mk("a", 76, 5), mk("b", 110, 5)];
-        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::default(), &crate::exposure::Config::default(), &crate::ceiling::Config::off());
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::default(), &crate::exposure::Config::default(), &crate::ceiling::Config::off(), &crate::floors::Floors::none());
         for s in &shelves {
             let hs: Vec<&str> = s.items.iter().map(|r| members[r.index].handle.as_str()).collect();
             println!("{} -> {:?}", s.key, hs);
