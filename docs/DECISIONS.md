@@ -930,3 +930,42 @@ instance's prior stays untouched by it.
 names the ceiling, and clamping proven live by lowering the ceiling between two requests and restoring it —
 the same row reads 25, then 10, then 25 again. Roadmap step 4 replaces these ceilings per surface with real
 numbers, and step 2 exists so those numbers are chosen against a measurement rather than a preference.
+
+## D37 — Ranking changes are decided by a paired interval over real clicks, or they do not happen
+
+**Context.** Phases B–C of the roadmap move weights, ceilings and shelf composition. Every one of those is
+a change a reasonable person can argue for and nobody can check, and the estate already extracted the
+metrics and the decision rule (`polaris-eval`, `paired::compare`) precisely because two products publishing
+two different nDCG values for the same ranking is a failure of the instrument, not of the ranking.
+
+**Decision.** Orbital adopts `polaris-eval` and commits a golden set, and a ranking change ships only when
+the run beats the baseline with an interval that excludes zero over at least **30** paired cases.
+
+- **Cases** are real sessions that clicked a member card; **judgements** are the clicks (grade 2) and
+  nothing else. No grade-0 judgements: the site does not record what it showed, and inventing "saw it, did
+  not click" would be inventing rows — the one thing this repo never does.
+- **Arms** are `rank_new` (baseline) and `rank_top` with the session's lens (candidate).
+- **The rule is fixed before the data** and stored in the golden set's `rule` block: metric, floor,
+  interval, and the caveat that the clicks were collected under the candidate's own ordering.
+- **A seed with no row is counted as missing**, and a golden set with no seeds is refused rather than run
+  empty — the failure mode is a set that shrinks while the number rises.
+- The command is `orbital eval` (a power-user surface, not a route: its output names rankings).
+
+**Rejected alternatives.**
+
+- *Wait for 200 seeds.* The roadmap asked for 200; the database holds **130** sessions with a click. The
+  honest move is to record 130 and say so. Padding the set with sessions that never clicked would be
+  inventing cases, and lowering the floor to fit the data is how a decision rule becomes a decoration.
+- *Judge by tag overlap instead of clicks.* Tags are the candidate's own input: the eval would score the
+  ranker against the arithmetic it is built from, and every change would look good.
+- *Report the mean difference without the interval.* A +0.045 nDCG over 130 cases with a straddling
+  interval is not a result; `paired::compare` refuses it, and so does this repo.
+- *Let the eval print a number and leave the decision to the operator.* Then the number becomes a
+  suggestion and the blocking never happens. Exit 1 on anything but `better`.
+- *Serve the verdict at a URL.* It names rankings; the prior's silence rule (D27) starts with "no response
+  describes how the ordering was produced".
+
+**Consequences.** The first real number is `A 0.8619 / B 0.9073, delta +0.0454 [+0.0085, +0.0823]` over 130
+cases — the candidate beats a recency list, and that is now a bound rather than an opinion. Any later
+change to a ceiling, a source weight or a shelf declaration re-runs the same command, and a red or
+`NO VERDICT` result means the change waits for more clicks.

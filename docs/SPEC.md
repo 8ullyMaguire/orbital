@@ -274,6 +274,39 @@ crate's own explanation. The profile is folded at boot and read on demand; it is
 `/api/v1/taste`, no field, and no sentence (D27). `orbital doctor` is its only home, and `docs/` is the only
 place it is described.
 
+## 2e-bis. The offline evaluation (`polaris-eval`, D37)
+
+No weight, ceiling or shelf may move because it looks better. A change earns its place by beating a
+baseline over **real clicks**, with an interval, or it does not ship.
+
+**Cases.** One per session in `source_hits` that clicked a member card. The judgement is the click
+itself — grade 2 for a member that session clicked, and nothing else, because the site records what was
+clicked and not what was shown, and "they saw it and did not click" would be invented data. A case whose
+pool is a vertical is judged inside that vertical; a session that browsed none is judged against the
+catalogue it was given.
+
+**Arms.** A is `rank_new` (newest first) — the simplest defensible order; B is `rank_top` with the
+session's own lens, which is what the site serves. Both are scored with `ndcg_at(…, 10)`.
+
+**The decision rule, fixed before the data:**
+
+| | |
+|---|---|
+| metric | nDCG@10, graded (a clicked member = 2) |
+| floor | **30 paired cases** — below it the answer is `NO VERDICT`, whatever the means say |
+| interval | 95% paired bootstrap, deterministic resampling |
+| verdict | `better` only when the interval excludes zero; a straddling interval is `NO VERDICT` |
+| exit code | 0 only for `better`; everything else exits **1** and blocks the change |
+
+`orbit eval` replays `eval/golden.json` (or `--file`), and `--emit N` writes a new seed list from the rows
+the database actually holds. A seed that no longer matches a row is counted as **missing**, never
+replaced: a golden set that silently shrinks makes a number improve while nothing does.
+
+**What it cannot tell you.** The clicks were collected while the site was already ordering by the
+candidate, so a positive verdict bounds how much *worse* the candidate is than recency on the member
+somebody clicked; it is not proof of a better ranking. That caveat is stored in the golden set's `rule`
+block so it travels with the numbers.
+
 ## 2e. The reader's dial (`polaris-gravity`, D36)
 
 The instance's taste is not the only pull. A reader may say **how much of their own lens to apply** — and
