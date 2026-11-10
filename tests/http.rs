@@ -1890,6 +1890,19 @@ async fn the_monument_tab_shows_the_lifetime_record(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .expect("a member");
+    // The two hundred that are recent, which is the other half of the gate's sentence.
+    let fresh: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'newcomer'")
+        .fetch_one(&pool)
+        .await
+        .expect("a member");
+    sqlx::query(
+        "INSERT INTO source_hits (user_id, surface, session_hash, position, created_at)
+         SELECT $1, 'profile', 'new-' || g, 1, now() - interval '3 days' FROM generate_series(1, 200) g",
+    )
+    .bind(fresh)
+    .execute(&pool)
+    .await
+    .expect("real clicks");
     sqlx::query(
         "INSERT INTO source_hits (user_id, surface, session_hash, position, created_at)
          SELECT $1, 'profile', 'old-' || g, 1, now() - interval '600 days' FROM generate_series(1, 10000) g",
