@@ -249,10 +249,13 @@ mod tests {
         let exposure = vec![1000.0, 10.0, 9.0, 8.0, 7.0];
         let cfg = Config::default();
         let mut used = HashSet::new();
-        let first = enforce(&[0, 0, 0, 0, 0, 1, 2], 2, &mut used, &exposure, &cfg);
+        // The order is the ranker's whole list, tails included: `enforce` can only promote a tail member
+        // it was given, which is why the caller passes the full permutation and not the top of it.
+        let first = enforce(&[0, 0, 0, 0, 0, 1, 2, 3, 4], 2, &mut used, &exposure, &cfg);
         assert_eq!(first.iter().filter(|i| **i == 0).count(), 1, "one slot for the leader: {first:?}");
         assert_eq!(first[0], 0, "and it is the first slot: {first:?}");
         let second = enforce(&[0, 0, 0, 1, 2, 3, 4], 2, &mut used, &exposure, &cfg);
+        assert_eq!(second.len(), 2, "a shelf of two still has two slots: {second:?}");
         assert!(!second.contains(&0), "never on a second shelf: {second:?}");
         // Every shelf still meets the cohort share, which is the clause that would quietly fail if the
         // cap and the quota were written as two independent passes.
