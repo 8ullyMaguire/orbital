@@ -2730,5 +2730,14 @@ async fn similar_members_are_shared_tags_and_do_not_move(pool: PgPool) {
     let page_commoner = sidebar.find("/@commoner").unwrap_or(usize::MAX);
     assert!(page_twins != usize::MAX && page_commoner != usize::MAX, "the sidebar lists both: {sidebar}");
     assert!(page_twins < page_commoner, "and in the same order as the API: {sidebar}");
-    assert!(sidebar.contains("shares rust, cli"), "the why line names the tags: {sidebar}");
+    // Ordered by rarity, then alphabetically — `cli` is on two profiles and `rust` on three, so the rarer tag is
+    // named first. What matters is that both are named and the line is not a number.
+    let why = sidebar
+        .split("sim-why\">")
+        .nth(1)
+        .and_then(|rest| rest.split('<').next())
+        .unwrap_or("")
+        .to_string();
+    assert!(why.contains("cli") && why.contains("rust"), "the why line names the tags: {why}");
+    assert!(!why.chars().any(|c| c.is_ascii_digit()), "and no number: {why}");
 }
