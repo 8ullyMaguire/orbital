@@ -162,3 +162,15 @@ credential block in `~/.hermes/.env`; docs committed; SecondBrain note.
 5. Footer of each SFW site links to the profile page, verified by fetching the
    rendered page on the host.
 6. Both Bluesky accounts posted and pinned.
+
+## Shared capability adoption (rows 410–413, 2026-11-11 audit)
+
+Audit: `secondbrain/10-Projects/polaris-extraction-candidates.md`. Ledger rows: 410 activity counts, 411 trust ladder, 412 typed votes + filter
+expressions, 413 user lists beyond gravity. Every row is adoption-and-deletion: the donor already ships the mechanism, so the work here is to delete this
+member's own copy and import the shared one — never to write a second implementation beside it.
+- **410 activity counts** — per-member and per-directory liveness, over the same windows.
+- **411 trust ladder** — feeds this member's flag resolution: a report weighted by an account with no history should not outweigh one from a long-standing
+  member.
+- **412 typed votes** — its ballots are a decision mechanism; vote kinds are the content mechanism, and keeping them distinct is the point (a "flag" and a
+  "decision" are not the same noun).
+- **413 user lists** — curation lists map directly onto gravity's implementation.
