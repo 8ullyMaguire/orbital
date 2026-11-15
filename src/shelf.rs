@@ -161,7 +161,7 @@ pub fn build(
         // `compose` speaks in `Id` (i64); the shelf speaks in pool indices. The cast is the boundary
         // between the crate's vocabulary and this repo's, and it stays in one place.
         let candidates: Vec<usize> = pool.ids().iter().map(|id| *id as usize).collect();
-        let items = to_items(&candidates, &tag_ids);
+        let items = capped(to_items(&candidates, &tag_ids));
         // The full MMR ordering, then the caps: `enforce` needs somewhere to look for a tail slot, and a
         // selection that stopped at `per_shelf` would have thrown away the candidates it needs.
         let order = select(items.clone(), items.len(), decl.for_you_lambda, |a, b| {
@@ -191,7 +191,7 @@ pub fn build(
         title: "Rising this week",
         subtitle: "Distinct visitors in the last seven days, damped for brand-new accounts.",
         items: {
-            let items = to_items(&by_rising, &tag_ids);
+            let items = capped(to_items(&by_rising, &tag_ids));
             let order = select(items.clone(), items.len(), decl.ordered_lambda, |a, b| {
                 polaris_candidates::jaccard(a, b)
             });
@@ -353,7 +353,7 @@ pub fn build(
         title: "New to the directory",
         subtitle: "Everyone who joined recently, newest first. No threshold to clear.",
         items: {
-            let items = to_items(&by_new, &tag_ids);
+            let items = capped(to_items(&by_new, &tag_ids));
             let order = select(items.clone(), items.len(), decl.ordered_lambda, |a, b| {
                 polaris_candidates::jaccard(a, b)
             });
@@ -429,6 +429,18 @@ fn to_items(order: &[usize], tag_ids: &HashMap<usize, Vec<i64>>) -> Vec<(usize, 
         // so only the ratios matter, and this keeps them identical for a ranking that was already sorted.
         .map(|(pos, idx)| (*idx, 1.0 - (pos as f64 / n), tag_ids.get(idx).cloned().unwrap_or_default()))
         .collect()
+}
+
+/// Cut a source list to the pool a shelf may consider.
+///
+/// `select` is MMR: it compares every candidate with every other, so an uncapped source list makes the
+/// home page quadratic in the number of members — 2,130 harvested profiles turned a 130 ms render into
+/// 31 s, and the page timed out at the proxy. `CANDIDATE_CAP` is the declared pool size, so the ordered
+/// shelves apply it like every other source does. At `lambda = 1.0` a truncation of the ranker's own
+/// order leaves the head of the shelf exactly as the ranker left it.
+fn capped(mut items: Vec<(usize, f64, Vec<i64>)>) -> Vec<(usize, f64, Vec<i64>)> {
+    items.truncate(CANDIDATE_CAP);
+    items
 }
 
 /// The observable facts a card may cite. Never the prior: D27 forbids a surface from naming it, and a
@@ -555,6 +567,29 @@ mod tests {
             .map(|m| m.handle.clone())
             .collect();
         assert_eq!(handles(&members, new), expected_new, "New must be the New ranker's order");
+    }
+
+    #[test]
+    fn a_source_list_larger_than_the_cap_keeps_the_rankers_head() {
+        // The case no fixture covered before the harvest: a pool bigger than `CANDIDATE_CAP`. `select` is
+        // quadratic, so the cap is what keeps the home page renderable; the head must not move, because
+        // that is the order the shelf promises to serve.
+        let members: Vec<MemberStat> = (0..CANDIDATE_CAP * 3)
+            .map(|i| member(&format!("m{i:02}"), (CANDIDATE_CAP * 3 - i) as i64, i as i64, i as i64, &["dev"]))
+            .collect();
+        let shelves = build(&members, &[], Utc::now(), &Declaration::default(), crate::dial::Lens::full(), crate::attention::Config::raw(), &crate::exposure::Config::off(), &crate::ceiling::Config::off(), &crate::floors::Floors::none());
+
+        let new = shelves.iter().find(|s| s.key == "new").unwrap();
+        let expected: Vec<String> = ranking::rank_new(members.clone(), Utc::now(), &[], 1.0)
+            .iter()
+            .take(PER_SHELF)
+            .map(|m| m.handle.clone())
+            .collect();
+        assert_eq!(handles(&members, new), expected, "the head of New is the ranker's head, cap or no cap");
+
+        // The cap itself, stated once: `select` never sees more than the declared pool.
+        let items = to_items(&(0..CANDIDATE_CAP * 3).collect::<Vec<usize>>(), &HashMap::new());
+        assert_eq!(capped(items).len(), CANDIDATE_CAP);
     }
 
     #[test]
