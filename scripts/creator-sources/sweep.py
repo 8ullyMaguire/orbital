@@ -23,9 +23,19 @@ FIELDS = ('id name disambiguation aliases gender birth_date country ethnicity '
           'career_start_year career_end_year scene_count created updated '
           'urls { url site { name } } images { url }')
 QUERY = '{ queryPerformers(input:{per_page:100,page:%d,sort:%s,direction:DESC}) { count performers {%s} } }'
+# The stash-box instances take the sort as an enum literal; ThePornDB takes it as a string.
+QUERY_STR = '{ queryPerformers(input:{per_page:100,page:%d,sort:"%s",direction:"DESC"}) { count performers {%s} } }'
 URLS = {'stashdb': 'https://stashdb.org/graphql', 'fansdb': 'https://fansdb.cc/graphql',
         'theporndb': 'https://theporndb.net/graphql'}
 KEYS = {'stashdb': 'STASHDB_KEY', 'fansdb': 'FANSDB_KEY', 'theporndb': 'STASH_APP_TOKEN'}
+# The stash-box instances answer `ApiKey: <token>`; ThePornDB is a different implementation and
+# wants `Authorization: Bearer <token>`.
+HEADERS = {'stashdb': 'ApiKey', 'fansdb': 'ApiKey', 'theporndb': 'Authorization'}
+BEARER = {'theporndb'}
+# `count` is the total on a stash-box and the page's row count on ThePornDB, whose `page` stops
+# answering new rows past ~150. There, the page count is a number the caller states, not a number
+# the server reports.
+NO_TOTAL = {'theporndb'}
 
 lock = threading.Lock()
 
@@ -39,11 +49,11 @@ def env(env_file):
     return out
 
 
-def page(url, key, header, n, sort):
+def page(url, key, header, n, sort, fmt=QUERY):
     for attempt in range(4):
         r = subprocess.run(['curl', '-s', '--max-time', '90', '-X', 'POST', url,
                             '-H', 'Content-Type: application/json', '-H', f'{header}: {key}',
-                            '-d', json.dumps({'query': QUERY % (n, sort, FIELDS)}), '-A', UA],
+                            '-d', json.dumps({'query': fmt % (n, sort, FIELDS)}), '-A', UA],
                            capture_output=True, text=True)
         try:
             d = json.loads(r.stdout)
@@ -72,18 +82,25 @@ def main():
 
     e = env(args.env_file)
     key = e[KEYS[args.site]]
+    if args.site in BEARER:
+        key = 'Bearer ' + key
     url = URLS[args.site]
-    header = 'ApiKey'
+    header = HEADERS[args.site]
 
-    first = page(url, key, header, 1, args.sort)
+    fmt = QUERY_STR if args.site in NO_TOTAL else QUERY
+    first = page(url, key, header, 1, args.sort, fmt)
     if 'error' in first:
         sys.exit(f'first page failed: {first["error"]}')
-    total = first['count']
-    last = (total + 99) // 100
     first_page = max(1, args.start_page)
-    pages = last
-    if args.max_pages:
-        pages = min(pages, first_page + args.max_pages - 1)
+    if args.site in NO_TOTAL:
+        pages = first_page + (args.max_pages or 150) - 1
+        total = 'unknown'
+    else:
+        total = first['count']
+        last = (total + 99) // 100
+        pages = last
+        if args.max_pages:
+            pages = min(pages, first_page + args.max_pages - 1)
     print(f'{args.site}: {total} performers, {pages} pages, {args.workers} workers', flush=True)
 
     fh = open(args.out, 'a' if args.append else 'w')
@@ -107,7 +124,7 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futs = {}
         for n in range(max(2, first_page), pages + 1):
-            futs[ex.submit(page, url, key, header, n, args.sort)] = n
+            futs[ex.submit(page, url, key, header, n, args.sort, fmt)] = n
         for done, fut in enumerate(futs, start=max(2, first_page)):
             res = fut.result()
             if 'error' in res:

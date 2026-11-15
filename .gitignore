@@ -20,3 +20,6 @@
 /scripts/creator-sources/merge.csv
 /scripts/creator-sources/merge.sql
 /scripts/creator-sources/orbital-ident.txt
+
+__pycache__/
+*.pyc

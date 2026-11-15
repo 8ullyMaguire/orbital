@@ -167,6 +167,12 @@ def classify(url):
             if kind == 'linkinbio':
                 first = rest.split('/')[0].split('?')[0].lower()
                 return (kind, label, icon, f'{dom}:{first}' if first else '')
+            if kind == 'patreon':
+                # `patreon.com/user?u=<id>` is one profile; the path segment is the word "user",
+                # which is a route word everywhere else and would erase the identity.
+                m = re.search(r'[?&]u=(\d+)', rest)
+                if m:
+                    return (kind, label, icon, f'patreon:{m.group(1)}')
             first = rest.split('/')[0].split('?')[0].lower()
             if not first or first in ROUTE_WORDS:
                 return (kind, label, icon, '')
@@ -177,6 +183,8 @@ def classify(url):
 
 def facts(p):
     """A short, factual bio. Nothing here is invented: every clause is a column."""
+    if p.get('_source') == 'pawchive':
+        return 'Illustrator publishing on Patreon.'  # the source is a Patreon archive
     role = 'Performer'
     if (p.get('gender') or '').startswith('TRANSGENDER'):
         role = 'Trans performer'
@@ -276,7 +284,8 @@ def main():
                     handle = slugify(k['key'].split(':', 1)[1])
                     if handle:
                         break
-        if not handle or len(handle) < 2:
+        if not handle or handle.isdigit():
+            # A Patreon id is a number and a handle made of digits is nobody's name.
             handle = slugify(p.get('name') or '')
         if len(handle) < 2:
             # p.get('name') can be a single character; the site's grammar wants two.
@@ -289,16 +298,16 @@ def main():
         used_handles.add(handle)
 
         links = [{'url': k['url'], 'label': k['label'], 'icon': k['icon']} for k in kept][:9]
-        if p.get('_source') == 'stashdb':
-            links.append({'url': f"https://stashdb.org/performers/{p['id']}",
-                          'label': 'StashDB', 'icon': 'book'})
-            keys.add(f"stashdb:{p['id']}")
-        else:
-            links.append({'url': f"https://fansdb.cc/performers/{p['id']}",
-                          'label': 'FansDB', 'icon': 'book'})
-            keys.add(f"fansdb:{p['id']}")
+        # A link back to the record, where the record has a public page. ThePornDB's performer
+        # pages are behind a login, so its rows carry only the surfaces the record itself has —
+        # a dead link is worse than no link.
+        src = {'stashdb': ('https://stashdb.org/performers/%s', 'StashDB'),
+               'fansdb': ('https://fansdb.cc/performers/%s', 'FansDB')}.get(p['_source'])
+        if src:
+            links.append({'url': src[0] % p['id'], 'label': src[1], 'icon': 'book'})
+        keys.add(f"{p['_source']}:{p['id']}")
 
-        tags = ['performer']
+        tags = ['artist'] if p.get('_source') == 'pawchive' else ['performer']
         kinds = {k['kind'] for k in kept}
         for kind in ('onlyfans', 'fansly', 'manyvids', 'justforfans', 'loyalfans',
                      'chaturbate', 'fanvue', 'clips4sale', 'reddit', 'patreon',
