@@ -1719,3 +1719,42 @@ against the condition**; nothing in this decision unparkes Phase D.
 a 504); a deploy no longer spends nineteen minutes drawing cards. `doctor` reports 0 failures — the
 uptime probe had been failing because it timed the home page. Link health is 4,050 unchecked and the
 daily checker covers 500/day, so the catalogue's quality gate takes eight days to see the new links.
+
+## D55 — The roster is a registry import, and the rule that keeps it a directory
+
+**Problem.** 2,132 members is a community; a directory of adult creators is not. StashDB (115,266
+performers) and FansDB (18,086) are the closest thing the adult web has to an authoritative registry,
+and both expose every performer with the socials their record carries. The question was not whether to
+import from them but which rows make a profile rather than a row in a database.
+
+**Decision.** A performer is imported when their record carries **at least one surface of their own** —
+X, Instagram, OnlyFans, Fansly, ManyVids, TikTok, Reddit, a link-in-bio page, a personal site. IAFD,
+Boobpedia, IMDb, Data18, ThePornDB and studio pages are evidence that a person exists, never a place to
+send a reader, and a performer with nothing but those is not imported. 86,534 of 133,352 records are
+excluded by that rule; 44,817 are imported, plus 13 that appeared between the sweep and the crawl.
+Dedupe is by link identity (an X handle or a creator URL Orbital already has), never by name.
+
+Two bugs in that rule, both found by measuring rather than by review: treating the first path segment
+of any link as a handle made `manyvids.com/profile` collide with `reddit.com/user` and reported 15,132
+performers as "already on Orbital" (the real overlap is 2,001); and a one-character name produced the
+handle `j`, which `users_handle_shape` rejects.
+
+**Rejected.** *Import everything the registries know.* It triples the catalogue with profiles whose
+only link goes to another catalogue, which is a link farm with a logo. *Import a hand-picked top
+slice.* Popularity in the registries is scene count, which measures who was cast, not who publishes —
+and the whole point of Orbital is that the ranking is our own measurement. *Import only performers
+with an OnlyFans/Fansly.* It would drop the X-and-Instagram creators, who are the majority of what the
+X following import found.
+
+**Consequences.** 46,949 members, 250,823 links, 160,603 tags. The tag vocabulary is derived from the
+links present (`onlyfans` 29,981, `instagram` 22,127, `amateur` 22,043, `pornstar` 3,249, `trans`
+2,342), not from anyone's editorial reading of a bio, so it is reproducible from the source record.
+
+`member_stats` had to be rewritten first: eight correlated probes per member is free at 2,132 and is
+~20 s per list page at 46,949, so list pages now aggregate each table once (`member_stats_from`). Home
+at 46,949 members measures 2.3–3.9 s locally *under a load average of 26 from unrelated work on the
+host* — the SQL half is 410 ms (EXPLAIN ANALYZE on the real query), the rest is decoding 47k rows and
+ranking them per request, twice on the home page. That is the next ceiling, and the fix is a
+short-TTL roster cache (tag-overlap narrowing would change what "neighbours" means), not a wider
+index. Link health, at 250,823 links and 500 checks a day, is a 500-day pass — the daily budget, not
+the checker, is what has to change.
