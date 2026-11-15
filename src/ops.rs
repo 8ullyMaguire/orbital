@@ -556,32 +556,71 @@ pub async fn og(pool: &PgPool, out: &Path, only: Option<&str>) -> Result<usize> 
     }
     let base = crate::config::Config::from_env()?.public_base;
     let mut written = 0usize;
+    let mut rasterised = 0usize;
     for (handle, name, links) in rows {
         let svg = crate::og::card(&name, &handle, links, &base);
         let svg_path = out.join(format!("{handle}.svg"));
-        std::fs::write(&svg_path, &svg)?;
+        let png_path = out.join(format!("{handle}.png"));
+        // This runs on every deploy, on the daily metadata timer and in the unit's `ExecStartPost`,
+        // and each card is an `rsvg-convert` process. Once the roster is four digits that is nineteen
+        // minutes per restart, nearly all of it re-drawing pictures that did not change — so a card is
+        // only written when its text differs from what is on disk.
+        let same_svg = !stale(&svg_path, &svg);
+        if !same_svg {
+            std::fs::write(&svg_path, &svg)?;
+        }
         if let Some(bin) = &raster {
             // Networks will not embed an SVG: the PNG is the one that matters, and it is only a
-            // subprocess away when the rasteriser is installed.
-            let png_path = out.join(format!("{handle}.png"));
-            let status = std::process::Command::new(bin)
-                .arg("--width")
-                .arg("1200")
-                .arg("--height")
-                .arg("630")
-                .arg("--output")
-                .arg(&png_path)
-                .arg(&svg_path)
-                .status();
-            match status {
-                Ok(s) if s.success() => {}
-                other => eprintln!("rsvg-convert failed for {handle}: {other:?}"),
+            // subprocess away when the rasteriser is installed. A missing PNG is always redrawn, so
+            // installing the rasteriser later still fills the directory.
+            if !same_svg || !png_path.exists() {
+                let status = std::process::Command::new(bin)
+                    .arg("--width")
+                    .arg("1200")
+                    .arg("--height")
+                    .arg("630")
+                    .arg("--output")
+                    .arg(&png_path)
+                    .arg(&svg_path)
+                    .status();
+                match status {
+                    Ok(s) if s.success() => rasterised += 1,
+                    other => eprintln!("rsvg-convert failed for {handle}: {other:?}"),
+                }
             }
         }
         written += 1;
     }
-    println!("wrote {written} card(s) to {}", out.display());
+    println!(
+        "wrote {written} card(s) to {} ({rasterised} rasterised)",
+        out.display()
+    );
     Ok(written)
+}
+
+/// Is the file at `path` different from `text`? A missing file is stale; an unreadable one is stale.
+/// Split out from `og` so the decision is testable without a database or a rasteriser.
+fn stale(path: &Path, text: &str) -> bool {
+    std::fs::read_to_string(path).map(|old| old != text).unwrap_or(true)
+}
+
+#[cfg(test)]
+mod stale_tests {
+    use super::stale;
+
+    #[test]
+    fn a_missing_or_changed_card_is_stale_and_an_identical_one_is_not() {
+        let dir = std::env::temp_dir().join(format!("orbital-og-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("card.svg");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(stale(&path, "one"), "a missing card must be written");
+        std::fs::write(&path, "one").unwrap();
+        assert!(!stale(&path, "one"), "an identical card must be skipped");
+        assert!(stale(&path, "two"), "a changed card must be written");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
 
 fn which(bin: &str) -> Option<PathBuf> {
