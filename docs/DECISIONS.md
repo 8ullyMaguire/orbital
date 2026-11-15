@@ -1803,3 +1803,41 @@ destination.
 **Consequences.** 262,493 links and 173,814 tags. The link checker's budget (500 a day) is now a
 year-long pass over the roster's links, which is D55's open point and this decision's main debt: the
 number that has to change is the budget, not the checker.
+
+## D57 — Two more registries, one negative result, and 1,191 members
+
+**What was added.** ThePornDB and Pawchive, plus a re-read of the two stash-box instances against the
+roster as it stands after D56.
+
+- **ThePornDB** (`theporndb.net/graphql`, Bearer auth). It is a *different dialect* of the same idea:
+  `sort`/`direction` are strings, not enum literals, and `count` is the page's row count, not a total.
+  Its `page` input stops answering new rows past ~150, so the accessible catalogue is **15,000** of an
+  unknown larger number — a ceiling the server imposes, not one we chose. Its performer pages are behind
+  a login, so a row carries no source link (a dead link is worse than no link). Yield: **164 new
+  creators** after identity dedupe.
+- **Pawchive** (`pawchive.py`) walks `/patreon/user/<id>/recommended` breadth-first, two requests per
+  node. From the seed the graph is **347 creators at depth 2** — it exhausts before any ceiling. 346
+  imported, as `artist` + `patreon`, bio "Illustrator publishing on Patreon." Calling a Patreon
+  illustrator a performer would be a sentence the source cannot support.
+- **X lists — negative result.** `1.1/lists/list` still answers (58 lists, 16,407 memberships on the
+  operator's account) but `1.1/lists/members` answers `404 "that page does not exist"` from both
+  `api.x.com` and `x.com/i/api`. The replacement is a GraphQL operation whose query id lives in the
+  logged-in app bundle. **Nothing was imported from lists**; `scripts/x-following/lists.py` is kept as
+  the record of the finding.
+
+**The re-read.** StashDB (160,266), FansDB (18,086) and ThePornDB (15,000) = 143,352 distinct records;
+84,499 already on Orbital by link identity, 96,008 with no surface of their own, **845 new** (fansdb
+359, stashdb 322, theporndb 164).
+
+**Measured.** 46,962 → **48,153 members**, 250,854 → **264,909 links**, 165,748 → **176,442 tags**.
+The 845 rows brought 1,827 links, of which 80 aggregator pages were expanded to 243 more; re-running
+`merge.sql` and `import.sql` reports `INSERT 0 0` on every statement.
+
+**A bug the Pawchive rows exposed.** A Patreon identity is `patreon.com/user?u=<id>` — the path segment
+is the word "user", which `ROUTE_WORDS` erases, so every Patreon creator looked like the same person;
+and a handle derived from the id was the digits themselves. `classify()` now returns `patreon:<id>`,
+and a numeric handle falls back to the name.
+
+**Consequences.** The roster is now three audiences, not one: performers (46,961), illustrators (346),
+and the import's own operator accounts. The vertical for silver is still `nsfw` for all three; if the
+operator wants them separated, that is a vertical decision, not an import one.
