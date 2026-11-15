@@ -1758,3 +1758,48 @@ ranking them per request, twice on the home page. That is the next ceiling, and 
 short-TTL roster cache (tag-overlap narrowing would change what "neighbours" means), not a wider
 index. Link health, at 250,823 links and 500 checks a day, is a 500-day pass — the daily budget, not
 the checker, is what has to change.
+
+## D56 — A link-in-bio page is one hop, and the hop is worth taking
+
+**Problem.** The registry import carried whatever URLs a record had, and 13,784 of them point at an
+aggregator — linktr.ee 8,798, allmylinks 3,243, beacons 1,031, link.me 413. Those pages are a list of
+somebody's elsewhere: opening them is the difference between a profile that says "they exist" and one
+that says where they actually are. The X-following import already did this for 303 pages; the registry
+rows are the same problem two orders of magnitude larger.
+
+**Decision.** Every aggregator URL the roster points at is fetched **once** (a cache keyed on the URL,
+so a later run costs nothing), and the creator surfaces it links to are kept: X, Instagram, OnlyFans,
+Fansly, ManyVids, TikTok, Reddit, Telegram, Spotify, a personal site. A page that yields none adds
+nothing — enrichment can add a link to a member, never create one.
+
+Two rejections are the rule, and both came from looking at real output rather than at the code:
+
+- **An asset is not a surface.** `static2.onlyfans.com/.../of-logo-b.jpg` was being read as the
+  identity `onlyfans.com:static`, which would make every profile that hotlinks the catalogue's logo the
+  same person. CDN subdomains and media extensions are rejected in `classify()`, where the identity is
+  defined, so the registry importer is protected too.
+- **An unknown host is a guess.** A page's body is full of wishlists, consent scripts and bare route
+  words (`tiktok.com/`); only hosts with a known grammar produce a link.
+
+`merge.py` exists because `build.py` cannot do this: it skips a performer whose identity is already on
+Orbital, so a second build emits nothing for the 44,817 members the first one created and their new
+socials would never reach the staging table. Merging keys on the handle and inserts only missing links,
+appended after `max(position)` — the existing order is the record's, a discovered social is an
+addition.
+
+**Measured.** 11,686 distinct aggregator URLs; 4,870 answered with a creator link (41 %); 20,300 creator
+links found; **11,639 new links on 4,513 members**, and **8,066 tags** their kinds imply. A second run
+of `merge.sql` reports `INSERT 0 0` on both statements. The 5,444 pages that answered nothing are
+linktr.ee 429s (a soft block that decays; `retry.sh` retries 250 every four hours) and 23 dead
+linkr.bio / campsite.bio pages.
+
+**Rejected.** *Re-run `build.py` and `import.sql`.* Reported above: the identity check is what keeps
+the import small, and it is exactly what makes a second build useless for existing members.
+*Keep every URL a page mentions.* A profile would become a copy of the page's chrome — its CDN, its
+analytics, the creators it recommends. *Treat the aggregator page as the profile.* It is a
+third-party redirect between the reader and the person; it stays as one link among many, not as the
+destination.
+
+**Consequences.** 262,493 links and 173,814 tags. The link checker's budget (500 a day) is now a
+year-long pass over the roster's links, which is D55's open point and this decision's main debt: the
+number that has to change is the budget, not the checker.
