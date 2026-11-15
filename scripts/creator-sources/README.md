@@ -6,6 +6,8 @@ public stash-box instances, plus whatever socials each performer's record points
 
     sweep.py   → new_<site>.jsonl     read the instance (full or since a cursor)
     build.py   → stage-creators.csv   decide who is a creator, what their profile says
+    enrich.py  → enrich.json          open the link-in-bio pages, keep the socials behind them
+    merge.py   → merge.csv + .sql     add the discovered socials to members already imported
     import.sql → orbital              write rows once, idempotently
     crawl.py   → all of the above     what the weekly timer runs
 

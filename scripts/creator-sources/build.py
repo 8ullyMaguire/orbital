@@ -98,10 +98,13 @@ EVIDENCE_HOSTS = (
 )
 
 AGG_SUFFIX = ('/api', '/v1')
+# Hosts that name the same surface under two spellings. `fans.ly/<x>` and
+# `fansly.com/<x>` are one profile, and the identity key must say so.
+ALIASES = {'fans.ly': 'fansly.com'}
 # A route word is not an identity: `manyvids.com/profile` names a page type, and matching it made
 # 15,132 performers look like they were already on Orbital.
 ROUTE_WORDS = {'profile', 'profiles', 'user', 'users', 'u', 'p', 'add', 'activity', 'studio',
-               'studios', 'video', 'videos', 'login', 'signup', 'i', 'home', 'watch', 'channel',
+               'studios', 'video', 'videos', 't', 'l', 'login', 'signup', 'i', 'home', 'watch', 'channel',
                'c', 'model', 'models', 'shop', 'store', 'tour', 'join', 'about', 'search',
                'view', 'photo', 'photos', 'gallery', 'post', 'posts', 'reel', 'shorts'}
 
@@ -142,6 +145,15 @@ def classify(url):
     h, rest = host_of(url)
     if not h:
         return None
+    # An asset is not a surface: `static2.onlyfans.com/.../of-logo-b.jpg` is the
+    # catalogue's own logo, and taking it as an identity would merge strangers.
+    if h.split('.')[0] in ('static', 'static1', 'static2', 'cdn', 'cdn-static', 'assets',
+                           'img', 'images', 'media', 'files', 'thumbs'):
+        return None
+    if re.search(r'\.(jpe?g|png|gif|webp|svg|ico|css|js|woff2?|mp4|webm)$', rest.lower()):
+        return None
+    # A creator's short domain and its long one are one identity.
+    h = ALIASES.get(h, h)
     for ev in EVIDENCE_HOSTS:
         if ev in h:
             return None

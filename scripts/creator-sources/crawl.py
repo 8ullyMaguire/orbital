@@ -130,6 +130,26 @@ def main():
     print('\n'.join(tail), flush=True)
     if r.returncode != 0:
         sys.exit(f'import failed: {r.stderr[-500:]}')
+
+    # One hop further out: the registry's rows carry aggregator pages (linktr.ee, allmylinks,
+    # beacons, link.me) and the socials live behind them. The cache is keyed on URL, so a run
+    # only fetches pages it has never seen — including the first run, which fetches everything
+    # the roster points at.
+    enrich = os.path.join(HERE, 'enrich.json')
+    r = sh([sys.executable, os.path.join(HERE, 'enrich.py'), '--stage', stage,
+            '--out', enrich])
+    print((r.stdout or r.stderr or '').strip().splitlines()[-1:] if r.stdout or r.stderr else '', flush=True)
+    merge_csv = os.path.join(HERE, 'merge.csv')
+    r = sh([sys.executable, os.path.join(HERE, 'merge.py'), '--stage', stage,
+            '--enrich', enrich, '--out', merge_csv])
+    print((r.stdout or '').strip().splitlines()[-2:-1], flush=True)
+    merge_sql = os.path.join(HERE, 'merge.sql')
+    if os.path.exists(merge_sql) and os.path.getsize(merge_csv) > 0:
+        r = sh(['psql', url, '-f', merge_sql])
+        tail = [l for l in (r.stdout or '').splitlines() if l.startswith(('INSERT', 'COMMIT', 'ERROR'))]
+        print('\n'.join(tail), flush=True)
+        if r.returncode != 0:
+            sys.exit(f'merge failed: {r.stderr[-500:]}')
     save_state({k: v for k, v in state.items() if v})
     print('cursor:', json.dumps(state), flush=True)
 
