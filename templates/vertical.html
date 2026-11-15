@@ -85,12 +85,21 @@
     <span class="muted sm">Opens the next profile in this vertical's ring; keep clicking and you come back around.</span>
   </p>
 
+  {% if v.nsfw %}
+  {# An NSFW vertical has no embed: `routes/public.rs::embed` refuses it by design (`if v.nsfw { return NotFound }`), so the
+     box above used to promise a preview at `/v/nsfw/embed` that answered 404 — a dead link the site rendered itself, found by
+     polaris-qa 2026-11-15. Saying why is better than a shorter page with no explanation. #}
+  <p class="muted sm">
+    This vertical carries NSFW members, so its leaderboard is not offered as an embed.
+  </p>
+  {% else %}
   <details class="embedbox">
     <summary>Embed this leaderboard on your site</summary>
     <p class="muted sm">Top 5 or Trending 5, live, with a join link. Paste this anywhere that accepts HTML:</p>
     <pre><code>{{ embed_snippet }}</code></pre>
     <p class="sm muted">Preview: <a href="{{ layout.base }}/v/{{ v.slug }}/embed?view={{ tab }}&count=5" target="_blank" rel="noopener">/v/{{ v.slug }}/embed?view={{ tab }}&amp;count=5</a></p>
   </details>
+  {% endif %}
 
 </div>
 {% endblock %}
