@@ -1676,3 +1676,46 @@ empty verticals, then seed and claim.*
 **Consequences.** Open steps **14** (was 24); parked **10**; shipped **27**. `doctor` gains a `fixtures` line that FAILs
 if a hidden test-shaped member ever exists again. The front page and the nav offer only populated verticals; the API
 keeps the full taxonomy, because publishing a count of zero is honest and offering a door with nobody behind it is not.
+
+## D54 — The roster arrives in bulk, and two ceilings were hiding behind a small one
+
+**Context.** The directory was imported from the owner's X following list: 2,130 profiles, 4,050
+links, 5,103 tags (`scripts/x-following/`, DECISIONS D9's one surface, adult accounts in `nsfw`).
+Every number in the site's arithmetic had been measured on a roster of two. Two of them were not
+ceilings at all, they were the absence of one:
+
+- `shelf::build` handed the whole member list to `polaris_candidates::select`, whose MMR is O(n²).
+  At 130 members the page took 130 ms; at 2,132 it took 31 s and the proxy answered 504. Both
+  ordered shelves now pass their source list through `capped()` (`CANDIDATE_CAP`).
+- `orbital og` rewrote and re-rasterised every card on every deploy, every `ExecStartPost` and every
+  daily metadata run: 4,266 `rsvg-convert` processes, ~19 minutes per restart. A card is now written
+  only when its SVG text changed (`ops::stale`), and its PNG only when the SVG changed or the PNG is
+  missing. Second run: `(0 rasterised)`, one `openat` per card.
+
+**Decision.** The pool cap and the card skip are the declared answer, not a workaround: a shelf may
+consider `CANDIDATE_CAP` candidates (already true for `For you` through `compose`) and an artefact is
+regenerated when its input changed. Neither changes a ranking: at `lambda = 1.0` the head of `Rising`
+and `New` is still the ranker's own head, and the frozen equality test plus a new pool-three-times-
+the-cap test hold it.
+
+The import also crosses D53's own return condition — "≥ 25 visible members" — without being the kind
+of membership that condition was written about: these are curated, unclaimed profile rows, not members
+who joined, contributed or can be asked anything. **The park stands until the owner reads that number
+against the condition**; nothing in this decision unparkes Phase D.
+
+**Rejected alternatives.**
+
+- *Raise the proxy timeout.* 31 s is not a page, and the cost grows quadratically — the next import
+  would need a bigger number, not a smaller one.
+- *Cache the home page.* It is per-visitor (tags, weights, gravity dial, exposure caps), so a shared
+  cache would serve one reader's lens to another. The cap costs nothing and keeps the composition.
+- *Skip `og` entirely.* The PNG is what social networks embed; the fix is to not redo work, not to
+  stop doing it.
+- *Place the roster's SFW-looking accounts in SFW verticals.* 2 of 2,130 qualified; the expensive
+  mistake is an adult account in a SFW vertical (D9), so the classifier defaults to `nsfw` and only
+  moves an account out when nothing adult matched.
+
+**Consequences.** Home renders in ~1.4 s at 2,132 members under a load average near 18 (was 31 s and
+a 504); a deploy no longer spends nineteen minutes drawing cards. `doctor` reports 0 failures — the
+uptime probe had been failing because it timed the home page. Link health is 4,050 unchecked and the
+daily checker covers 500/day, so the catalogue's quality gate takes eight days to see the new links.
