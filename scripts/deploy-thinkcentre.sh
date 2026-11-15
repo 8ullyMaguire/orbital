@@ -19,6 +19,7 @@ UNIT="\$HOME/.config/systemd/user/orbital.service"
 APP_ENV="\$HOME/.config/systemd/user/orbital-app.env"
 
 say() { printf '\n== %s\n' "$*"; }
+warn() { printf '!! %s\n' "$*"; }
 
 say "0/7 make the host's tree match the remote — it builds from ITS checkout, not yours"
 ssh "$HOST" bash -s <<REMOTE
@@ -117,6 +118,49 @@ ExecStart=%h/.cargo-target/orbital/release/orbital check-links --limit 500
 Nice=10
 NoNewPrivileges=true
 PrivateTmp=true
+UNIT
+
+# The creator crawl: stash-box instances are the closest thing the adult web has to an
+# authoritative performer registry, and new performers appear on them continuously. Weekly, oneshot,
+# incremental — `crawl.py` keeps a per-instance `updated` cursor, so a run reads the changed tail of
+# the table rather than 133,000 rows, and the identity check in `build.py` decides what is actually
+# new. It writes rows through `scripts/creator-sources/import.sql`, the same shape as the one-off
+# imports, so a failed run leaves nothing half-written.
+cat > "$HOME/.config/systemd/user/orbital-creators.service" <<'UNIT'
+[Unit]
+Description=Orbital — fold new creators from StashDB and FansDB into the directory
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/personal/documents/code/rust/orbital
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+EnvironmentFile=%h/.config/systemd/user/orbital-app.env
+ExecStart=/usr/bin/python3 /personal/documents/code/rust/orbital/scripts/creator-sources/crawl.py --max-pages 40
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+TimeoutStartSec=3600
+UNIT
+
+# The keys live outside the repo: $HOME/.config/orbital-creators.env (mode 600). Without it the
+# weekly run exits immediately, so say so here rather than at 05:10 on a Sunday.
+if [ ! -f "$HOME/.config/orbital-creators.env" ]; then
+  warn "orbital-creators.timer is installed but $HOME/.config/orbital-creators.env is missing — the crawl will exit until STASHDB_KEY / FANSDB_KEY are placed there"
+fi
+
+cat > "$HOME/.config/systemd/user/orbital-creators.timer" <<'UNIT'
+[Unit]
+Description=Weekly Orbital creator crawl
+
+[Timer]
+OnCalendar=Sun 05:10:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
 UNIT
 
 cat > "$HOME/.config/systemd/user/orbital-checklinks.timer" <<'UNIT'
@@ -297,7 +341,7 @@ WantedBy=timers.target
 UNIT
 
 systemctl --user daemon-reload
-systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer orbital-snapshot.timer orbital-metadata.timer orbital-uptime.timer
+systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer orbital-snapshot.timer orbital-metadata.timer orbital-uptime.timer orbital-creators.timer
 echo "units written; checklinks, backup, restore-test, prune, snapshot, metadata and uptime timers enabled"
 REMOTE
 

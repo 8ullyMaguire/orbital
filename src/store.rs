@@ -106,6 +106,82 @@ fn member_stats(ctx: &str) -> String {
     )
 }
 
+/// The same columns as `member_stats`, computed **once for the whole roster** instead of once per row.
+///
+/// `member_stats` is a correlated subquery block: eight probes per member, which is free at two members
+/// and fatal at forty-five thousand (a category page measured 18 s on a 45k catalogue). This fragment
+/// pre-aggregates each table by `user_id` and left-joins it, so a list query scans `source_hits`,
+/// `tags`, `user_verticals` and `tag_endorsements` once each. It returns the FROM clause; the caller
+/// writes the column list, which keeps one copy of the aggregate names.
+///
+/// `ctx` is the caller's bound parameter for the vertical context (or `NULL::text`): a click seen inside
+/// a category counts for that category, and a click with no context counts everywhere (D1's rule,
+/// unchanged — only the loop around it moved into SQL).
+fn member_stats_from(ctx: &str) -> String {
+    format!(
+        r#"
+      FROM users u
+      LEFT JOIN (
+          SELECT sh.user_id,
+                 count(DISTINCT sh.session_hash)::bigint AS visitors,
+                 count(DISTINCT sh.session_hash) FILTER (
+                     WHERE sh.created_at > now() - interval '7 days')::bigint AS visitors_7d,
+                 count(DISTINCT sh.session_hash) FILTER (
+                     WHERE sh.created_at >= now() - interval '28 days'
+                       AND sh.created_at <  now() - interval '7 days')::bigint AS visitors_prev,
+                 count(*)::bigint AS clicks
+            FROM source_hits sh
+           WHERE ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
+           GROUP BY sh.user_id
+      ) st ON st.user_id = u.id
+      LEFT JOIN (
+          SELECT h.user_id,
+                 sum(1.0 + ln(greatest(coalesce(h.position, 1), 1)::float8))::float8 AS attention,
+                 sum((1.0 + ln(greatest(coalesce(h.position, 1), 1)::float8))
+                     * power(0.5, extract(epoch FROM (now() - h.created_at)) / 86400.0 / 90.0))::float8 AS recent
+            FROM (SELECT DISTINCT ON (sh.user_id, sh.session_hash)
+                         sh.user_id, sh.session_hash, sh.position, sh.created_at
+                    FROM source_hits sh
+                   WHERE ({ctx} IS NULL OR sh.vertical_context = {ctx} OR sh.vertical_context IS NULL)
+                   ORDER BY sh.user_id, sh.session_hash, sh.created_at) h
+           GROUP BY h.user_id
+      ) at ON at.user_id = u.id
+      LEFT JOIN (
+          SELECT t.user_id, array_agg(t.tag_slug ORDER BY t.tag_slug) AS tags
+            FROM tags t GROUP BY t.user_id
+      ) tg ON tg.user_id = u.id
+      LEFT JOIN (
+          SELECT uv.user_id,
+                 array_agg(v.slug ORDER BY CASE WHEN uv.role = 'primary' THEN 0 ELSE 1 END, v.sort) AS verticals
+            FROM user_verticals uv JOIN verticals v ON v.slug = uv.vertical_slug
+           GROUP BY uv.user_id
+      ) vv ON vv.user_id = u.id
+      LEFT JOIN (
+          SELECT x.user_id, LEAST(1.0, max(x.cnt)::float8 / {full})::float8 AS endorse
+            FROM (SELECT t2.user_id, count(*) AS cnt
+                    FROM tags t2 JOIN tag_endorsements te ON te.tag_slug = t2.tag_slug
+                   GROUP BY t2.user_id, t2.tag_slug) x
+           GROUP BY x.user_id
+      ) en ON en.user_id = u.id
+"#,
+        full = crate::governance::ENDORSE_FULL
+    )
+}
+
+/// The column list that goes with `member_stats_from`, in the order `MemberStat` decodes.
+const MEMBER_STAT_COLS: &str = "\
+      u.id, u.handle, u.display_name, u.bio, u.accent, u.avatar_url, u.trust_level,
+      u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at,
+      coalesce(st.visitors, 0)::bigint AS visitors,
+      coalesce(st.visitors_7d, 0)::bigint AS visitors_7d,
+      coalesce(st.visitors_prev, 0)::bigint AS visitors_prev,
+      coalesce(st.clicks, 0)::bigint AS clicks,
+      coalesce(at.attention, 0)::float8 AS attention,
+      coalesce(at.recent, 0)::float8 AS recent,
+      coalesce(tg.tags, '{}'::text[]) AS tags,
+      coalesce(vv.verticals, '{}'::text[]) AS verticals,
+      coalesce(en.endorse, 0)::float8 AS endorse";
+
 // ---------------------------------------------------------------- users
 
 pub async fn user_by_handle(pool: &PgPool, handle: &str) -> Result<Option<User>, AppError> {
@@ -454,12 +530,11 @@ pub async fn vertical_counts(
 /// Members of one vertical, with stats measured in that vertical's context.
 pub async fn vertical_members(pool: &PgPool, slug: &str) -> Result<Vec<MemberStat>, AppError> {
     let sql = format!(
-        "SELECT u.id, u.handle, u.display_name, u.bio, u.accent, u.avatar_url, u.trust_level,
-                u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at, uv.role, {}
-           FROM users u
+        "SELECT {MEMBER_STAT_COLS}, uv.role
+           {from}
            JOIN user_verticals uv ON uv.user_id = u.id AND uv.vertical_slug = $1
           WHERE u.hidden = false",
-        member_stats("$1")
+        from = member_stats_from("$1")
     );
     Ok(sqlx::query_as::<_, MemberStat>(&sql)
         .bind(slug)
@@ -507,12 +582,11 @@ pub async fn record_impressions(pool: &PgPool, surface: &str, ids: &[Uuid]) -> R
 /// Every listed member, with stats over their whole click history.
 pub async fn all_members(pool: &PgPool, include_nsfw: bool) -> Result<Vec<MemberStat>, AppError> {
     let sql = format!(
-        "SELECT u.id, u.handle, u.display_name, u.bio, u.accent, u.avatar_url, u.trust_level,
-                u.bsky_handle, u.nsfw_enabled, u.created_at, u.last_active_at, 'primary'::text AS role, {}
-           FROM users u
+        "SELECT {MEMBER_STAT_COLS}, 'primary'::text AS role
+           {from}
           WHERE u.hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})
           ORDER BY u.created_at DESC",
-        member_stats("NULL::text")
+        from = member_stats_from("NULL::text")
     );
     Ok(sqlx::query_as::<_, MemberStat>(&sql)
         .bind(include_nsfw)
