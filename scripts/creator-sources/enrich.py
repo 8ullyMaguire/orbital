@@ -28,11 +28,14 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from build import classify  # noqa: E402  one definition of "a creator surface"
+
+DELAY = 0.0  # politeness, set by --retry-nulls
 
 UA = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/131.0 Safari/537.36')
@@ -77,6 +80,8 @@ def fetch(url, timeout=25):
 
 def extract(url):
     """Creator surfaces the page links to, as (kind, url) pairs, deduped by identity."""
+    if DELAY:
+        time.sleep(DELAY)
     body = fetch(url)
     if not body:
         return None
@@ -125,6 +130,8 @@ def main():
     ap.add_argument('--out', default=os.path.join(HERE, 'enrich.json'))
     ap.add_argument('--workers', type=int, default=6)
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--retry-nulls', action='store_true',
+                    help='re-fetch the pages that failed; linktr.ee answers 429 to 8 workers')
     ap.add_argument('--only', default='', help='comma-separated hosts to restrict to')
     args = ap.parse_args()
 
@@ -133,7 +140,13 @@ def main():
         want = set(args.only.split(','))
         agg = {u: h for u, h in agg.items() if host_of(u) in want}
     data = json.load(open(args.out)) if os.path.exists(args.out) else {}
-    todo = [u for u in agg if u not in data]
+    if args.retry_nulls:
+        todo = [u for u, v in data.items() if v is None]
+        global DELAY
+        DELAY = 0.5
+        print(f'retrying {len(todo)} pages that answered nothing', flush=True)
+    else:
+        todo = [u for u in agg if u not in data]
     if args.limit:
         todo = todo[:args.limit]
     print(f'aggregator urls: {len(agg)} across {len({host_of(u) for u in agg})} hosts; '

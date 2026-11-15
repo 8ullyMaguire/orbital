@@ -163,6 +163,40 @@ RandomizedDelaySec=1800
 WantedBy=timers.target
 UNIT
 
+# The slow second pass over link-in-bio pages. linktr.ee answers cached profiles to anybody and
+# 429 to a burst of uncached ones, so the first enrichment pass reads about 45% of what it asks
+# for. A small batch every four hours recovers the rest without asking for a ban; a page that
+# still answers nothing is retried next time and nothing is lost by stopping early.
+cat > "$HOME/.config/systemd/user/orbital-enrich-retry.service" <<'UNIT'
+[Unit]
+Description=Orbital — retry the link-in-bio pages that were rate-limited
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/personal/documents/code/rust/orbital/scripts/creator-sources
+EnvironmentFile=%h/.config/systemd/user/orbital-db.env
+ExecStart=/usr/bin/env bash ./retry.sh
+Nice=15
+NoNewPrivileges=true
+PrivateTmp=true
+TimeoutStartSec=3600
+UNIT
+
+cat > "$HOME/.config/systemd/user/orbital-enrich-retry.timer" <<'UNIT'
+[Unit]
+Description=Every four hours, retry a batch of the pages linktr.ee rate-limited
+
+[Timer]
+OnCalendar=*-*-* 02,06,10,14,18,22:40:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
+UNIT
+
 cat > "$HOME/.config/systemd/user/orbital-checklinks.timer" <<'UNIT'
 [Unit]
 Description=Daily Orbital link check
@@ -341,7 +375,7 @@ WantedBy=timers.target
 UNIT
 
 systemctl --user daemon-reload
-systemctl --user enable --now orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer orbital-snapshot.timer orbital-metadata.timer orbital-uptime.timer orbital-creators.timer
+systemctl --user enable --now orbital-enrich-retry.timer orbital-checklinks.timer orbital-backup.timer orbital-restore-test.timer orbital-prune.timer orbital-snapshot.timer orbital-metadata.timer orbital-uptime.timer orbital-creators.timer
 echo "units written; checklinks, backup, restore-test, prune, snapshot, metadata and uptime timers enabled"
 REMOTE
 
