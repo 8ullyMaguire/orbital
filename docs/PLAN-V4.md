@@ -418,8 +418,17 @@ lockfile locally, push to both remotes, then restore/remove those host files bef
   (the shell, not the password-holding account), second inserted 0, composition read
   `shells=1, claimed=1, entities=1, subjects=1, receipts=0`, 1 tag survived the `entity_tags` CHECK,
   and categories were filled from verticals.
-- Live deploy and the two `orbital catalogue` applies are **still running** when this is written.
-  Do not mark M1 Done in `docs/ROADMAP.md` until their output is in the handoff.
+- **M1 gate passed on the live host.** `orbital catalogue` was applied four times: `seen 48151
+  inserted 44581 conflicts 3570 tags 163948`, then `seen 3570 inserted 0 conflicts 3570`, then
+  `seen 3570 inserted 0 conflicts 3570` (conflicting shells linked to the canonical entity), then
+  `seen 0 inserted 0 conflicts 0 tags 0`. Live composition: `shells 48151 · subjects 48151 ·
+  entities 44581 · receipts 4`. `orbital doctor` reports `PASS catalogue  48151 shell(s), 48151
+  subject(s), 44581 entities, 4 receipts`. Public probes `/`, `/v/nsfw`, `/@thekayluxx` all 200.
+- The live run exposed a third defect the test did not yet cover: 3,570 shells share a canonical key
+  and were left without a subject link. The conflict branch now calls the database's own
+  `canonical_key()` function (not a hand-built comparison) and links the losing shell to the
+  existing entity; a regression assertion requires both shells of a shared surface to be subjects.
+  Final targeted run: `test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out`.
 
 ---
 

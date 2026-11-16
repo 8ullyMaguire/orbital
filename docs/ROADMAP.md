@@ -1,8 +1,9 @@
 # Orbital — roadmap
 
 State at the time of writing (rewritten 2026-11-16, D58): **schema v9**, **48,153 members of which
-48,151 are unclaimed shells**, **0 entities**, **0 categories**, **0 import receipts**, **267,030 links**,
-`orbital doctor` green before the catalogue gate was added, nine timers, home 3.1–3.8 s and `/v/nsfw`
+48,151 are unclaimed shells**, **44,581 entities**, categories filled from verticals, **4 import
+receipts**, **267,030 links**,
+`orbital doctor` green including `PASS catalogue` (48,151 shells / 48,151 subjects), nine timers, home 3.1–3.8 s and `/v/nsfw`
 4.8 s. The order below is now the **entity-first refactor**: fill the substrate, move the read path
 one surface at a time, add claim and erasure, receipt ingestion, then the scale and evaluation gates.
 The two-member snapshot at the top of this file was true on 2026-11-10 and is kept only in §1.
@@ -150,7 +151,9 @@ they describe a two-member site and must not be picked up by momentum.
 | M5 | **[OPS] Scale contract and link health**: roster cache until M2 removes the decode; budget ordered failing → new → clicked with coverage printed | same-session latency comparison; `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0 done in docs; **M1 in flight — code and tests written, live gate not yet run**; M2–M6 open.
+Status: M0 Done; **M1 Done — 2 targeted tests green, four live applies, fourth `seen 0 inserted 0`,
+`PASS catalogue`, three public 200s; evidence in `docs/PLAN-V4.md`**; M2–M6 open. M2's detailed
+section must be written before its first commit.
 
 ### Phase A — how it was judged (shipped, historical)
 

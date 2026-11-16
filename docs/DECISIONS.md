@@ -1880,5 +1880,10 @@ estate's adopt-by-deletion rule are unchanged.
 FAILs while shells outnumber subjects. The Nov 10 open list in `docs/ROADMAP.md` is marked historical
 and the refactor ledger is the only source of "next". Until M2 lands, the public pages are unchanged
 and the entity rows are substrate: filled, receipted, and invisible to readers. The 30-day claim
-conversion rule will be fixed in M3 before any further bulk import.
+The 30-day claim conversion rule will be fixed in M3 before any further bulk import.
+
+**M1 landed (2026-11-16).** The live backfill inserted 44,581 person entities and 163,948 tags,
+linked all 48,151 shells as subjects (3,570 sharing a canonical surface are one entity), and wrote
+four receipts; the fourth apply affected zero rows. `doctor` now fails the moment the subject count
+falls below the shell count. The entity rows remain substrate: no public page reads them until M2.
 
