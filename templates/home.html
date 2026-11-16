@@ -8,9 +8,9 @@
   <a href="/lens" style="margin-left:8px">edit</a>
 </p>
 {% endif %}
-{% include "tuner.html" %}
+<div class="wrap">{% include "tuner.html" %}</div>
 <section class="hero wrap">
-  <p class="eyebrow"><span class="dotlive"></span> {{ total_members }} {% if total_members == 1 %}person{% else %}people{% endif %} · {{ layout.nav.len() }} verticals · {{ total_clicks }} outbound clicks recorded</p>
+  <p class="eyebrow"><span class="dotlive" aria-hidden="true"></span> {{ total_members }} {% if total_members == 1 %}person{% else %}people{% endif %} · {{ layout.nav.len() }} verticals · {{ total_clicks }} outbound clicks recorded</p>
   <h1>Find people by<br><em>what they make</em>.</h1>
   <p class="lede">{{ layout.site_name }} is a directory of humans and their links, sorted into verticals. No feed, no algorithm, no growth team — a page per person, a leaderboard per craft, and the numbers are measured rather than claimed.</p>
   <form class="searchrow" action="/search" method="get" role="search">

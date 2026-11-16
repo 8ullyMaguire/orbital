@@ -1084,7 +1084,7 @@ fifth.
 | U5 | live grid is one grid | browser probe on `/` at 1280 | hero h1 left == section left ±1px |
 | U6 | no horizontal overflow and no blank main | probe on `/`, `/v/nsfw`, `/search?q=patreon` at 390 and 1280 | `overflowX=0`, `mainChars>40` each |
 | U7 | axe finds no WCAG 2.1 AA violations | `axe.run` with `wcag2a,wcag2aa,wcag21a,wcag21aa` on the three routes | `violations: []`; report incomplete separately |
-| U8 | manifest is served as a manifest | `curl -sI -m 20 'https://orbital.polarisocial.xyz/assets/manifest.webmanifest?v=2026.11.16.2'` | `200`, `content-type: application/manifest+json` |
+| U8 | manifest is served as a manifest | `curl -sI -m 20 'https://orbital.polarisocial.xyz/assets/manifest.webmanifest?v=2026.11.16.4'` | `200`, `content-type: application/manifest+json` |
 
 Axe is a floor: it cannot judge target size or non-text contrast, so U4 and the probe remain part of
 the gate. A clean axe run over zero rendered controls would be vacuous; the route count is asserted.
@@ -1098,15 +1098,16 @@ return `404 {"error":{"code":"not_found"}}`; a malformed `/api/claim` body retur
 `400 invalid_request` (JSON parse) or `400 unprocessable` (missing field), not `text/plain`.
 
 The shell: `.mnav` is visible and `.nav` hidden at 390; menu rows are 44 px; brand, menu, language and
-CTA are 44 px or taller (CTA 58.7); hero and sections both start at x=72.5 with the h1 and cards at
-x=96.5 at 1280. `/`, `/v/nsfw` and `/search?q=patreon` have `overflowX=0`; headings are `[1,2…]`,
+CTA are 44 px or taller and the CTA is one line ("Add profile", 101 px); hero and sections both start
+at x=72.5 with the h1, tuner and cards at x=96.5 at 1280; the tuner is no longer centred against a
+left-aligned hero. `/`, `/v/nsfw` and `/search?q=patreon` have `overflowX=0`; headings are `[1,2…]`,
 `[1]`, `[1,2,2]`; images have alt text; the search placeholder now fits (`scrollWidth 262 ==
-clientWidth 262` at 390); the crumb is 44 px; catalogue cards are `<article>` with a title link and a
-separate claim control; inline prose links are underlined (`link-in-text-block` was the one serious
-axe finding before that fix).
+clientWidth 262` at 390) and its ink is `#858bad`; the crumb is 44 px; catalogue cards are
+`<article>` with a title link and a separate claim control; inline prose links are underlined
+(`link-in-text-block` was the one serious axe finding before that fix).
 
 Axe 4.10.2 on the home page: **0 violations, 25 passes**; with `color-contrast` disabled, **0
-violations, 24 passes, 0 incomplete**. The full run reports 84 `color-contrast` *incomplete* nodes,
+violations, 24 passes, 0 incomplete**. The full run reports 84 `color-contrast` *incomplete* nodes at 1280 (89 at 390),
 not violations: buttons, the gradient headline and generated avatars are painted with gradients or
 pseudo-elements, which axe refuses to score. The browser probe measured 180 text nodes and reported
 one false positive (`h1 em` has `color: transparent` because of `background-clip: text`; its three

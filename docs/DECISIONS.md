@@ -2025,7 +2025,7 @@ The audit script and route list are committed under `scripts/site-audit/` so the
 re-run, not a rewrite. Live: `/api/v1/nope` is a contract 404, malformed bodies are `invalid_request`
 or `unprocessable`; axe 4.10.2 reports 0 violations (home 25 passes, search 23, vertical 20), with
 `color-contrast` incomplete only on gradient/pseudo-element surfaces; the probe measured 180 text
-nodes and found no contrast failure. Remaining: no service worker/offline mode, and the 84
+nodes and found no contrast failure. Remaining: no service worker/offline mode, and the 84–89
 `color-contrast` incomplete nodes need a manual or pixel-composited checker if a formal AA statement
 is required.
 

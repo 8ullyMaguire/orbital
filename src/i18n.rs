@@ -74,7 +74,7 @@ static STRINGS: &[Entry] = &[
     Entry("nav.directory", "Directory", "Directorio"),
     Entry("nav.verticals", "Verticals", "Verticales"),
     Entry("nav.search", "Search", "Buscar"),
-    Entry("cta.add", "Add your profile", "Añade tu perfil"),
+    Entry("cta.add", "Add profile", "Añade perfil"),
     Entry("foot.browse", "Browse", "Explorar"),
     Entry("foot.everything", "Everything", "Todo"),
     Entry("foot.search", "Search people", "Buscar personas"),

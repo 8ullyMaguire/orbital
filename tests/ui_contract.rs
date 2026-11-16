@@ -30,7 +30,7 @@ async fn home_renders_one_h1_and_the_mobile_shell(pool: PgPool) {
     let body = home(pool).await;
     assert_eq!(body.matches("<h1").count(), 1, "one h1 per page");
     assert!(body.contains(r#"<meta name="theme-color""#));
-    assert!(body.contains(r#"<link rel="manifest" href="/assets/manifest.webmanifest?v=2026.11.16.2">"#));
+    assert!(body.contains(r#"<link rel="manifest" href="/assets/manifest.webmanifest?v=2026.11.16.4">"#));
     assert!(body.contains(r#"<details class="mnav">"#));
     assert!(!body.contains("<h4"), "footer labels are not a fourth heading level");
 }
@@ -53,7 +53,7 @@ fn catalogue_cards_do_not_nest_anchors() {
 #[test]
 fn base_has_a_manifest_and_a_phone_menu() {
     let base = include_str!("../templates/base.html");
-    assert!(base.contains(r#"<link rel="manifest" href="/assets/manifest.webmanifest?v=2026.11.16.2">"#));
+    assert!(base.contains(r#"<link rel="manifest" href="/assets/manifest.webmanifest?v=2026.11.16.4">"#));
     assert!(base.contains(r#"<details class="mnav">"#));
     assert!(base.contains(r#"<summary class="nav-a mnav-summary" aria-label="Menu""#));
 }

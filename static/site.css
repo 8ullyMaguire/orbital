@@ -200,6 +200,7 @@ p a:hover, li a:hover { text-decoration-color: currentColor; }
   color: #a9aed0; margin: 0 0 22px;
 }
 .dotlive {
+  display: inline-block; vertical-align: middle; flex: 0 0 7px;
   width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
   box-shadow: 0 0 0 4px #3ec7a022;
 }
@@ -217,7 +218,7 @@ p a:hover, li a:hover { text-decoration-color: currentColor; }
   background: #ffffff08; border: 1px solid var(--line-2); color: var(--text);
   font: inherit; font-size: .97rem;
 }
-.searchrow input::placeholder { color: #767c9c; }
+.searchrow input::placeholder { color: #858bad; }
 .searchrow input:focus { outline: none; border-color: #7c5cff88; background: #ffffff0d; }
 .hint { margin-top: 14px; }
 .hint a { color: #b3a6ff; border-bottom: 1px solid #b3a6ff44; }
@@ -577,7 +578,7 @@ a.vname:hover { color: #fff; text-decoration: underline; text-underline-offset: 
 
 /* The tuner: a form, not a widget. It works with JavaScript off because it is a form. */
 .tuner {
-  margin: 18px auto;
+  margin: 18px 0;
   max-width: 720px;
   border: 1px solid var(--line, #24262c);
   border-radius: 12px;

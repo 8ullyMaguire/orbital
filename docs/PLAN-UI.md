@@ -262,6 +262,6 @@ Implemented with three additions the plan did not name: `api_envelope` normalise
 rejections (bad JSON, wrong method, unknown API path) rather than only handler errors; inline prose
 links gained an underline after axe's `link-in-text-block` finding on `/search`; and the breadcrumb
 became a 44 px target. `api_error_contract` finished at **7 passed**, not 4; `ui_contract` 4 and
-`http` 69 unchanged. The version query is `?v=2026.11.16.2` on the stylesheet and manifest so a
+`http` 69 unchanged. The version query is `?v=2026.11.16.4` on the stylesheet and manifest so a
 deploy is not hidden behind the edge's five-minute cache. Full measurements: `docs/SPEC.md` §8
 "Result".
