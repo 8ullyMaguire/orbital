@@ -50,6 +50,12 @@ async fn vertical_cards_are_bounded_and_keep_the_leader(pool: PgPool) {
         !bounded.iter().any(|m| m.id == ids[29]),
         "the one-visitor tail is not decoded at all"
     );
+    let candidates = orbital::store::vertical_candidate_ids(&pool, "dev", 24)
+        .await
+        .expect("candidate ids");
+    let decorated: Vec<Uuid> = bounded.iter().map(|m| m.id).collect();
+    assert_eq!(candidates, decorated, "the decorated rows are exactly the candidate ids, in order");
+    assert_eq!(candidates.len(), 24, "the decoration pass sees 24 ids, not the 30-member vertical");
 
     let count = orbital::store::vertical_member_count(&pool, "dev")
         .await

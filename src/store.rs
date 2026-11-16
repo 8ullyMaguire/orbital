@@ -542,25 +542,56 @@ pub async fn vertical_members(pool: &PgPool, slug: &str) -> Result<Vec<MemberSta
         .await?)
 }
 
-/// The head of one vertical's leaderboard, bounded before decode. The ORDER BY is a candidate
-/// selector for `rank_top`, not a replacement for it: the ranker still owns the final order.
+/// The ids a vertical surface may decorate. This query never touches tags, verticals or endorsements:
+/// it only joins the memberships to the small `source_hits` aggregate, so the sort is over simple
+/// rows. The caller decorates this list and nothing else.
+pub async fn vertical_candidate_ids(
+    pool: &PgPool,
+    slug: &str,
+    limit: i64,
+) -> Result<Vec<Uuid>, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT u.id
+           FROM users u
+           JOIN user_verticals uv ON uv.user_id = u.id AND uv.vertical_slug = $1
+           LEFT JOIN (
+               SELECT sh.user_id,
+                      count(DISTINCT sh.session_hash)::bigint AS visitors,
+                      count(*)::bigint AS clicks
+                 FROM source_hits sh
+                WHERE sh.vertical_context = $1 OR sh.vertical_context IS NULL
+                GROUP BY sh.user_id
+           ) st ON st.user_id = u.id
+          WHERE u.hidden = false
+          ORDER BY coalesce(st.visitors, 0) DESC, coalesce(st.clicks, 0) DESC, u.created_at
+          LIMIT $2",
+    )
+    .bind(slug)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
 pub async fn vertical_members_limited(
     pool: &PgPool,
     slug: &str,
     limit: i64,
 ) -> Result<Vec<MemberStat>, AppError> {
+    let ids = vertical_candidate_ids(pool, slug, limit).await?;
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
     let sql = format!(
         "SELECT {MEMBER_STAT_COLS}, uv.role
            {from}
            JOIN user_verticals uv ON uv.user_id = u.id AND uv.vertical_slug = $1
-          WHERE u.hidden = false
-          ORDER BY coalesce(st.visitors, 0) DESC, coalesce(st.clicks, 0) DESC, u.created_at
-          LIMIT $2",
+          WHERE u.hidden = false AND u.id = ANY($2)
+          ORDER BY array_position($2::uuid[], u.id)",
         from = member_stats_from("$1")
     );
     Ok(sqlx::query_as::<_, MemberStat>(&sql)
         .bind(slug)
-        .bind(limit)
+        .bind(&ids)
         .fetch_all(pool)
         .await?)
 }

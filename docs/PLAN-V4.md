@@ -992,6 +992,33 @@ Short-TTL roster cache until M2 removes the roster decode; link check budget ord
 clicked, with coverage printed next to the failure count. Gate: same-session latency comparison and
 a coverage number in `doctor`.
 
+### M5a — two-phase vertical candidates (the deferred M2b pushdown)
+
+**Reproduced:** `vertical_members_limited` still builds the full decorated roster — `source_hits`,
+`tags`, `verticals`, endorsements — in `member_stats_from`, joins the 48k members, sorts them and only
+then applies `LIMIT`. M2b bounded the decode but not the SQL work. Live home is 1.99 / 1.96 / 2.04 s
+this session; `/v/nsfw` reads the same shape with a 300-row pool.
+
+**Decision.** Split the read into two queries. The first selects candidate ids only: it joins
+`user_verticals` to a small `source_hits` aggregate and orders by visitors, clicks, then `created_at`,
+with the same `LIMIT`. The second decorates only those ids (`WHERE u.id = ANY($2)`) and restores their
+order with `array_position`. This is the CTE pushdown D58 named, expressed as two statements because it
+lets the test assert the candidate list separately from the decoration. Ordering, role, and every
+rendered field stay identical; only the number of decorated rows changes.
+
+1. `src/store.rs` — add `vertical_candidate_ids(pool, slug, limit) -> Result<Vec<Uuid>, AppError>` and
+   change `vertical_members_limited` to:
+   - call it;
+   - return `Vec::new()` for an empty candidate list (no `ANY('{}')` surprise);
+   - decorate with `SELECT {MEMBER_STAT_COLS}, uv.role {from} JOIN user_verticals uv ... WHERE uv.vertical_slug = $1 AND u.id = ANY($2) ORDER BY array_position($2::uuid[], u.id)`.
+2. `tests/vertical_bounds.rs` — add assertions that `vertical_candidate_ids` returns exactly the 24
+   ids in `vertical_members_limited` order, that the leader is first and the tail absent, and that the
+   decorated rows are 24, not 30. Keep the existing home-pill assertion.
+
+Verify: `cargo test --test vertical_bounds` → green; `cargo test --test http home` → green; live home
+and `/v/nsfw` 200 with the same counts, plus a same-session before/after comparison (NO VERDICT if load
+changes). The pushdown is a SQL-shape change; no template or route changes.
+
 ## M6 — evaluation before any new ranking rule
 
 Commit a golden set over entities, run `orbital eval`, and refuse a ranking change below the sample
