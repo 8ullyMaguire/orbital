@@ -1880,7 +1880,7 @@ estate's adopt-by-deletion rule are unchanged.
 FAILs while shells outnumber subjects. The Nov 10 open list in `docs/ROADMAP.md` is marked historical
 and the refactor ledger is the only source of "next". Until M2 lands, the public pages are unchanged
 and the entity rows are substrate: filled, receipted, and invisible to readers. The 30-day claim
-The 30-day claim conversion rule will be fixed in M3 before any further bulk import.
+conversion rule will be fixed in M3 before any further bulk import.
 
 **M1 landed (2026-11-16).** The live backfill inserted 44,581 person entities and 163,948 tags,
 linked all 48,151 shells as subjects (3,570 sharing a canonical surface are one entity), and wrote
@@ -1898,4 +1898,18 @@ enter any shelf or ranking. The three member shelves are untouched by M2a.
 `doctor` still reports `PASS catalogue`. The host release build was blocked by another project's
 build lock, so the release binary was built from the host's freshly built bundle on the workstation
 and installed with `install -m 755`; the service was restarted and healthz answered 200.
+
+**M2b decision (2026-11-16).** Vertical cards now read at most 24 decoded rows per vertical plus one
+indexed `count(*)`, instead of decoding all 48k rows once per populated vertical. The candidate ORDER
+BY is a selector for the existing `rank_top`, not a new ranker; vertical-context stats (D1) are kept.
+
+**M2b result — NO VERDICT on latency.** `vertical_bounds` 1 passed, `entity_read` 1 passed, `http home`
+4 passed; live home still 200 with the nsfw pill reading 48150 and `PASS catalogue`. Same-session
+timings went 3.77/2.96 s before to 6.54/4.81/4.87 s after, but host load changed, so the comparison
+does not prove a regression or an improvement. The SQL still sorts all 48k aggregated rows before
+`LIMIT`; only the decode and the pill count are bounded. **Unblock for the latency gate:** push the
+candidate selection into a CTE that restricts each aggregate subquery to the chosen 24 user ids, so
+the sort is over `source_hits` groups rather than the decorated roster. That work is deferred to M5,
+which already owns the scale contract. M2b is "bounded decode shipped, latency gate deferred", not
+"Done".
 

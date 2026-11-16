@@ -151,9 +151,8 @@ they describe a two-member site and must not be picked up by momentum.
 | M5 | **[OPS] Scale contract and link health**: roster cache until M2 removes the decode; budget ordered failing → new → clicked with coverage printed | same-session latency comparison; `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0 Done; M1 Done (evidence in `docs/PLAN-V4.md`); **M2 In flight — M2a Done (live `/` 4.61 s
-vs 7.98 s same-session baseline; catalogue section + claim CTA present; `entity_read` 2 passed,
-`http home` 4 passed); M2b vertical cards and M2c other surfaces open**; M3–M6 open.
+Status: M0 Done; M1 Done; M2a Done; **M2b bounded decode shipped (`53ae60b`), latency gate deferred
+to M5 with the exact unblock in D58; M2c other surfaces open**; M3–M6 open.
 
 ### Phase A — how it was judged (shipped, historical)
 

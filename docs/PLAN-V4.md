@@ -650,6 +650,13 @@ pub async fn vertical_member_count(pool: &PgPool, slug: &str) -> Result<i64, App
 Verify: `cargo test --test vertical_bounds` → green; `cargo test --test http home` → green; live
 `/` 200 with the vertical card pill and the catalogue section; same-session before/after latency.
 
+M2b gate: **bounded decode shipped, latency gate deferred**. `vertical_bounds` 1 passed, `entity_read`
+1 passed, `http home` 4 passed; live `/` 200 with the nsfw pill reading 48150 and `PASS catalogue`.
+Same-session timing 3.77/2.96 s before → 6.54/4.81/4.87 s after under changed host load: NO VERDICT.
+The SQL still sorts the decorated 48k roster before LIMIT; only decode and count are bounded. Deferred
+to M5 with the exact unblock recorded in D58: a CTE that restricts each aggregate subquery to the 24
+chosen user ids.
+
 ### M2c — details written when M2b closes
 
 ## M3 — claim proof and erasure
