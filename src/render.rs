@@ -261,6 +261,8 @@ pub struct HomeTemplate {
     pub verticals: Vec<VerticalCard>,
     /// The three shelves `src/shelf.rs` composes. An empty pool yields no shelves, not empty headings.
     pub shelves: Vec<ShelfView>,
+    /// M2a: six rows read from `entities` with an explicit LIMIT, independent of roster size.
+    pub catalogue: Vec<EntityCardView>,
     pub total_members: i64,
     pub total_clicks: i64,
     pub quick: Vec<(String, String)>,
@@ -269,6 +271,17 @@ pub struct HomeTemplate {
     /// One line per declared floor, including the ones that matched nothing (D51). Empty is the common case and
     /// renders no block at all.
     pub floor_notes: Vec<String>,
+}
+
+/// One card in the bounded catalogue shelf. The URL points at the subject's existing profile when
+/// there is one, otherwise at search; there is no entity page to link to yet.
+#[derive(Clone)]
+pub struct EntityCardView {
+    pub url: String,
+    pub title: String,
+    pub description: String,
+    pub category_label: String,
+    pub claimed: bool,
 }
 
 /// One shelf as the template receives it: a heading, a subtitle that is a claim about the arithmetic,

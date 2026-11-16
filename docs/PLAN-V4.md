@@ -432,14 +432,124 @@ lockfile locally, push to both remotes, then restore/remove those host files bef
 
 ---
 
-## M2 — the entity read path (next; details written when M1 closes)
+## M2 — the entity read path (in flight; M2a below, M2b written when M2a closes)
 
-Home shelves first, then `/v/{slug}`, `/search`, the two feeds and `sitemap.xml`. One surface per
-commit, each with a live 200/body probe and a roster-size assertion. The shelves keep their three
-names and their per-source budgets; the switch is in `src/shelf.rs`, not scattered `.take(n)` edits.
-A shell entity is visible as a catalogue entry with a claim CTA but is `noindex` and never ranked
-until claimed. Gate: same-session before/after latency at the same load, plus every public surface
-answering 200 with a non-empty list where a fixture provides one.
+Order inside the row: **M2a** bounded entity shelf on home (this turn), **M2b** vertical cards from a
+bounded query instead of ten full roster decodes, **M2c** `/v/{slug}`, search, feeds and sitemap.
+One surface per commit; a row is Done only when every surface has its gate. The baseline measured
+this session on the live host was `/` 7.98 s and `/v/nsfw` 11.68 s under load >20, worse than the
+3.1–4.8 s measured at M1 — same-session comparisons only, never compare across sessions.
+
+### M2a — a bounded catalogue shelf on home
+
+The three member shelves stay untouched. A fourth section reads `entities` directly with an explicit
+`LIMIT`, so it is the first public surface whose cost is independent of the 48k-row roster.
+
+1. `src/models.rs` — append:
+
+```rust
+/// One bounded catalogue entry for the home shelf. `claimed` comes from the users behind the
+/// subject link, not from the entity: an imported shell is visible but cannot rank or be indexed.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct EntitySummary {
+    pub id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub description: String,
+    pub category_label: String,
+    pub nsfw: bool,
+    pub claimed: bool,
+    pub handle: String,
+}
+```
+
+2. `src/store.rs` — append:
+
+```rust
+/// A bounded read from the catalogue. The ORDER BY and LIMIT are part of the scale contract: this
+/// query returns six rows whether the roster has two members or forty-eight thousand.
+pub async fn catalogue_entries(
+    pool: &PgPool,
+    include_nsfw: bool,
+    limit: i64,
+) -> Result<Vec<EntitySummary>, AppError> {
+    sqlx::query_as::<_, EntitySummary>(
+        "SELECT e.id, e.slug, e.title, e.description,
+                COALESCE(c.label, 'Catalogue') AS category_label,
+                e.nsfw,
+                EXISTS (SELECT 1 FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                        WHERE ep.entity_id = e.id
+                          AND (u.claimed_at IS NOT NULL OR u.password_hash IS NOT NULL)) AS claimed,
+                COALESCE((SELECT u.handle FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                          WHERE ep.entity_id = e.id AND ep.role = 'subject'
+                          ORDER BY u.handle LIMIT 1), '') AS handle
+         FROM entities e LEFT JOIN categories c ON c.slug = e.category_slug
+         WHERE e.hidden = false AND e.merged_into IS NULL AND ($1 OR e.nsfw = false)
+         ORDER BY e.created_at DESC
+         LIMIT $2",
+    )
+    .bind(include_nsfw)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+```
+
+3. `src/render.rs` — append `EntityCardView { url, title, description, category_label, claimed }`
+   and add `pub catalogue: Vec<EntityCardView>` to `HomeTemplate`.
+
+4. `src/routes/public.rs` in `home`, after `let shelves`:
+
+```rust
+    // M2a: the first bounded read from the catalogue. Six rows, whatever the roster size.
+    let catalogue: Vec<crate::render::EntityCardView> = store::catalogue_entries(&st.pool, true, 6)
+        .await?
+        .into_iter()
+        .map(|e| crate::render::EntityCardView {
+            url: if e.handle.is_empty() {
+                format!("/search?q={}", e.slug)
+            } else {
+                format!("/@{}", e.handle)
+            },
+            title: e.title,
+            description: e.description,
+            category_label: e.category_label,
+            claimed: e.claimed,
+        })
+        .collect();
+```
+
+5. `templates/home.html` — add after the verticals section:
+
+```html
+{% if catalogue.len() > 0 %}
+<section class="wrap section" data-shelf="catalogue">
+  <div class="section-h">
+    <h2>Recently catalogued</h2>
+    <p class="muted sm">The catalogue is being filled from imported surfaces. Unclaimed entries carry a claim CTA and do not rank.</p>
+  </div>
+  <div class="vgrid">
+    {% for e in catalogue %}
+    <a class="vcard" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>
+      <div class="vcard-h"><span class="vname">{{ e.title }}</span><span class="pill">{{ e.category_label }}</span></div>
+      <p class="muted sm vdesc">{{ e.description }}</p>
+      {% if !e.claimed %}<p class="muted sm">Unclaimed — <a href="/app/#/join">claim this</a></p>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+```
+
+6. `tests/entity_read.rs` — store-level gate: hidden and merged entities excluded, SFW filter
+   honoured, `limit` respected, `claimed` derived from the user behind the subject link; plus one
+   HTTP assertion that `/` contains `data-shelf="catalogue"` and the fixture title.
+
+Verify: `cargo test --test entity_read` → green; `cargo test --test http home` → green; live
+`curl https://orbital.polarisocial.xyz/ | grep -o 'data-shelf="catalogue"'` → the string appears;
+`curl -s -o /dev/null -w '%{http_code} %{time_total}s'` before and after on the same host.
+
+### M2b / M2c — details written when M2a closes
 
 ## M3 — claim proof and erasure
 

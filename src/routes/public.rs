@@ -211,6 +211,24 @@ pub async fn home(
                 }
             })
             .collect();
+
+    // M2a: the first bounded read from the catalogue. Six rows, whatever the roster size.
+    let catalogue: Vec<crate::render::EntityCardView> = store::catalogue_entries(&st.pool, true, 6)
+        .await?
+        .into_iter()
+        .map(|e| crate::render::EntityCardView {
+            url: if e.handle.is_empty() {
+                format!("/search?q={}", e.slug)
+            } else {
+                format!("/@{}", e.handle)
+            },
+            title: e.title,
+            description: e.description,
+            category_label: e.category_label,
+            claimed: e.claimed,
+        })
+        .collect();
+
     // What this render put in front of someone, recorded once per member per hour. Recorded after the
     // choice, never before: a page that counted itself before choosing would inflate its own ceiling.
     let shown: Vec<uuid::Uuid> = shelves
@@ -251,6 +269,7 @@ pub async fn home(
         tuner,
         verticals: cards,
         shelves,
+        catalogue,
         total_members,
         total_clicks,
         quick,

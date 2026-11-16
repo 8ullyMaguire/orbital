@@ -237,3 +237,17 @@ pub struct BackfillCounts {
     pub conflicts: i64,
     pub tags: i64,
 }
+
+/// One bounded catalogue entry for the home shelf. `claimed` comes from the users behind the
+/// subject link, not from the entity: an imported shell is visible but cannot rank or be indexed.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct EntitySummary {
+    pub id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub description: String,
+    pub category_label: String,
+    pub nsfw: bool,
+    pub claimed: bool,
+    pub handle: String,
+}

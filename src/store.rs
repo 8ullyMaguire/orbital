@@ -1700,3 +1700,32 @@ pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> anyhow::Re
     }
     Ok(counts)
 }
+
+/// A bounded read from the catalogue. The ORDER BY and LIMIT are part of the scale contract: this
+/// query returns six rows whether the roster has two members or forty-eight thousand.
+pub async fn catalogue_entries(
+    pool: &PgPool,
+    include_nsfw: bool,
+    limit: i64,
+) -> Result<Vec<EntitySummary>, AppError> {
+    sqlx::query_as::<_, EntitySummary>(
+        "SELECT e.id, e.slug, e.title, e.description,
+                COALESCE(c.label, 'Catalogue') AS category_label,
+                e.nsfw,
+                EXISTS (SELECT 1 FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                        WHERE ep.entity_id = e.id
+                          AND (u.claimed_at IS NOT NULL OR u.password_hash IS NOT NULL)) AS claimed,
+                COALESCE((SELECT u.handle FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                          WHERE ep.entity_id = e.id AND ep.role = 'subject'
+                          ORDER BY u.handle LIMIT 1), '') AS handle
+         FROM entities e LEFT JOIN categories c ON c.slug = e.category_slug
+         WHERE e.hidden = false AND e.merged_into IS NULL AND ($1 OR e.nsfw = false)
+         ORDER BY e.created_at DESC
+         LIMIT $2",
+    )
+    .bind(include_nsfw)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}

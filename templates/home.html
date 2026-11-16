@@ -47,8 +47,26 @@
 </section>
 
 <p class="wrap muted sm policy" style="margin:0 auto 4px">
-  Each person appears once on this page, and the busiest faces make room for the quieter ones.
+Each person appears once on this page, and the busiest faces make room for the quieter ones.
 </p>
+
+{% if catalogue.len() > 0 %}
+<section class="wrap section" data-shelf="catalogue">
+<div class="section-h">
+  <h2>Recently catalogued</h2>
+  <p class="muted sm">The catalogue is being filled from imported surfaces. Unclaimed entries carry a claim CTA and do not rank.</p>
+</div>
+<div class="vgrid">
+  {% for e in catalogue %}
+  <a class="vcard" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>
+    <div class="vcard-h"><span class="vname">{{ e.title }}</span><span class="pill">{{ e.category_label }}</span></div>
+    <p class="muted sm vdesc">{{ e.description }}</p>
+    {% if !e.claimed %}<p class="muted sm">Unclaimed — <a href="/app/#/join">claim this</a></p>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+</section>
+{% endif %}
 
 {% if floor_notes.len() > 0 %}
 <div class="ranked-away">
