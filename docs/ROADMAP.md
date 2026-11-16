@@ -151,8 +151,8 @@ they describe a two-member site and must not be picked up by momentum.
 | M5 | **[OPS] Scale contract and link health**: roster cache until M2 removes the decode; budget ordered failing → new → clicked with coverage printed | same-session latency comparison; `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0 Done; M1 Done; M2a Done; M2b bounded decode shipped (latency deferred to M5); **M2c
-vertical page, feeds and sitemap Done (`93512af`, `f894069`); M2c search open**; M3–M6 open.
+Status: M0 Done; M1 Done; **M2 Done (M2a, M2b bounded decode with latency deferred to M5, M2c
+vertical/feeds/sitemap/search; `92e3be8` closed M2)**; M3–M6 open.
 
 ### Phase A — how it was judged (shipped, historical)
 

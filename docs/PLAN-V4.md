@@ -866,8 +866,15 @@ pub async fn search_entities(
    entity titles while `/search?q=nothing-matches` contains neither.
 
 Verify: `cargo test --test search_entities` → green; full `http` suite green; live
-`/search?q=patreon` 200 with `data-shelf="catalogue-search"` and a real entity title in the body, plus
+`/search` 200 with `data-shelf="catalogue-search"` and a real entity title in the body, plus
 same-session timing.
+
+M2c search passed: `search_entities` 1 passed, full `http` suite 69 passed. Live `/search?q=patreon`
+200 in 2.14 s with one catalogue shelf and the real title `11_22 AI (Patreon)` in the body;
+`/search?q=zzz-no-match` has no catalogue shelf; `/v/nsfw` 200 in 1.52 s; `doctor` PASS catalogue.
+The member results keep their 60-row limit, and the catalogue adds at most 12 rows. **M2 closes here:
+M2a home shelf, M2b bounded vertical cards, M2c vertical page, feeds, sitemap and search all have
+targeted tests plus live 200/body probes.** M5 still carries M2b's deferred latency pushdown.
 
 ## M3 — claim proof and erasure
 

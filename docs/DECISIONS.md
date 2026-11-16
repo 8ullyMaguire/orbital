@@ -1929,3 +1929,10 @@ same order and content. Gate: `feed_bounds` 1 passed, full `http` suite 69 passe
 in the sitemap; timings 1.21 / 0.82 / 0.87 / 0.48 s. Search remains inside M2c; M5 still owns the M2b
 pushdown.
 
+**M2c search and M2 close (2026-11-16).** Search queried only users while 399 live entities matched
+`patreon`. It now adds a 12-row bounded `search_entities` shelf over title, description and tags, with
+claim CTAs and `nofollow` for unclaimed shells; the 60-row member result is unchanged. Gate:
+`search_entities` 1 passed, full `http` suite 69 passed. Live `/search?q=patreon` 200 in 2.14 s with
+`data-shelf="catalogue-search"` and the real title `11_22 AI (Patreon)`; an unmatched query has no
+catalogue shelf; `doctor` PASS catalogue. M2 is Done; M5 still owns M2b's deferred pushdown.
+
