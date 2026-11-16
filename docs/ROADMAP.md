@@ -146,13 +146,14 @@ they describe a two-member site and must not be picked up by momentum.
 | M0 | **[DOC] Make the ledger honest**: live counts in §1 and the header, D58 recorded, handoff rewritten | `head -8 docs/ROADMAP.md` prints 48,153 / 0 / 0 and the 2026-11-16 date |
 | M1 | **[BE] Fill the substrate**: categories from verticals, one `person` entity per shell keyed on its own first surface, tags through the entity CHECK, subject links, receipt, doctor line, `orbital catalogue [--dry-run]` | `cargo test --test catalogue` green; live `orbital catalogue` twice → second `seen 0 inserted 0`; two `catalogue-backfill` receipts; `doctor \| grep catalogue` PASS |
 | M2 | **[FE] Entity read path**, one surface per commit: home → vertical → search → feeds → sitemap. A shell is a catalogue entry with a claim CTA, `noindex`, never ranked | every surface 200 with a non-empty fixture list; same-session before/after latency at the same load; no public page decodes the full roster |
-| M3 | **[BE] Claim proof and erasure**: one proof path, `orbital erase <handle>`, conversion count and rollback rule fixed before more imports | unproved claim refused; proved claim sets `claimed_at` and makes the entity rankable; erase is one transaction and a second run reports 0 |
+| M3a | **[BE] Claim proof and erasure**: `/api/claim-token`, PDS-backed `/api/claim`, transactional commit, `orbital erase --handle <h> [--apply]` | unproved claim 400 with no write; proved claim sets `claimed_at` and marks the entity claimed; erase is one transaction and a second run reports 0 |
+| M3b | **[BE] Conversion count and rollback rule**: 30-day claim conversion over `claim-proof` receipts, and a documented rollback before more imports | a count command prints the 30-day window; the rollback rule is written in D58 before M4 runs |
 | M4 | **[OPS] Receipted ingestion**: declared source rows, cursors, retry/backoff, `import_runs` per stage | two consecutive runs; the second `INSERT 0 0` on every statement |
 | M5 | **[OPS] Scale contract and link health**: roster cache until M2 removes the decode; budget ordered failing → new → clicked with coverage printed | same-session latency comparison; `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0 Done; M1 Done; **M2 Done (M2a, M2b bounded decode with latency deferred to M5, M2c
-vertical/feeds/sitemap/search; `92e3be8` closed M2)**; M3–M6 open.
+Status: M0 Done; M1 Done; M2 Done (`92e3be8`); **M3a claim proof and erasure Done (`3e65500`);
+M3 conversion count/rollback rule open**; M4–M6 open. M5 still carries M2b's deferred pushdown.
 
 ### Phase A — how it was judged (shipped, historical)
 

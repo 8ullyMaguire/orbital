@@ -1936,3 +1936,16 @@ claim CTAs and `nofollow` for unclaimed shells; the 60-row member result is unch
 `data-shelf="catalogue-search"` and the real title `11_22 AI (Patreon)`; an unmatched query has no
 catalogue shelf; `doctor` PASS catalogue. M2 is Done; M5 still owns M2b's deferred pushdown.
 
+**M3a claim proof and erasure (2026-11-16).** `users.claimed_at` existed but no code wrote it, so
+48,151 shells had no claim or removal path. A public `/api/claim-token` exposes the one-time token
+(useless without control of the external profile); `/api/claim` resolves the Bluesky handle through
+the PDS and requires the token in the profile description before `store::commit_claim` will write.
+The commit sets password, `claimed_at`, bsky fields, `entity_people.claimed_at` and a claim receipt in
+one transaction; a second claim is a 409. `orbital erase --handle <h> [--apply]` deletes the shell,
+its exclusive entities and everything naming them in one transaction, keeps entities shared by other
+subjects, and reports counts with an all-zero second run. Gate: `claim_erasure` 1 passed (mock PDS,
+400 unproved / 200 proved / 409 repeat, dry run = apply, zeros on repeat), `http` 69 passed.
+Live: claim-token 200, unproved claim 400 with `Bluesky does not know that handle`, no claim receipt
+and 0 claimed shells, home 200, `erase --handle does-not-exist-xyz --apply` all zeros. Remaining in
+M3: the 30-day conversion count and the rollback rule before more imports.
+

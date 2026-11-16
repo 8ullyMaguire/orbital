@@ -933,6 +933,13 @@ Verify: `cargo test --test claim_erasure` → green; full `http` suite green; li
 bogus handle 400 with no database change, and `orbital erase does-not-exist --apply` reports all
 zeros. Do not erase a live shell as part of the gate.
 
+M3a passed: `claim_erasure` 1 passed, `http` 69 passed. Live claim-token 200 for `007-natalee`;
+unproved claim 400 with `Bluesky does not know that handle`; zero `claim-proof` receipts and zero
+claimed shells after the refused request; home 200; `orbital erase --handle does-not-exist-xyz --apply`
+printed `user 0, entities 0, links 0, tags 0, visits 0`; `doctor` PASS catalogue. The proved-claim and
+erase paths were exercised against the mock PDS and a transaction fixture, not against a live person.
+M3's 30-day conversion count and rollback rule remain open; M4–M6 and M5's pushdown remain open.
+
 ## M4 — receipted ingestion
 
 Fold `sweep.py`/`build.py`/`enrich.py`/`merge.py`/`crawl.py` into declared source rows and one runner
