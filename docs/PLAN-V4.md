@@ -884,6 +884,55 @@ Gate: an unproved claim is refused; a proved one sets `users.claimed_at` and mak
 rankable; erasure removes the shell, its entity and its links in one transaction and a second run
 reports 0.
 
+### M3a — claim proof and one-command erasure
+
+**Reproduced:** `users.claimed_at` exists (migration 0009) but no code writes it. 48,151 shells have
+`password_hash IS NULL` and no claim path; an imported person cannot claim their own entry or ask for
+its removal. `verify_bsky` proves control of a handle for an account that already exists, which a
+shell cannot be.
+
+**Decision.** Use the existing Bluesky proof mechanism, but move the proof before the mutation and
+allow it on a shell: a shell's `verify_token` is readable through a public token endpoint (it is useless
+without control of the external profile), the claimant puts `orbital-verify:<token>` in that profile,
+and `/api/claim` resolves the handle through the configured PDS before committing. The store commit
+takes an explicit `Option<ClaimProof>` and refuses `None` — a route that skipped verification cannot
+silently succeed. A proved claim sets `password_hash`, `claimed_at`, the bsky fields,
+`entity_people.claimed_at` and a `claim` import receipt in one transaction. Re-claiming a claimed account
+is a 409, not a silent overwrite. Reversible detail: the claim password is set by the claimant in the
+same request; no email is invented.
+
+Erasure is `orbital erase <handle> [--apply]`, implemented in `ops.rs` as one transaction: count and
+delete the shell's entity ids (via `entity_people` and slug fallback), then the user; cascades remove
+links, tags, visits and vertical memberships; a `claim/erasure` receipt records the counts. A dry run
+reports the same counts without deleting. A second run must report all zeros.
+
+1. `src/models.rs` — add `ClaimProof { did, handle }` and
+   `EraseReport { user: i64, entities: i64, links: i64, tags: i64, visits: i64 }` with a `Display`
+   that prints `user N, entities N, links N, tags N, visits N`.
+2. `src/store.rs` — add:
+   - `claim_token(pool, handle) -> Result<Option<String>, AppError>`: only for rows with
+     `claimed_at IS NULL AND password_hash IS NULL`.
+   - `commit_claim(pool, handle, proof: Option<ClaimProof>, password_hash: &str) -> Result<(), AppError>`:
+     `SELECT ... FOR UPDATE` the shell; `Validation` if it is missing or proof is `None`; `Conflict` if
+     already claimed; then the five updates and one `import_runs` receipt in a transaction.
+3. `src/routes/api.rs` — add `GET /api/claim-token?handle=…` and `POST /api/claim`. The POST resolves
+   the handle and fetches the profile exactly as `verify_bsky` does, requires the needle in
+   `description`, then calls `store::commit_claim` with `Some(ClaimProof { did, handle })`; failures
+   return 400 and change nothing.
+4. `src/ops.rs` — add `erase_shell(pool, handle, apply) -> Result<EraseReport, AppError>` with the
+   transaction above. `src/main.rs` — add `Cmd::Erase { handle, --apply }` and print the report.
+5. `tests/claim_erasure.rs` — seed a shell, entity, subject link, link, tag and visit; spin a local
+   mock PDS with the token in its profile description; assert an unproved POST is 400 and leaves
+   `claimed_at` NULL; assert a proved POST is 200, sets `claimed_at`, password, bsky fields and
+   `entity_people.claimed_at`, and marks the catalogue entry claimed; assert a second POST is 409;
+   assert `erase_shell(dry run)` changes nothing and reports the same counts as `--apply`, the apply
+   deletes all five kinds of rows, and a second apply reports all zeros.
+
+Verify: `cargo test --test claim_erasure` → green; full `http` suite green; live
+`GET /api/claim-token?handle=<shell>` 200 (or 404 for a claimed handle), `POST /api/claim` with a
+bogus handle 400 with no database change, and `orbital erase does-not-exist --apply` reports all
+zeros. Do not erase a live shell as part of the gate.
+
 ## M4 — receipted ingestion
 
 Fold `sweep.py`/`build.py`/`enrich.py`/`merge.py`/`crawl.py` into declared source rows and one runner

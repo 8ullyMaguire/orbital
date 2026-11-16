@@ -1866,3 +1866,70 @@ pub async fn search_entities(
     .await
     .map_err(AppError::from)
 }
+
+/// The one-time token a shell's claimant must place in their external profile. It is useful only
+/// to somebody who controls that profile; publishing it does not prove the claim.
+pub async fn claim_token(pool: &PgPool, handle: &str) -> Result<Option<String>, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT verify_token FROM users
+          WHERE handle = $1 AND claimed_at IS NULL AND password_hash IS NULL",
+    )
+    .bind(handle)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// Commit a claim only when the caller passes proof derived from the PDS. `None` is refused before
+/// any write, so a route that forgot to verify cannot silently claim a shell.
+pub async fn commit_claim(
+    pool: &PgPool,
+    handle: &str,
+    proof: Option<crate::models::ClaimProof>,
+    password_hash: &str,
+) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+    let row: Option<(Uuid, Option<chrono::DateTime<chrono::Utc>>, Option<String>)> = sqlx::query_as(
+        "SELECT id, claimed_at, password_hash FROM users WHERE handle = $1 FOR UPDATE",
+    )
+    .bind(handle)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((id, claimed_at, existing_password)) = row else {
+        return Err(AppError::Validation(
+            "no claimable shell with that handle".into(),
+        ));
+    };
+    if claimed_at.is_some() || existing_password.is_some() {
+        return Err(AppError::Conflict("that handle is already claimed".into()));
+    }
+    let Some(proof) = proof else {
+        return Err(AppError::Validation("claim proof is missing".into()));
+    };
+    sqlx::query(
+        "UPDATE users SET password_hash = $2, claimed_at = now(),
+                          bsky_did = $3, bsky_handle = $4, bsky_verified_at = now()
+          WHERE id = $1",
+    )
+    .bind(id)
+    .bind(password_hash)
+    .bind(&proof.did)
+    .bind(&proof.handle)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE entity_people SET claimed_at = now() WHERE user_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO import_runs (source, rows_seen, rows_inserted, note, finished_at)
+         VALUES ('claim-proof', 1, 1, $1, now())",
+    )
+    .bind(format!(
+        "entity-first refactor M3; handle={handle} did={}",
+        proof.did
+    ))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}

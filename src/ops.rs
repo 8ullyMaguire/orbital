@@ -783,3 +783,95 @@ pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>, dry_run: bool
     .await?;
     Ok(())
 }
+
+/// Erase one imported shell and everything that names it, in one transaction. An entity shared by
+/// another subject is kept: erasing one of several people behind a canonical surface must not erase
+/// the others. A second run reports all zeros, which is the idempotency gate.
+pub async fn erase_shell(pool: &PgPool, handle: &str, apply: bool) -> Result<crate::models::EraseReport> {
+    let mut tx = pool.begin().await?;
+    let user: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM users WHERE handle = $1 FOR UPDATE")
+            .bind(handle)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some((user_id,)) = user else {
+        return Ok(crate::models::EraseReport {
+            user: 0,
+            entities: 0,
+            links: 0,
+            tags: 0,
+            visits: 0,
+        });
+    };
+    let entities: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM entities e
+          WHERE (slug = $1 OR EXISTS (
+                    SELECT 1 FROM entity_people ep WHERE ep.entity_id = e.id AND ep.user_id = $2))
+            AND NOT EXISTS (
+                    SELECT 1 FROM entity_people other
+                     WHERE other.entity_id = e.id AND other.user_id <> $2)",
+    )
+    .bind(handle)
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let links: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM links WHERE user_id = $1 OR entity_id = ANY($2)",
+    )
+    .bind(user_id)
+    .bind(&entities)
+    .fetch_one(&mut *tx)
+    .await?;
+    let tags: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM tags WHERE user_id = $1)
+              + (SELECT count(*) FROM entity_tags WHERE entity_id = ANY($2))::bigint",
+    )
+    .bind(user_id)
+    .bind(&entities)
+    .fetch_one(&mut *tx)
+    .await?;
+    let visits: i64 =
+        sqlx::query_scalar("SELECT count(*)::bigint FROM source_hits WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let report = crate::models::EraseReport {
+        user: 1,
+        entities: entities.len() as i64,
+        links,
+        tags,
+        visits,
+    };
+
+    if apply {
+        sqlx::query("DELETE FROM links WHERE user_id = $1 OR entity_id = ANY($2)")
+            .bind(user_id)
+            .bind(&entities)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM tags WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM entities WHERE id = ANY($1)")
+            .bind(&entities)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO import_runs (source, rows_seen, rows_inserted, note, finished_at)
+             VALUES ('erasure', $1, $2, $3, now())",
+        )
+        .bind(report.entities + links + tags + visits + 1)
+        .bind(report.user + report.entities + links + tags + visits)
+        .bind(format!("entity-first refactor M3; handle={handle}"))
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(report)
+}

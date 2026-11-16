@@ -251,3 +251,31 @@ pub struct EntitySummary {
     pub claimed: bool,
     pub handle: String,
 }
+
+/// Proof that the claimant controls the external profile: the PDS resolved the handle and the
+/// profile carried the shell's one-time token. Constructed only after both checks pass.
+#[derive(Debug, Clone)]
+pub struct ClaimProof {
+    pub did: String,
+    pub handle: String,
+}
+
+/// What one erasure touched. The second run must report all zeros, which is the idempotency gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EraseReport {
+    pub user: i64,
+    pub entities: i64,
+    pub links: i64,
+    pub tags: i64,
+    pub visits: i64,
+}
+
+impl std::fmt::Display for EraseReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "user {}, entities {}, links {}, tags {}, visits {}",
+            self.user, self.entities, self.links, self.tags, self.visits
+        )
+    }
+}

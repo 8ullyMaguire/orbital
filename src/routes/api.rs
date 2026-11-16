@@ -17,7 +17,9 @@ use crate::auth::{
     CurrentUser, MaybeUser,
 };
 use crate::error::{ApiError, ApiResult, AppError};
-use crate::models::{LinkInput, LinkPatch, LoginInput, ProfilePatch, RegisterInput, ReorderInput};
+use crate::models::{
+    ClaimProof, LinkInput, LinkPatch, LoginInput, ProfilePatch, RegisterInput, ReorderInput,
+};
 use crate::render::{fmt_count, month_year, tracked_link};
 use crate::store;
 use crate::text::{accent_for, normalise_handle, normalise_slug, normalise_tag, validate_link_url};
@@ -31,6 +33,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/verticals", get(verticals))
         .route("/api/me", get(me).patch(update_me))
         .route("/api/me/verify-bsky", post(verify_bsky))
+        .route("/api/claim-token", get(claim_token))
+        .route("/api/claim", post(claim_shell))
         .route("/api/me/verify-token", post(rotate_token))
         .route("/api/me/standing", get(standing))
         .route("/api/links", get(list_links).post(create_link))
@@ -379,6 +383,98 @@ pub async fn verify_bsky(
     }
     store::set_bsky_claim(&st.pool, user.id, &did, &handle).await?;
     Ok(Json(json!({ "verified": true, "did": did, "handle": handle })))
+}
+
+#[derive(Deserialize)]
+pub struct ClaimTokenQuery {
+    pub handle: String,
+}
+
+/// A shell's one-time proof token. Public on purpose: the token only matters to somebody who can
+/// put it in the external profile named by the claim.
+pub async fn claim_token(
+    State(st): State<AppState>,
+    Query(q): Query<ClaimTokenQuery>,
+) -> ApiResult<Json<Value>> {
+    let handle = q.handle.trim().trim_start_matches('@').to_lowercase();
+    let token = store::claim_token(&st.pool, &handle)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(Json(json!({ "handle": handle, "verify_token": token })))
+}
+
+#[derive(Deserialize)]
+pub struct ShellClaim {
+    pub handle: String,
+    pub bsky_handle: String,
+    pub password: String,
+}
+
+/// Claim a shell by proving control of a Bluesky profile. The PDS is the trusted side; a claimant
+/// cannot assert success by sending the token back in a form field.
+pub async fn claim_shell(
+    State(st): State<AppState>,
+    Json(claim): Json<ShellClaim>,
+) -> ApiResult<Json<Value>> {
+    let handle = normalise_handle(&claim.handle)?;
+    let bsky = claim.bsky_handle.trim().trim_start_matches('@').to_lowercase();
+    if bsky.len() < 3 || !bsky.contains('.') {
+        return Err(ApiError(AppError::Validation(
+            "give the full Bluesky handle, like someone.bsky.social".into(),
+        )));
+    }
+    if claim.password.len() < 12 {
+        return Err(ApiError(AppError::Validation(
+            "a claim needs a password of at least 12 characters".into(),
+        )));
+    }
+    let url = format!(
+        "{}/xrpc/com.atproto.identity.resolveHandle?handle={}",
+        st.cfg.bsky_pds,
+        crate::render::urlencode(&bsky)
+    );
+    let did: String = match st.http.get(&url).send().await {
+        Ok(r) if r.status().is_success() => match r.json::<Value>().await {
+            Ok(v) => v["did"].as_str().unwrap_or_default().to_string(),
+            Err(_) => String::new(),
+        },
+        _ => String::new(),
+    };
+    if did.is_empty() {
+        return Err(ApiError(AppError::Validation("Bluesky does not know that handle".into())));
+    }
+    let Some(token) = store::claim_token(&st.pool, &handle).await? else {
+        return Err(ApiError(AppError::Conflict("that handle is not a claimable shell".into())));
+    };
+    let profile_url = format!(
+        "{}/xrpc/app.bsky.actor.getProfile?actor={}",
+        st.cfg.bsky_pds,
+        crate::render::urlencode(&did)
+    );
+    let description = match st.http.get(&profile_url).send().await {
+        Ok(r) if r.status().is_success() => r
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|v| v["description"].as_str().map(str::to_string))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+    let needle = format!("orbital-verify:{token}");
+    if !description.contains(&needle) {
+        return Err(ApiError(AppError::Validation(format!(
+            "put `{needle}` in your Bluesky description, then try again"
+        ))));
+    }
+    let hash = hash_password(&claim.password)?;
+    store::commit_claim(
+        &st.pool,
+        &handle,
+        Some(ClaimProof { did: did.clone(), handle: bsky.clone() }),
+        &hash,
+    )
+    .await?;
+    Ok(Json(json!({ "claimed": true, "handle": handle, "did": did, "bsky_handle": bsky })))
 }
 
 // ------------------------------------------------------------------ links

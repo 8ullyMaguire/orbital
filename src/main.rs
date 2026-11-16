@@ -77,6 +77,15 @@ enum Cmd {
         #[arg(long)]
         limit: Option<i64>,
     },
+    /// Remove one imported shell and everything that names it, in one transaction.
+    Erase {
+        /// The shell's handle, without the @.
+        #[arg(long)]
+        handle: String,
+        /// Delete what the report found. Without it, this is a dry run.
+        #[arg(long)]
+        apply: bool,
+    },
     /// Remove rows a smoke test left on a real database. Reports first; deletes only with `--apply`.
     Cleanup {
         /// Delete what the report found. Without it, this is a dry run.
@@ -214,6 +223,11 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Catalogue { dry_run, limit } => {
             let pool = db::connect(&cfg).await?;
             orbital::ops::backfill_catalogue(&pool, limit, dry_run).await?;
+        }
+        Cmd::Erase { handle, apply } => {
+            let pool = db::connect(&cfg).await?;
+            let report = orbital::ops::erase_shell(&pool, &handle, apply).await?;
+            println!("erase {handle} (apply={apply}): {report}");
         }
         Cmd::Cleanup { apply } => {
             let pool = db::connect(&cfg).await?;
