@@ -151,9 +151,11 @@ they describe a two-member site and must not be picked up by momentum.
 | M4 | **[OPS] Receipted ingestion — PARKED**: declared source rows, cursors, retry/backoff, `import_runs` per stage | two consecutive runs; the second `INSERT 0 0` on every statement. Unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override (M3b rule) |
 | M5a | **[OPS] Two-phase vertical candidates**: select bounded ids first, decorate only those; closes the M2b pushdown | candidate ids equal decorated ids; same-session latency comparison |
 | M5b | **[OPS] Link-health coverage — Done (`9f3281e`)**: budget failing → new → clicked, with unchecked coverage printed in `doctor` | `doctor` prints unchecked coverage beside failures |
-| M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
+| M6 | **[BE] Evaluation before ranking — Done (`a17e48a`)**: entity golden set, `orbital eval --entities`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0/M1/M2/M3a/M3b/M5a/M5b Done; **M4 PARKED (0 claims / 0%); M6 evaluation gate open.**
+Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
+currently prints `NO VERDICT — 2 cases, floor 30`, which locks entity ranking changes until real clicks
+accumulate. M4 unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override.
 
 ### Phase A — how it was judged (shipped, historical)
 

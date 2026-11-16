@@ -1103,6 +1103,15 @@ Verify: `cargo test --test eval_entities` → green; existing `tests/eval.rs` st
 `orbital eval --entities` prints a sentence with the case count and verdict, and the exit code is 0
 only for `VERDICT: better`. M4 remains parked; this gate does not import rows.
 
+M6a passed: `eval_entities` 1 passed, existing `eval` 4 passed. Live `eval --entities --emit 200`
+emitted 2 seeds (the only two sessions whose clicks reach an entity); the committed
+`eval/golden-entities.json` records them with the 30-case floor. Live `orbital eval --entities`
+printed `NO VERDICT — 2 cases, 0 seeds missing, A 0.0000 / B 0.8155, delta +0.8155 [+0.6309, +1.0000].
+only 2 paired readers; the floor is 30`, exit 1. Member eval still prints its historical
+`VERDICT: better — 125 cases`. `/`, `/v/nsfw`, `/search?q=patreon`, `/feed.json` all 200; `doctor`
+PASS catalogue and link coverage. The gate works by refusing to unlock an entity ranking change; it
+does not claim a good entity ranking yet. M6 is Done. M4 remains parked at 0 claims / 0%.
+
 ## Definition of done for this refactor
 
 - `catalogue_composition` reports `shells <= subjects` on live.

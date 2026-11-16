@@ -1985,3 +1985,15 @@ rest. First deploy exposed a definition mismatch: coverage counted `fail_count >
 `total 267461, unchecked 266942, failing 1`; `/`, `/v/nsfw`, `/feed.json` 200. No checker run against
 the live host: ordering is proven by the fixture, not by walking 267k links. M5b is Done; M6 is next.
 
+**M6a entity evaluation and committed baseline (2026-11-16).** `orbital eval` judged member cards
+while the site serves entities. Added `orbital eval --entities`: cases are entities reached through
+`entity_people(role='subject')`, arm A is `created_at` recency, arm B is visits/clicks scaled by the
+viewer's entity-tag lens, with the same `polaris-eval` nDCG@10, paired bootstrap and 30-case floor.
+The member evaluator is untouched. Gate: `eval_entities` 1 passed (the metric sees an older
+lens-favoured entity beat recency; 2 cases → NO VERDICT/exit 1; a stale seed counted as missing),
+existing `eval` 4 passed. Live emitted only 2 seeds — only two sessions have clicked a path reaching
+an entity — and `eval/golden-entities.json` records them. Live `orbital eval --entities` prints
+`NO VERDICT — 2 cases, 0 seeds missing, A 0.0000 / B 0.8155 ... only 2 paired readers; the floor is 30`,
+exit 1. Member eval still prints its historical `VERDICT: better — 125 cases`. An entity ranking
+change stays locked until the floor is met; lowering the floor or inventing cases would defeat the gate.
+
