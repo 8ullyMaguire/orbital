@@ -1038,7 +1038,8 @@ next to the freshness check. Change `links_to_check` to budget the checker in th
 links newest-checked first, then never-checked links, then clicked links, then the rest. A failure that
 comes back still resets `fail_count` through the existing `record_link_health`, so the failing bucket
 drains. Coverage is a number, not a pass/fail threshold: a site with 99% unchecked links should be
-visible, not silently green or spuriously red.
+visible, not silently green or spuriously red. `failing` uses `health::FAIL_THRESHOLD` (the same
+3-failure badge as `/api/v1/stats`), while the checker still prioritises every `fail_count > 0`.
 
 1. `src/models.rs` — `LinkCoverage { total, checked, unchecked, failing, clicked }` with a
    `Display` printing exactly the doctor line above.
@@ -1049,9 +1050,10 @@ visible, not silently green or spuriously red.
    link ahead of an older clicked one.
 3. `src/ops.rs` — in `doctor`, after the link-freshness check, add `say(true, "link coverage", coverage.to_string())`.
 4. `tests/link_health_coverage.rs` — seed five visible links: a failing one, two never checked, one
-   checked and clicked, one checked and unclicked. Assert `links_to_check(5)` returns failing → never
-   checked → clicked → rest, and assert the coverage counts (5 total, 3 checked, 2 unchecked,
-   1 failing, 1 clicked). Include a hidden link and assert it is excluded.
+   checked and clicked, one checked and unclicked, and one with `fail_count = 1`. Assert
+   `links_to_check(6)` returns failing → flaky → never-checked → clicked → rest, and assert the
+   coverage counts (6 total, 4 checked, 2 unchecked, 1 failing at the 3-failure badge threshold,
+   1 clicked). Include a hidden link and assert it is excluded.
 
 Verify: `cargo test --test link_health_coverage` → green; live `orbital doctor` prints the coverage
 line beside the failure count, and its numbers match `/api/v1/stats` (`links.total`, `links.unchecked`,

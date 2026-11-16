@@ -1320,10 +1320,13 @@ pub async fn link_health_coverage(pool: &PgPool) -> Result<crate::models::LinkCo
         sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false AND last_checked IS NOT NULL")
             .fetch_one(pool)
             .await?;
-    let failing: i64 =
-        sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false AND fail_count > 0")
-            .fetch_one(pool)
-            .await?;
+    // Match the public badge: one failed HEAD is a note, three consecutive failures are "failing".
+    let failing: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM links WHERE hidden = false AND fail_count >= $1",
+    )
+    .bind(crate::health::FAIL_THRESHOLD as i64)
+    .fetch_one(pool)
+    .await?;
     let clicked: i64 =
         sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false AND click_count > 0")
             .fetch_one(pool)

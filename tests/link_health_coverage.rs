@@ -37,18 +37,26 @@ async fn link_budget_orders_failures_then_new_then_clicked(pool: PgPool) {
          VALUES ($1, $2, $3, now(), 3, 10)",
     )
     .await;
+    let flaky = link(
+        &pool,
+        uid,
+        "flaky",
+        "INSERT INTO links (user_id, url, label, last_checked, fail_count, position)
+         VALUES ($1, $2, $3, now() - interval '1 hour', 1, 11)",
+    )
+    .await;
     let new1 = link(
         &pool,
         uid,
         "new1",
-        "INSERT INTO links (user_id, url, label, position) VALUES ($1, $2, $3, 11)",
+        "INSERT INTO links (user_id, url, label, position) VALUES ($1, $2, $3, 12)",
     )
     .await;
     let new2 = link(
         &pool,
         uid,
         "new2",
-        "INSERT INTO links (user_id, url, label, position) VALUES ($1, $2, $3, 12)",
+        "INSERT INTO links (user_id, url, label, position) VALUES ($1, $2, $3, 13)",
     )
     .await;
     let clicked = link(
@@ -56,7 +64,7 @@ async fn link_budget_orders_failures_then_new_then_clicked(pool: PgPool) {
         uid,
         "clicked",
         "INSERT INTO links (user_id, url, label, last_checked, click_count, position)
-         VALUES ($1, $2, $3, now() - interval '2 hours', 5, 13)",
+         VALUES ($1, $2, $3, now() - interval '2 hours', 5, 14)",
     )
     .await;
     let plain = link(
@@ -64,7 +72,7 @@ async fn link_budget_orders_failures_then_new_then_clicked(pool: PgPool) {
         uid,
         "plain",
         "INSERT INTO links (user_id, url, label, last_checked, position)
-         VALUES ($1, $2, $3, now() - interval '1 hour', 14)",
+         VALUES ($1, $2, $3, now() - interval '1 hour', 15)",
     )
     .await;
     link(
@@ -76,7 +84,7 @@ async fn link_budget_orders_failures_then_new_then_clicked(pool: PgPool) {
     )
     .await;
 
-    let order: Vec<Uuid> = orbital::store::links_to_check(&pool, 5)
+    let order: Vec<Uuid> = orbital::store::links_to_check(&pool, 6)
         .await
         .expect("link budget")
         .into_iter()
@@ -84,8 +92,8 @@ async fn link_budget_orders_failures_then_new_then_clicked(pool: PgPool) {
         .collect();
     assert_eq!(
         order,
-        vec![failing, new1, new2, clicked, plain],
-        "failing first, never-checked next, clicked before the rest, hidden excluded"
+        vec![failing, flaky, new1, new2, clicked, plain],
+        "failing and flaky first, never-checked next, clicked before the rest, hidden excluded"
     );
 
     let coverage = orbital::store::link_health_coverage(&pool)
@@ -94,13 +102,13 @@ async fn link_budget_orders_failures_then_new_then_clicked(pool: PgPool) {
     assert_eq!(
         coverage,
         LinkCoverage {
-            total: 5,
-            checked: 3,
+            total: 6,
+            checked: 4,
             unchecked: 2,
             failing: 1,
             clicked: 1,
         }
     );
     let line = coverage.to_string();
-    assert!(line.contains("5 total, 2 unchecked (40.00%), 1 failing, 1 clicked"), "{line}");
+    assert!(line.contains("6 total, 2 unchecked (33.33%), 1 failing, 1 clicked"), "{line}");
 }
