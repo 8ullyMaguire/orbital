@@ -1019,6 +1019,12 @@ Verify: `cargo test --test vertical_bounds` → green; `cargo test --test http h
 and `/v/nsfw` 200 with the same counts, plus a same-session before/after comparison (NO VERDICT if load
 changes). The pushdown is a SQL-shape change; no template or route changes.
 
+M5a passed: `vertical_bounds` 1 passed (the candidate ids are exactly the decorated ids, in order),
+`http home` 4 passed, `vertical_page_bounds` 1 passed. Same-session live, n=3, no interval: home
+2.19/2.30/2.06 s → 1.97/2.04/1.97 s; `/v/nsfw` 0.86/0.84/0.89 s → 0.73/0.71/0.69 s; 48150-people
+header and 100 rows unchanged; `doctor` PASS catalogue. The M2b unblock is closed. M5b link-health
+coverage remains open.
+
 ## M6 — evaluation before any new ranking rule
 
 Commit a golden set over entities, run `orbital eval`, and refuse a ranking change below the sample

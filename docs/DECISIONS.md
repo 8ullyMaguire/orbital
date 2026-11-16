@@ -1963,3 +1963,13 @@ asks to leave. M4's gate must show a second run inserting 0 rows before the stag
 Live today: 0 claims / 0% — **M4 is parked**. Unblock: either the floor is met, or a D58 override is
 recorded explaining that this import is seed data rather than a live directory.
 
+**M5a two-phase vertical candidates (2026-11-16).** `vertical_members_limited` decorated the whole
+roster before `LIMIT`: `member_stats_from` aggregated tags, verticals and endorsements for 48k users,
+then sorted. It now selects bounded candidate ids from `user_verticals` plus a small `source_hits`
+aggregate, then decorates only those ids with `array_position` order. Fields and ordering unchanged.
+Gate: `vertical_bounds` 1 passed (candidate ids equal the decorated ids, leader first, tail absent),
+`http home` 4 passed, `vertical_page_bounds` 1 passed. Same-session live, n=3, no interval: home
+2.19/2.30/2.06 s → 1.97/2.04/1.97 s; `/v/nsfw` 0.86/0.84/0.89 s → 0.73/0.71/0.69 s; header 48150 and
+100 rows unchanged; `doctor` PASS catalogue. This closes the unblock D58 recorded for M2b. **M5b link
+health coverage remains open.**
+
