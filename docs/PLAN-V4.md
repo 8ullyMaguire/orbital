@@ -974,6 +974,12 @@ D58 override records why the import is seed data rather than a live directory.
 Verify: `cargo test --test claim_conversion` → green; live `orbital claims --days 30` prints the
 window and counts, matches the live psql counts, and M4 remains parked until the floor is met.
 
+M3b passed: `claim_conversion` 1 passed, `http` 69 passed. Live `orbital claims --days 30` printed
+`claims 30 day(s): receipts 0, claims 0, shells 48151, erasures 0, conversion 0.00%`; psql cross-check
+`0|0|48151|0`; `/`, `/v/nsfw`, `/search?q=patreon`, `/feed.json` all 200. The rollback rule is recorded
+in D58 in the same commit. M4 is parked at 0 claims / 0% until the floor is met or D58 records a seed-data
+override. M5's deferred pushdown and M6 remain open.
+
 ## M4 — receipted ingestion
 
 Fold `sweep.py`/`build.py`/`enrich.py`/`merge.py`/`crawl.py` into declared source rows and one runner

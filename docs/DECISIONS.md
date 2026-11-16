@@ -1949,3 +1949,17 @@ Live: claim-token 200, unproved claim 400 with `Bluesky does not know that handl
 and 0 claimed shells, home 200, `erase --handle does-not-exist-xyz --apply` all zeros. Remaining in
 M3: the 30-day conversion count and the rollback rule before more imports.
 
+**M3b conversion count and rollback rule (2026-11-16).** `orbital claims [--days 30]` prints receipt,
+claim, shell and erasure counts plus conversion over `shells_now + claims_in_window`; an empty
+population prints `NO VERDICT`, not 0%. Gate: `claim_conversion` 1 passed, `http` 69 passed. Live
+`orbital claims --days 30` prints `receipts 0, claims 0, shells 48151, erasures 0, conversion 0.00%`;
+psql cross-check is `0|0|48151|0`; `/`, `/v/nsfw`, `/search?q=patreon`, `/feed.json` all 200.
+
+**M4 import gate, fixed before any new import (M3b).** No new import stage may run while 30-day
+conversion is below 1% **and** fewer than 5 people have claimed in that window. If an import runs,
+every row it creates must carry that run's `import_runs` id in its note; rollback is to stop the
+runner, delete exactly the rows with that run id, and use `orbital erase --handle` for a person who
+asks to leave. M4's gate must show a second run inserting 0 rows before the stage is called idempotent.
+Live today: 0 claims / 0% — **M4 is parked**. Unblock: either the floor is met, or a D58 override is
+recorded explaining that this import is seed data rather than a live directory.
+

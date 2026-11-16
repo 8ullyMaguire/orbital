@@ -148,12 +148,12 @@ they describe a two-member site and must not be picked up by momentum.
 | M2 | **[FE] Entity read path**, one surface per commit: home → vertical → search → feeds → sitemap. A shell is a catalogue entry with a claim CTA, `noindex`, never ranked | every surface 200 with a non-empty fixture list; same-session before/after latency at the same load; no public page decodes the full roster |
 | M3a | **[BE] Claim proof and erasure**: `/api/claim-token`, PDS-backed `/api/claim`, transactional commit, `orbital erase --handle <h> [--apply]` | unproved claim 400 with no write; proved claim sets `claimed_at` and marks the entity claimed; erase is one transaction and a second run reports 0 |
 | M3b | **[BE] Conversion count and rollback rule**: 30-day claim conversion over `claim-proof` receipts, and a documented rollback before more imports | a count command prints the 30-day window; the rollback rule is written in D58 before M4 runs |
-| M4 | **[OPS] Receipted ingestion**: declared source rows, cursors, retry/backoff, `import_runs` per stage | two consecutive runs; the second `INSERT 0 0` on every statement |
+| M4 | **[OPS] Receipted ingestion — PARKED**: declared source rows, cursors, retry/backoff, `import_runs` per stage | two consecutive runs; the second `INSERT 0 0` on every statement. Unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override (M3b rule) |
 | M5 | **[OPS] Scale contract and link health**: roster cache until M2 removes the decode; budget ordered failing → new → clicked with coverage printed | same-session latency comparison; `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0 Done; M1 Done; M2 Done (`92e3be8`); **M3a claim proof and erasure Done (`3e65500`);
-M3 conversion count/rollback rule open**; M4–M6 open. M5 still carries M2b's deferred pushdown.
+Status: M0 Done; M1 Done; M2 Done (`92e3be8`); M3a Done (`3e65500`); **M3b Done (`a738788`,
+rollback rule in D58); M4 PARKED by the M3b floor (0 claims / 0%)**; M5 (deferred pushdown) and M6 open.
 
 ### Phase A — how it was judged (shipped, historical)
 
