@@ -1033,3 +1033,88 @@ is data in `entities`, not a new table.
 | S7 | public pages still answer | `curl -s -o /dev/null -w '%{http_code}' https://orbital.polarisocial.xyz/ /v/nsfw /@thekayluxx` | `200` each |
 | S8 | the ledger is honest | `head -8 docs/ROADMAP.md` | live counts, not the two-member snapshot |
 
+## 8. Public surface quality and the estate error contract (2026-11-16)
+
+### Measured problem
+
+The live site was swept with the repo's browser probe at 1280×900 and 390×844 on
+`/`, `/v/nsfw` and `/search?q=patreon`:
+
+    mobile header      nav.nav display:none, no menu control → 3 visible links instead of 8
+    tap targets        brand 83×25, nav links 37 high, CTA 37 high, dropdown rows 39 high
+    hero grid          1280: hero h1 left 217, sections/cards left 96 → two grids on one page
+    heading order      /v/nsfw [1,4,4,4]; /search [1,3,2,4,4,4]
+    catalogue markup   home + search nest <a href="/app/#/join"> inside <a class="vcard"> (invalid HTML)
+    avatar ink         #0a0b12 on accent #b10acb is 3.53:1 (normal text needs 4.5:1)
+    search placeholder clipped at 390 ("…a site" loses its last character)
+    API error codes    orbital emits `invalid` and `unauthorized`; the estate schema allows
+                       `invalid_request` and `unauthenticated` (polaris-core's closed set)
+
+The estate already ships the shared answer for the last row: `polaris-core` owns the error
+envelope and `page::{Pagination, Page, Cursor}` and is already adopted by darkhold. Orbital's
+hand-written envelope is a fourth copy with drift. This section adopts it rather than extracting a
+fifth.
+
+### Goals
+
+- One no-JavaScript mobile menu; every header control at least 44×44 CSS px.
+- One page grid: hero, sections and cards share the same left edge at desktop and phone widths.
+- Valid card markup: no nested anchors; claim is a real control, not a link inside a link.
+- One heading order per page; no `h4` after `h1` and no `h3` before `h2`.
+- Generated avatars readable on every accent (white ink over a dark scrim).
+- A web app manifest, `theme-color`, and `color-scheme: dark`; no service worker, no offline claim.
+- `/api/*` errors serialize through `polaris_core::ApiError` and use its closed code set.
+
+### Non-goals
+
+- No visual redesign, new palette, webfont, or client-side framework.
+- No service worker, offline mode, push, or install prompt.
+- No new shared link-health crate; that candidate is recorded, not extracted, because darkhold's
+  `note_links` model is not the same contract and a crate with one adopter is decoration.
+- No ranking, catalogue or data-model change; no import and no claim/erasure change.
+
+### Success criteria (each a command, not an adjective)
+
+| # | claim | command | expected |
+|---|---|---|---|
+| U1 | API errors are the estate shape | `cargo test --test api_error_contract` | 7 passed; codes `invalid_request`, `unauthenticated`, `not_found`, `unprocessable`, `internal`; unmatched `/api/*` is a contract 404 |
+| U2 | rendered pages keep the new structure | `cargo test --test ui_contract` | 4 passed; mobile menu, manifest, one `h1`, no nested anchors |
+| U3 | the existing HTTP surface still passes | `cargo test --test http` | 69+ passed, 0 failed |
+| U4 | live header has a phone menu and 44px controls | browser probe on `/` at 390 | `nav.nav` hidden, `.mnav` visible, no header target under 44 |
+| U5 | live grid is one grid | browser probe on `/` at 1280 | hero h1 left == section left ±1px |
+| U6 | no horizontal overflow and no blank main | probe on `/`, `/v/nsfw`, `/search?q=patreon` at 390 and 1280 | `overflowX=0`, `mainChars>40` each |
+| U7 | axe finds no WCAG 2.1 AA violations | `axe.run` with `wcag2a,wcag2aa,wcag21a,wcag21aa` on the three routes | `violations: []`; report incomplete separately |
+| U8 | manifest is served as a manifest | `curl -sI -m 20 'https://orbital.polarisocial.xyz/assets/manifest.webmanifest?v=2026.11.16.2'` | `200`, `content-type: application/manifest+json` |
+
+Axe is a floor: it cannot judge target size or non-text contrast, so U4 and the probe remain part of
+the gate. A clean axe run over zero rendered controls would be vacuous; the route count is asserted.
+
+### Result (2026-11-16)
+
+Code: `polaris-core` adopted; `api_envelope` normalises Axum's own 404/405/415/422 responses and a
+global `/api/*` fallback, so an unknown API path is no longer an empty 404. `api_error_contract`
+**7 passed**, `ui_contract` **4 passed**, `http` **69 passed**. Live `/api/v1/nope` and `/api/nope`
+return `404 {"error":{"code":"not_found"}}`; a malformed `/api/claim` body returns
+`400 invalid_request` (JSON parse) or `400 unprocessable` (missing field), not `text/plain`.
+
+The shell: `.mnav` is visible and `.nav` hidden at 390; menu rows are 44 px; brand, menu, language and
+CTA are 44 px or taller (CTA 58.7); hero and sections both start at x=72.5 with the h1 and cards at
+x=96.5 at 1280. `/`, `/v/nsfw` and `/search?q=patreon` have `overflowX=0`; headings are `[1,2…]`,
+`[1]`, `[1,2,2]`; images have alt text; the search placeholder now fits (`scrollWidth 262 ==
+clientWidth 262` at 390); the crumb is 44 px; catalogue cards are `<article>` with a title link and a
+separate claim control; inline prose links are underlined (`link-in-text-block` was the one serious
+axe finding before that fix).
+
+Axe 4.10.2 on the home page: **0 violations, 25 passes**; with `color-contrast` disabled, **0
+violations, 24 passes, 0 incomplete**. The full run reports 84 `color-contrast` *incomplete* nodes,
+not violations: buttons, the gradient headline and generated avatars are painted with gradients or
+pseudo-elements, which axe refuses to score. The browser probe measured 180 text nodes and reported
+one false positive (`h1 em` has `color: transparent` because of `background-clip: text`; its three
+gradient stops measure 9.54:1, 4.63:1 and 12.19:1 against `#06070d`). Button white ink was darkened to
+`#7657ec → #5a36e0` (4.83:1 at the light end, 6.58:1 at the dark end) before this pass. Search with
+`color-contrast` disabled: **0 violations, 23 passes, 0 incomplete**; vertical: **0, 20, 0**.
+
+Latency after the final deploy, same session, n=3: home 2.02/2.02/2.19 s; `/v/nsfw`
+1.09/0.67/0.83 s; search 0.59 s. No claim of a speedup: these are absolute probes, and no
+before/after interval was fixed for a UI-only change.
+

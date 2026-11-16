@@ -2002,3 +2002,30 @@ an entity — and `eval/golden-entities.json` records them. Live `orbital eval -
 exit 1. Member eval still prints its historical `VERDICT: better — 125 cases`. An entity ranking
 change stays locked until the floor is met; lowering the floor or inventing cases would defeat the gate.
 
+**D59 — the public surface is part of the contract, and the estate already owns the error envelope
+(2026-11-16).** A browser and vision pass on `/`, `/v/nsfw` and `/search?q=patreon` at 1280×900 and
+390×844 measured: the phone header hid all eight nav links with no menu control; brand and nav links
+were 25–37 px high; the hero `h1` began at x=217 while sections began at x=96 (two grids on one
+page); `/v/nsfw` heading order was `[1,4,4,4]` and `/search` `[1,3,2,4,4,4]`; the home and search
+catalogue wrapped `<a href="/app/#/join">` inside `<a class="vcard">` (invalid HTML); generated avatar
+ink `#0a0b12` on `#b10acb` measured 3.53:1; the search placeholder clipped at 390 px; there was no
+manifest, theme colour or `color-scheme`; and `/api/v1/nope` emitted `invalid`/`unauthorized`, which
+are not in `estate/contracts/error.schema.json`.
+
+Chosen: adopt the existing `polaris-core` envelope instead of writing another serializer, and fix the
+shell in place. Rejected: a new orbital error crate (duplicates a 14-code set with six existing
+adopters), and extracting link-health into a shared crate this turn (orbital has the only full
+implementation and darkhold's checker is a different shape; the estate rule is no extraction on one
+caller). `AppError` keeps orbital's meanings and maps once onto `ErrorCode`; `ApiError` delegates the
+wire shape, caps the message through the crate and returns `internal error` for a 500 while logging
+the cause. The shell gains a `<details>` phone menu, 44 px targets, one page grid, valid card markup,
+`<h2>` empty states, white avatar ink over a dark scrim, a short placeholder, a manifest and
+`color-scheme: dark`. Gate: `api_error_contract` 7 passed, `ui_contract` 4 passed, `http` 69 passed.
+The audit script and route list are committed under `scripts/site-audit/` so the next pass is a
+re-run, not a rewrite. Live: `/api/v1/nope` is a contract 404, malformed bodies are `invalid_request`
+or `unprocessable`; axe 4.10.2 reports 0 violations (home 25 passes, search 23, vertical 20), with
+`color-contrast` incomplete only on gradient/pseudo-element surfaces; the probe measured 180 text
+nodes and found no contrast failure. Remaining: no service worker/offline mode, and the 84
+`color-contrast` incomplete nodes need a manual or pixel-composited checker if a formal AA statement
+is required.
+

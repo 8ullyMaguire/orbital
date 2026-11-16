@@ -68,7 +68,7 @@ of which **460 open, 33 refused with reasons, 30 shipped**. That page is the **l
 | Visitor profiles | 126 stored; **5** ever reached the personalisation warm-up |
 | Logins | **0 since 2026-10-29** |
 | Vertical navigations, all time | **5**, and 0 ring hits |
-| Tests | **211** (78 unit, 69 HTTP, 8 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema **v9**, deploy gate green |
+| Tests | **222** (78 unit, 69 HTTP, 7 API contract, 4 UI contract, 8 store, 5 taste, 4 eval, 4 concentration, 4 dial, 4 silence, 4 attention, 2 fame), schema **v9**, deploy gate green |
 | Capabilities document | **200** at `/api/v1/capabilities`, 4 declared routes all answer (was 404) |
 | Machine-readable search | `/api/v1/search?q=` answers JSON (was 404) |
 | Concentration | weekly snapshots exist: profile **gini 0.39 / top-10 100 %** over 3 members, vertical **0.30 / 100 %** over 2 — N is far too small for a trend, recorded as such |
@@ -152,8 +152,9 @@ they describe a two-member site and must not be picked up by momentum.
 | M5a | **[OPS] Two-phase vertical candidates**: select bounded ids first, decorate only those; closes the M2b pushdown | candidate ids equal decorated ids; same-session latency comparison |
 | M5b | **[OPS] Link-health coverage — Done (`9f3281e`)**: budget failing → new → clicked, with unchecked coverage printed in `doctor` | `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking — Done (`a17e48a`)**: entity golden set, `orbital eval --entities`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
+| M7 | **[FE] Public-surface quality and the estate error envelope — Done**: phone menu, 44 px header controls, one page grid, valid catalogue cards, heading order, avatar contrast, manifest/PWA metadata; `polaris-core` owns the `/api/*` error envelope including Axum's own rejections and unmatched API paths | `api_error_contract` 7 passed, `ui_contract` 4 passed, `http` 69 passed; live 390 px header opens the menu and header/crumb targets are ≥44 px; axe WCAG 2.1 AA reports 0 violations (home 25 passes, search 23, vertical 20; `color-contrast` incomplete on gradient surfaces only); `/api/v1/nope` returns `not_found` and a malformed body `invalid_request`/`unprocessable` from the shared set |
 
-Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
+Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6/M7 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
 currently prints `NO VERDICT — 2 cases, floor 30`, which locks entity ranking changes until real clicks
 accumulate. M4 unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override.
 

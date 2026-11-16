@@ -1112,6 +1112,9 @@ only 2 paired readers; the floor is 30`, exit 1. Member eval still prints its hi
 PASS catalogue and link coverage. The gate works by refusing to unlock an entity ranking change; it
 does not claim a good entity ranking yet. M6 is Done. M4 remains parked at 0 claims / 0%.
 
+M7 (the public-surface and estate-error-contract pass) has its own plan at `docs/PLAN-UI.md`; it
+changes presentation and `/api/*` serialization only, no ranking or data. It is Done on the ledger.
+
 ## Definition of done for this refactor
 
 - `catalogue_composition` reports `shells <= subjects` on live.
