@@ -1567,7 +1567,7 @@ pub async fn prune_visitors(pool: &PgPool, days: i64) -> Result<(u64, u64), AppE
 }
 
 /// One read for the doctor and the operator. Every count is cast: `count(*)` is int4.
-pub async fn catalogue_composition(pool: &PgPool) -> Result<CatalogueComposition> {
+pub async fn catalogue_composition(pool: &PgPool) -> anyhow::Result<CatalogueComposition> {
     let row = sqlx::query_as::<_, CatalogueComposition>(
         "SELECT
            (SELECT count(*)::bigint FROM users
@@ -1603,7 +1603,7 @@ fn entity_slug(handle: &str) -> String {
 /// Fill the substrate from shells that do not have a catalogue row yet. A shell is a user with no
 /// password and no claim; an account is never backfilled as somebody else's subject. Tags that do not
 /// satisfy `entity_tags`' own CHECK are counted out here instead of aborting the whole run.
-pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> Result<BackfillCounts> {
+pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> anyhow::Result<BackfillCounts> {
     sqlx::query(
         "INSERT INTO categories (slug, label, description, sort, nsfw)
          SELECT slug, label, description, sort, nsfw FROM verticals
@@ -1612,7 +1612,7 @@ pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> Result<Bac
     .execute(pool)
     .await?;
 
-    let rows: Vec<(Uuid, String, String, Option<String>, bool, String)> = sqlx::query_as(
+    let rows: Vec<(Uuid, String, String, Option<String>, Option<String>, String)> = sqlx::query_as(
         "SELECT u.id, u.handle, u.display_name, u.bio,
                 (SELECT l.url FROM links l WHERE l.user_id = u.id AND l.hidden = false
                   ORDER BY l.position, l.created_at LIMIT 1) AS own_url,

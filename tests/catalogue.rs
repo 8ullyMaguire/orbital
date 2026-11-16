@@ -37,7 +37,7 @@ async fn seed(pool: &PgPool, id: Uuid, url: &str) {
 
 #[sqlx::test]
 async fn backfill_fills_the_substrate_and_the_second_run_inserts_nothing(pool: PgPool) {
-    sqlx::query("INSERT INTO verticals (slug, label) VALUES ('dev', 'Developers')")
+    sqlx::query("INSERT INTO verticals (slug, label) VALUES ('dev', 'Developers') ON CONFLICT DO NOTHING")
         .execute(&pool)
         .await
         .expect("a vertical");
@@ -64,11 +64,11 @@ async fn backfill_fills_the_substrate_and_the_second_run_inserts_nothing(pool: P
         .await
         .expect("count");
     assert_eq!(people, 1);
-    let categories: i64 = sqlx::query_scalar("SELECT count(*) FROM categories")
+    let dev_category: i64 = sqlx::query_scalar("SELECT count(*) FROM categories WHERE slug = 'dev'")
         .fetch_one(&pool)
         .await
         .expect("count");
-    assert_eq!(categories, 1, "categories were filled from verticals");
+    assert_eq!(dev_category, 1, "categories were filled from verticals");
     let c = orbital::store::catalogue_composition(&pool)
         .await
         .expect("composition");
