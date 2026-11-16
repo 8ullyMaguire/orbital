@@ -1963,6 +1963,11 @@ asks to leave. M4's gate must show a second run inserting 0 rows before the stag
 Live today: 0 claims / 0% — **M4 is parked**. Unblock: either the floor is met, or a D58 override is
 recorded explaining that this import is seed data rather than a live directory.
 
+**Operator decision (2026-11-16, via clarify): keep M4 parked.** The explicit choice was to wait for
+≥1% 30-day conversion or ≥5 claims rather than record a seed-data override. No override exists; do not
+treat silence or a future "just import it" as one. Reopen M4 only when `orbital claims --days 30` meets
+the floor or a new recorded decision reverses this one.
+
 **M5a two-phase vertical candidates (2026-11-16).** `vertical_members_limited` decorated the whole
 roster before `LIMIT`: `member_stats_from` aggregated tags, verticals and endorsements for 48k users,
 then sorted. It now selects bounded candidate ids from `user_verticals` plus a small `source_hits`
