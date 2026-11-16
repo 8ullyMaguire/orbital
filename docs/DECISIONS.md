@@ -1921,3 +1921,11 @@ the order inside the pool; rows beyond 300 were never rendered. Live `/v/nsfw` w
 `/v/dev` 200. Gate: `vertical_page_bounds` 1 passed, `http vertical` 7 passed. Feeds, search and
 sitemap remain inside M2c; M5 still owns the deferred M2b pushdown.
 
+**M2c feeds and sitemap (2026-11-16).** `feed_json`, `feed_xml` and `vertical_feed` decoded the whole
+roster to emit 100 items; `sitemap` decoded a whole vertical to ask whether it was empty. They now
+use `all_members_limited(100)`, `vertical_members_limited(100)` and `vertical_member_count`, with the
+same order and content. Gate: `feed_bounds` 1 passed, full `http` suite 69 passed. Live `/feed.json`,
+`/feed.xml`, `/v/nsfw/feed.json`, `/sitemap.xml` all 200 with exactly 100 feed items and the nsfw URL
+in the sitemap; timings 1.21 / 0.82 / 0.87 / 0.48 s. Search remains inside M2c; M5 still owns the M2b
+pushdown.
+

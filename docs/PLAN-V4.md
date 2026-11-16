@@ -795,6 +795,12 @@ Verify: `cargo test --test feed_bounds` → green; `cargo test --test http feed`
 `/feed.json`, `/feed.xml`, `/v/nsfw/feed.json`, `/sitemap.xml` all 200 with real item bodies and
 same-session timings recorded.
 
+M2c feeds/sitemap passed: `feed_bounds` 1 passed, full `http` suite 69 passed (no test names matched
+the `feed` filter, so the single test file was run whole). Live `/feed.json` 1.21 s, `/feed.xml` 0.82 s,
+`/v/nsfw/feed.json` 0.87 s, `/sitemap.xml` 0.48 s, all 200; 100 JSON items in both feeds, 100 `<item>`
+elements in RSS, `/v/nsfw` present in the sitemap, `doctor` PASS catalogue. Search remains the last
+M2c surface; its detail is written when feeds close.
+
 ## M3 — claim proof and erasure
 
 One claim path (page proof or Bluesky token), one `orbital erase <handle>` command with the same
