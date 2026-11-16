@@ -1841,3 +1841,44 @@ and a numeric handle falls back to the name.
 **Consequences.** The roster is now three audiences, not one: performers (46,961), illustrators (346),
 and the import's own operator accounts. The vertical for silver is still `nsfw` for all three; if the
 operator wants them separated, that is a vertical decision, not an import one.
+
+## D58 — Rebuild the catalogue on the substrate we already shipped
+
+**Problem.** Four bulk imports put 48,151 unclaimed shells in `users` and left `entities`,
+`categories` and `import_runs` empty. Every discovery surface still asks "which members?" and decodes
+the whole roster twice per request: `/` 3.1–3.8 s, `/v/nsfw` 4.8 s. The site calls 48,151 people who
+never asked to be in it ranking members. The entity substrate from D52 was built for exactly this and
+has never been filled.
+
+**Decision.** Refactor to an entity-first catalogue in six gated steps (`docs/SPEC.md` §7,
+`docs/PLAN-V4.md`): fill the substrate from the roster, move the read path one surface at a time,
+add claim proof and erasure, receipt ingestion, put a scale contract on the read path, and require an
+eval before further ranking changes. The first backfill creates a `person` entity per shell with a
+database-normalised canonical key; a later step promotes own surfaces to `site` entities with
+`entity_edges(relation='runs')`. An unclaimed shell is a catalogue entry with a claim CTA: `noindex`,
+never on a shelf, never in search or feeds. D27 (silent prior), D28 (open contribution) and the
+estate's adopt-by-deletion rule are unchanged.
+
+**Rejected alternatives, with the reason each lost.**
+
+- *Keep the member-centric model and add a cache.* That makes the 3-second page fast while leaving
+  the product claiming that 48,151 unclaimed rows are members. The slow page is a symptom; the model
+  is the cause, and the cache is still M5's work once the read path reads the right table.
+- *Hide all shells and start with a two-member site.* It is the only way to make the Nov 10 "stubs,
+  not members" advice literal, and it deletes the entire directory the last two sessions built. A
+  page nobody can find cannot be claimed. Visibility for a shell is a claim CTA and `noindex`, not 404.
+- *Write a new `stubs` table, or a new `pending_entities` table.* Both already exist as `entities`
+  with `origin`/`source`/`imported_at` and `users.claimed_at` from migration 0009. Adding a third
+  store is the two-implementation failure D31 forbids.
+- *Promote each link to a `site` entity in the first backfill.* It would multiply 48k people into
+  roughly 267k entities, including aggregators and CDN assets the importer already rejects as
+  surfaces. The promotion needs the identity rules and its own gate, so it is a later step.
+- *Turn claim and erasure on before the entity read path exists.* A claim on a page the site does not
+  serve is a button with nothing behind it. Claim moves up from Phase H to M3, after the surface.
+
+**Consequences.** `orbital catalogue` is idempotent and writes an `import_runs` receipt; `doctor`
+FAILs while shells outnumber subjects. The Nov 10 open list in `docs/ROADMAP.md` is marked historical
+and the refactor ledger is the only source of "next". Until M2 lands, the public pages are unchanged
+and the entity rows are substrate: filled, receipted, and invisible to readers. The 30-day claim
+conversion rule will be fixed in M3 before any further bulk import.
+

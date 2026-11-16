@@ -1,8 +1,11 @@
 # Orbital — roadmap
 
-State at the time of writing: **schema v9**, **211 tests**, `orbital doctor` green, seven timers, 2 visible
-members, 19 links across 18 domains, capabilities document served and gate-checked. Last rewrite **2026-11-10** (v5): the order below is the owner's — **stack first, then
-shared recommendations, then frictionless contribution, then federation**.
+State at the time of writing (rewritten 2026-11-16, D58): **schema v9**, **48,153 members of which
+48,151 are unclaimed shells**, **0 entities**, **0 categories**, **0 import receipts**, **267,030 links**,
+`orbital doctor` green before the catalogue gate was added, nine timers, home 3.1–3.8 s and `/v/nsfw`
+4.8 s. The order below is now the **entity-first refactor**: fill the substrate, move the read path
+one surface at a time, add claim and erasure, receipt ingestion, then the scale and evaluation gates.
+The two-member snapshot at the top of this file was true on 2026-11-10 and is kept only in §1.
 
 This file is the honest list **and the ledger**: every open step carries its gate on the same line, and
 a step moves to §4 "Done" only once that gate has run against the live host. The count of open steps is
@@ -130,7 +133,26 @@ test rather than a convention.
 Each step ships alone, is verified against the live host, and carries its gate on the same line. Tags:
 **[DB] [BE] [FE] [OPS] [CFG]**. Order encodes dependency *and* the owner's priority order.
 
-### Phase A — how it was judged (shipped)
+### The refactor ledger — 2026-11-16, plan of record (D58, `docs/PLAN-V4.md`)
+
+The full spec is `docs/SPEC.md` §7; the plan with complete code and commands is `docs/PLAN-V4.md`.
+**The loop takes the first row that is neither Done nor In flight.** A row closes only when its gate
+ran against the live host, not when it merged. The Nov 10 list and the Phase D park below are history:
+they describe a two-member site and must not be picked up by momentum.
+
+| # | step | gate on the same line |
+|---|---|---|
+| M0 | **[DOC] Make the ledger honest**: live counts in §1 and the header, D58 recorded, handoff rewritten | `head -8 docs/ROADMAP.md` prints 48,153 / 0 / 0 and the 2026-11-16 date |
+| M1 | **[BE] Fill the substrate**: categories from verticals, one `person` entity per shell keyed on its own first surface, tags through the entity CHECK, subject links, receipt, doctor line, `orbital catalogue [--dry-run]` | `cargo test --test catalogue` green; live `orbital catalogue` twice → second `seen 0 inserted 0`; two `catalogue-backfill` receipts; `doctor \| grep catalogue` PASS |
+| M2 | **[FE] Entity read path**, one surface per commit: home → vertical → search → feeds → sitemap. A shell is a catalogue entry with a claim CTA, `noindex`, never ranked | every surface 200 with a non-empty fixture list; same-session before/after latency at the same load; no public page decodes the full roster |
+| M3 | **[BE] Claim proof and erasure**: one proof path, `orbital erase <handle>`, conversion count and rollback rule fixed before more imports | unproved claim refused; proved claim sets `claimed_at` and makes the entity rankable; erase is one transaction and a second run reports 0 |
+| M4 | **[OPS] Receipted ingestion**: declared source rows, cursors, retry/backoff, `import_runs` per stage | two consecutive runs; the second `INSERT 0 0` on every statement |
+| M5 | **[OPS] Scale contract and link health**: roster cache until M2 removes the decode; budget ordered failing → new → clicked with coverage printed | same-session latency comparison; `doctor` prints unchecked coverage beside failures |
+| M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
+
+Status: M0 done in docs; **M1 in flight — code and tests written, live gate not yet run**; M2–M6 open.
+
+### Phase A — how it was judged (shipped, historical)
 
 Adopt, don't write. Every step here ends with less code in this repo than it started with, and the gate
 is always the same shape: the ordering is byte-identical before and after, and `git grep` cannot find the
@@ -154,7 +176,10 @@ Ideas:
 The guardrail every step here shares: **damped, never hidden** — attenuation may cost position and may
 never cost reachability, and no damped score may exceed its raw score.
 
-### The open list — 13 steps, in the owner's order
+### The Nov 10 list — historical, superseded by the refactor ledger above
+
+**Do not take a step from this list.** It described a two-member site; the 48k-row roster and D58
+moved the work to the ledger above. It is kept so the reasoning behind the freeze is not lost.
 
 **Rewritten 2026-11-10, the freeze.** The per-phase headings are gone from this list, because the order is now the
 owner's freeze order and not the phase order: the housekeeping, then the contributor and the seed, then the claim,
