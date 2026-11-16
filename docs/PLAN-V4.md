@@ -657,7 +657,81 @@ The SQL still sorts the decorated 48k roster before LIMIT; only decode and count
 to M5 with the exact unblock recorded in D58: a CTE that restricts each aggregate subquery to the 24
 chosen user ids.
 
-### M2c — details written when M2b closes
+### M2c — vertical page reads a bounded catalogue view
+
+**Reproduced:** `src/routes/public.rs:324` calls `store::vertical_members` for the whole vertical;
+live `/v/nsfw` measured 7.41 s this session with 48,150 rows in that vertical. The page renders at
+most 100 cards, so decoding all 48k is a decode of 48,000 rows to display 100.
+
+**Decision.** Use the existing `vertical_members_limited` with a 300-row candidate pool (3× the 100
+rendered, leaving room for ceiling/rotation/tag filters), and move the four aggregate facts the page
+needs — member count, visitors total, trending count, tag counts — into small SQL queries. The
+rankers still own the order within the pool; only the candidate set is bounded. This changes which
+rows *could* appear (rows 301+ cannot, which were never rendered) but not the arithmetic. D58 records
+it. Feeds, search and sitemap remain in M2c and are written when this surface closes.
+
+1. `src/store.rs` — append:
+
+```rust
+pub async fn vertical_visitors_total(pool: &PgPool, slug: &str) -> Result<i64, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT coalesce(sum(visitors), 0)::bigint FROM (
+           SELECT count(DISTINCT session_hash) AS visitors
+             FROM source_hits WHERE vertical_context = $1 GROUP BY user_id
+         ) v",
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await?)
+}
+
+pub async fn vertical_trending_count(pool: &PgPool, slug: &str) -> Result<i64, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM (
+           SELECT user_id FROM source_hits
+            WHERE vertical_context = $1 AND created_at > now() - interval '7 days'
+            GROUP BY user_id
+         ) v",
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await?)
+}
+
+pub async fn vertical_tag_counts(
+    pool: &PgPool,
+    slug: &str,
+    limit: i64,
+) -> Result<Vec<(String, i64)>, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT t.tag_slug, count(DISTINCT t.user_id)::bigint AS n
+           FROM tags t JOIN user_verticals uv ON uv.user_id = t.user_id
+          WHERE uv.vertical_slug = $1
+          GROUP BY t.tag_slug ORDER BY n DESC, t.tag_slug LIMIT $2",
+    )
+    .bind(slug)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+```
+
+2. `src/routes/public.rs` in `vertical`: replace the whole-roster read with
+   `store::vertical_members_limited(&st.pool, &v.slug, 300).await?`; read
+   `let member_count = store::vertical_member_count(&st.pool, &v.slug).await?;` once; replace every
+   `members.len() as i64` with `member_count`; replace `let visitors_total: i64 = members.iter()...`
+   and the tag-count loop with the three store calls above (`vertical_visitors_total`,
+   `vertical_trending_count`, `vertical_tag_counts(..., 18)`), mapping the tuple rows into
+   `TagCount { href, slug, count }`. The four tabs keep their labels and hrefs.
+
+3. `tests/vertical_page_bounds.rs`: seed 120 members in `dev` (each with one distinct visit and one
+   tag), call `/v/dev`, assert 200, the header reads 120 (not 300), exactly 100 ranked rows, the
+   tag chip count comes from all 120 members, and `vertical_members_limited(..., 300)` returns at
+   most 300 rows. This is the gate: a test that only checked 200 would pass on the old code.
+
+Verify: `cargo test --test vertical_page_bounds` → green; `cargo test --test http vertical` → green;
+live `/v/dev` and `/v/nsfw` 200 with the member count in the body; same-session timing recorded even
+if load makes it NO VERDICT.
 
 ## M3 — claim proof and erasure
 

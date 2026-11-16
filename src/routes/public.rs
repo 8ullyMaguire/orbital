@@ -323,11 +323,13 @@ pub async fn vertical(
     };
     // One surface: the adult vertical has a page like every other vertical.
     let verticals = store::populated_verticals(&st.pool, true).await?;
-    let members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
+    // M2c: the page renders at most 100 cards. Decode a 3x candidate pool, not the whole vertical.
+    let members: Vec<MemberStat> = store::vertical_members_limited(&st.pool, &v.slug, 300)
         .await?
         .into_iter()
-        .filter(|m| visible(m))
+        .filter(visible)
         .collect();
+    let member_count = store::vertical_member_count(&st.pool, &v.slug).await?;
 
     let tab = q
         .tab
@@ -443,22 +445,18 @@ pub async fn vertical(
     }
     tuner.off = off;
 
-    let visitors_total: i64 = members.iter().map(|m| m.visitors).sum();
-    let mut tag_counts: std::collections::BTreeMap<String, i64> = Default::default();
-    for m in &members {
-        for t in &m.tags {
-            *tag_counts.entry(t.clone()).or_default() += 1;
-        }
-    }
-    let mut tags: Vec<TagCount> = tag_counts
+    // M2c: aggregates come from SQL over the vertical, not from the 300 decoded candidates.
+    let visitors_total = store::vertical_visitors_total(&st.pool, &v.slug).await?;
+    let trending_count = store::vertical_trending_count(&st.pool, &v.slug).await?;
+    let mut tags: Vec<TagCount> = store::vertical_tag_counts(&st.pool, &v.slug, 18)
+        .await?
         .into_iter()
-        .filter(|(t, n)| *n >= 1 && t != &active_tag)
+        .filter(|(t, _)| t != &active_tag)
         .map(|(t, n)| TagCount {
             href: format!("/v/{}?tab={}&tag={}", v.slug, tab, urlencode(&t)),
             slug: t,
             count: n,
         })
-        .take(18)
         .collect();
     tags.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.slug.cmp(&b.slug)));
 
@@ -467,25 +465,25 @@ pub async fn vertical(
             label: "Top".into(),
             href: format!("/v/{}?tab=top", v.slug),
             active: tab == "top",
-            count: members.len() as i64,
+            count: member_count,
         },
         Tab {
             label: "Trending".into(),
             href: format!("/v/{}?tab=trending", v.slug),
             active: tab == "trending",
-            count: ranking::rank_trending(members.clone(), now, &weights, lens.ordered).len() as i64,
+            count: trending_count,
         },
         Tab {
             label: "New".into(),
             href: format!("/v/{}?tab=new", v.slug),
             active: tab == "new",
-            count: members.len() as i64,
+            count: member_count,
         },
         Tab {
             label: "Monument".into(),
             href: format!("/v/{}?tab=monument", v.slug),
             active: tab == "monument",
-            count: members.len() as i64,
+            count: member_count,
         },
     ];
 
@@ -501,7 +499,7 @@ pub async fn vertical(
             label: v.label.clone(),
             description: v.description.clone(),
             icon: icon_svg(&v.icon),
-            members: members.len() as i64,
+            members: member_count,
             nsfw: v.nsfw,
             accent: crate::text::accent_for(&v.slug),
             visitors_total,

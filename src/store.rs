@@ -1764,3 +1764,49 @@ pub async fn catalogue_entries(
     .await
     .map_err(AppError::from)
 }
+
+/// Distinct visitors sent out by one vertical, without decoding the roster that produced them.
+pub async fn vertical_visitors_total(pool: &PgPool, slug: &str) -> Result<i64, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT coalesce(sum(visitors), 0)::bigint FROM (
+           SELECT count(DISTINCT session_hash) AS visitors
+             FROM source_hits WHERE vertical_context = $1 GROUP BY user_id
+         ) v",
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// How many members have a visit in the last seven days — the Trending tab's own count, computed in
+/// SQL instead of by ranking 48k decoded rows to throw most of them away.
+pub async fn vertical_trending_count(pool: &PgPool, slug: &str) -> Result<i64, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM (
+           SELECT user_id FROM source_hits
+            WHERE vertical_context = $1 AND created_at > now() - interval '7 days'
+            GROUP BY user_id
+         ) v",
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// The tag chips for a vertical, counted from the tags table rather than from decoded members.
+pub async fn vertical_tag_counts(
+    pool: &PgPool,
+    slug: &str,
+    limit: i64,
+) -> Result<Vec<(String, i64)>, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT t.tag_slug, count(DISTINCT t.user_id)::bigint AS n
+           FROM tags t JOIN user_verticals uv ON uv.user_id = t.user_id
+          WHERE uv.vertical_slug = $1
+          GROUP BY t.tag_slug ORDER BY n DESC, t.tag_slug LIMIT $2",
+    )
+    .bind(slug)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
