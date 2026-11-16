@@ -1062,7 +1062,7 @@ fn feed_response(content_type: &'static str, body: String) -> Response {
 }
 
 pub async fn feed_json(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
-    let members = store::all_members(&st.pool, true).await?;
+    let members = store::all_members_limited(&st.pool, true, 100).await?;
     let members: Vec<MemberStat> = members.into_iter().filter(|m| visible(m)).collect();
     let mut meta = site_meta(&st.cfg.public_base);
     meta.self_url = Some(format!("{}/feed.json", st.cfg.public_base));
@@ -1080,7 +1080,7 @@ pub(crate) async fn vertical_feed(
     let Some(v) = store::vertical_by_slug(&st.pool, &slug).await? else {
         return Err(PageError(AppError::NotFound));
     };
-    let members: Vec<MemberStat> = store::vertical_members(&st.pool, &v.slug)
+    let members: Vec<MemberStat> = store::vertical_members_limited(&st.pool, &v.slug, 100)
         .await?
         .into_iter()
         .filter(|m| visible(m))
@@ -1100,7 +1100,7 @@ pub(crate) async fn vertical_feed(
 }
 
 pub(crate) async fn feed_xml(State(st): State<AppState>, _ctx: Ctx) -> PageResult<Response> {
-    let members = store::all_members(&st.pool, true).await?;
+    let members = store::all_members_limited(&st.pool, true, 100).await?;
     let members: Vec<MemberStat> = members.into_iter().filter(|m| visible(m)).collect();
     Ok(feed_response(
         "application/rss+xml; charset=utf-8",
@@ -1125,8 +1125,8 @@ pub(crate) async fn sitemap(State(st): State<AppState>, _ctx: Ctx) -> PageResult
             "<url><loc>{base}/about</loc><priority>0.5</priority></url>"
         ));
         for v in store::populated_verticals(&st.pool, true).await? {
-            let members = store::vertical_members(&st.pool, &v.slug).await?;
-            if members.is_empty() {
+            // A count answers "is this vertical empty" without decoding its whole roster.
+            if store::vertical_member_count(&st.pool, &v.slug).await? == 0 {
                 continue;
             }
             body.push_str(&format!(

@@ -1810,3 +1810,25 @@ pub async fn vertical_tag_counts(
     .fetch_all(pool)
     .await?)
 }
+
+/// The site feeds emit 100 items. Decode 100 rows, not the whole roster, in the same order
+/// `all_members` has always used.
+pub async fn all_members_limited(
+    pool: &PgPool,
+    include_nsfw: bool,
+    limit: i64,
+) -> Result<Vec<MemberStat>, AppError> {
+    let sql = format!(
+        "SELECT {MEMBER_STAT_COLS}, 'primary'::text AS role
+           {from}
+          WHERE u.hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})
+          ORDER BY u.created_at DESC
+          LIMIT $2",
+        from = member_stats_from("NULL::text")
+    );
+    Ok(sqlx::query_as::<_, MemberStat>(&sql)
+        .bind(include_nsfw)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?)
+}

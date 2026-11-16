@@ -740,6 +740,61 @@ The aggregate functions (`vertical_visitors_total`, `vertical_trending_count`, `
 are the ones the page uses; no member roster is decoded for the numbers. Remaining in M2c: feeds,
 search and sitemap, whose details are written when this sub-step closes.
 
+### M2c — feeds and sitemap read bounded rows
+
+**Reproduced:** `feed_json`, `feed_xml` and `vertical_feed` call `all_members` / `vertical_members`
+and decode the whole roster, then `feed_entries` takes 100. `sitemap` decodes a whole vertical just to
+ask whether it is empty. Live feeds were 1.34 / 1.31 / 0.91 s this session — fast because the host was
+quiet, but the decode is still O(48k) for 100 output items.
+
+**Decision.** Add `all_members_limited` with the same `ORDER BY u.created_at DESC` as `all_members`
+and an explicit `LIMIT`; use it in both site feeds with 100. Use the existing
+`vertical_members_limited(..., 100)` for the vertical feed. Replace the sitemap's emptiness decode with
+`vertical_member_count(...) > 0`. Feed content and order stay identical: `feed_entries` already took
+the first 100 of exactly those orderings. This is bounded decode, not a new feed model.
+
+1. `src/store.rs` — append:
+
+```rust
+/// The site feeds emit 100 items. Decode 100 rows, not the whole roster, in the same order
+/// `all_members` has always used.
+pub async fn all_members_limited(
+    pool: &PgPool,
+    include_nsfw: bool,
+    limit: i64,
+) -> Result<Vec<MemberStat>, AppError> {
+    let sql = format!(
+        "SELECT {MEMBER_STAT_COLS}, 'primary'::text AS role
+           {from}
+          WHERE u.hidden = false AND ($1 OR {SFW_PRIMARY_ONLY})
+          ORDER BY u.created_at DESC
+          LIMIT $2",
+        from = member_stats_from("NULL::text")
+    );
+    Ok(sqlx::query_as::<_, MemberStat>(&sql)
+        .bind(include_nsfw)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?)
+}
+```
+
+2. `src/routes/public.rs`: in `feed_json` and `feed_xml` replace `store::all_members(&st.pool, true)`
+   with `store::all_members_limited(&st.pool, true, 100)`. In `vertical_feed` replace
+   `store::vertical_members(&st.pool, &v.slug)` with
+   `store::vertical_members_limited(&st.pool, &v.slug, 100)`. In `sitemap` replace the
+   `vertical_members` emptiness check with
+   `if store::vertical_member_count(&st.pool, &v.slug).await? == 0 { continue; }`.
+
+3. `tests/feed_bounds.rs`: seed 120 members with distinct created_at, assert `all_members_limited(10)`
+   returns the ten newest in the same order as the head of `all_members`, that both `/feed.json` and
+   `/feed.xml` contain exactly 100 items and the newest handle, that `/v/dev/feed.json` contains 100
+   for a 120-member vertical, and that `/sitemap.xml` lists `/v/dev` while decoding no roster.
+
+Verify: `cargo test --test feed_bounds` → green; `cargo test --test http feed` → green; live
+`/feed.json`, `/feed.xml`, `/v/nsfw/feed.json`, `/sitemap.xml` all 200 with real item bodies and
+same-session timings recorded.
+
 ## M3 — claim proof and erasure
 
 One claim path (page proof or Bluesky token), one `orbital erase <handle>` command with the same
