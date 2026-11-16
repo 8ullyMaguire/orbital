@@ -733,6 +733,13 @@ Verify: `cargo test --test vertical_page_bounds` → green; `cargo test --test h
 live `/v/dev` and `/v/nsfw` 200 with the member count in the body; same-session timing recorded even
 if load makes it NO VERDICT.
 
+M2c vertical page passed: `vertical_page_bounds` 1 passed, `http vertical` 7 passed. Live `/v/nsfw`
+200 in 1.64 / 2.39 / 1.74 s against a 7.41 s baseline in the same session; 48150 people in the header,
+exactly 100 rendered rows, `/v/dev` 200, `doctor` PASS catalogue, home catalogue section still present.
+The aggregate functions (`vertical_visitors_total`, `vertical_trending_count`, `vertical_tag_counts`)
+are the ones the page uses; no member roster is decoded for the numbers. Remaining in M2c: feeds,
+search and sitemap, whose details are written when this sub-step closes.
+
 ## M3 — claim proof and erasure
 
 One claim path (page proof or Bluesky token), one `orbital erase <handle>` command with the same

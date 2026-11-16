@@ -1913,3 +1913,11 @@ the sort is over `source_hits` groups rather than the decorated roster. That wor
 which already owns the scale contract. M2b is "bounded decode shipped, latency gate deferred", not
 "Done".
 
+**M2c vertical page (2026-11-16).** `/v/{slug}` rendered 100 cards after decoding all 48,150 members
+of the vertical. It now decodes a 300-row candidate pool (3× the rendered page) and reads member
+count, visitors total, trending count and tag counts from small SQL aggregates. `rank_top` still owns
+the order inside the pool; rows beyond 300 were never rendered. Live `/v/nsfw` went from 7.41 s to
+1.64 / 2.39 / 1.74 s in the same session, header 48150 people, 100 rows, `PASS catalogue`, and
+`/v/dev` 200. Gate: `vertical_page_bounds` 1 passed, `http vertical` 7 passed. Feeds, search and
+sitemap remain inside M2c; M5 still owns the deferred M2b pushdown.
+
