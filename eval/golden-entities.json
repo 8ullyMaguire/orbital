@@ -1,0 +1,15 @@
+{
+  "generated": "2026-11-16",
+  "rule": {
+    "metric": "nDCG@10, graded relevance (a clicked entity = 2)",
+    "arm_a": "recency — entities.created_at, newest first",
+    "arm_b": "visits and clicks multiplied by the viewer's entity-tag lens",
+    "min_cases": 30,
+    "interval": "95% paired bootstrap, deterministic resampling (polaris-eval::paired)",
+    "caveat": "entity clicks were collected while the site already ranked entities; a positive verdict bounds how much worse the candidate is, not how much better"
+  },
+  "seeds": [
+    "e68407dfdba4085e0a9d3bc502a4c3334448282e77b1fa861ea4238987665ce1",
+    "3a1ff9151db82111d8315de6a02bfef08dbc7a837eb73408374e22aac676e93d"
+  ]
+}
