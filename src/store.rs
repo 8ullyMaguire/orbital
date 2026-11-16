@@ -1296,18 +1296,45 @@ pub async fn member_count(pool: &PgPool, include_nsfw: bool) -> Result<i64, AppE
     Ok(row.get::<i64, _>("n"))
 }
 
-/// Links the checker has not looked at most recently. Oldest-checked first, so a run that is
-/// interrupted still makes progress across the directory instead of re-checking the first page.
+/// Links the checker has not looked at most recently. Failures first, then never-checked links, then
+/// clicked ones: a bounded budget should re-check a known break before it walks the long tail.
 pub async fn links_to_check(pool: &PgPool, limit: i64) -> Result<Vec<(Uuid, String)>, AppError> {
     Ok(sqlx::query_as::<_, (Uuid, String)>(
         "SELECT id, url FROM links
           WHERE hidden = false
-          ORDER BY last_checked NULLS FIRST, position, created_at
+          ORDER BY (fail_count > 0) DESC, (last_checked IS NULL) DESC,
+                   (click_count > 0) DESC, last_checked DESC NULLS LAST, position, created_at
           LIMIT $1",
     )
     .bind(limit)
     .fetch_all(pool)
     .await?)
+}
+
+/// The denominator behind the failing count. One small query per fact, all over visible links only.
+pub async fn link_health_coverage(pool: &PgPool) -> Result<crate::models::LinkCoverage, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false")
+        .fetch_one(pool)
+        .await?;
+    let checked: i64 =
+        sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false AND last_checked IS NOT NULL")
+            .fetch_one(pool)
+            .await?;
+    let failing: i64 =
+        sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false AND fail_count > 0")
+            .fetch_one(pool)
+            .await?;
+    let clicked: i64 =
+        sqlx::query_scalar("SELECT count(*)::bigint FROM links WHERE hidden = false AND click_count > 0")
+            .fetch_one(pool)
+            .await?;
+    Ok(crate::models::LinkCoverage {
+        total,
+        checked,
+        unchecked: total - checked,
+        failing,
+        clicked,
+    })
 }
 
 /// Record one check. A success resets the counter, so a site that comes back stops being marked

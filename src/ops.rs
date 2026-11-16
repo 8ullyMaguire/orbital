@@ -120,6 +120,13 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         Err(e) => say(false, "link checker", format!("{e}")),
     }
 
+    // 4b. The failure count is meaningless without its denominator: 267k links and one failing is
+    // a different site from 20 links and one failing. Print both; do not turn coverage into a gate.
+    match crate::store::link_health_coverage(pool).await {
+        Ok(c) => say(true, "link coverage", c.to_string()),
+        Err(e) => say(false, "link coverage", format!("{e}")),
+    }
+
     // 5. The uptime probe is still stamping, and what it stamped was a 200. The probe writes a
     // file; nothing else here would notice a host that stopped answering.
     let stamp = std::fs::read_to_string(backup_dir().join("uptime.txt")).unwrap_or_default();

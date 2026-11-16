@@ -1025,6 +1025,39 @@ M5a passed: `vertical_bounds` 1 passed (the candidate ids are exactly the decora
 header and 100 rows unchanged; `doctor` PASS catalogue. The M2b unblock is closed. M5b link-health
 coverage remains open.
 
+### M5b — link-health coverage and check order
+
+**Reproduced:** `doctor` prints only "link checker: last check Nh ago", while live has 267,461 links,
+266,942 unchecked and 1 failing. The checker's `links_to_check` orders `last_checked NULLS FIRST`, so
+a known failure can sit behind hundreds of thousands of never-checked rows and the failure count is
+reported without the denominator that makes it meaningful.
+
+**Decision.** Add `store::link_health_coverage` returning total, checked, unchecked, failing and
+clicked counts. `doctor` prints `link coverage  N total, N unchecked (NN.NN%), N failing, N clicked`
+next to the freshness check. Change `links_to_check` to budget the checker in this order: failing
+links newest-checked first, then never-checked links, then clicked links, then the rest. A failure that
+comes back still resets `fail_count` through the existing `record_link_health`, so the failing bucket
+drains. Coverage is a number, not a pass/fail threshold: a site with 99% unchecked links should be
+visible, not silently green or spuriously red.
+
+1. `src/models.rs` — `LinkCoverage { total, checked, unchecked, failing, clicked }` with a
+   `Display` printing exactly the doctor line above.
+2. `src/store.rs` — `link_health_coverage(pool)` with four/five small indexed counts over `links`;
+   change `links_to_check` ordering to
+   `ORDER BY (fail_count > 0) DESC, (last_checked IS NULL) DESC, (click_count > 0) DESC, last_checked DESC NULLS LAST, position, created_at`.
+   This is the exact order the gate asserts; `last_checked DESC` alone would put a recent unclicked
+   link ahead of an older clicked one.
+3. `src/ops.rs` — in `doctor`, after the link-freshness check, add `say(true, "link coverage", coverage.to_string())`.
+4. `tests/link_health_coverage.rs` — seed five visible links: a failing one, two never checked, one
+   checked and clicked, one checked and unclicked. Assert `links_to_check(5)` returns failing → never
+   checked → clicked → rest, and assert the coverage counts (5 total, 3 checked, 2 unchecked,
+   1 failing, 1 clicked). Include a hidden link and assert it is excluded.
+
+Verify: `cargo test --test link_health_coverage` → green; live `orbital doctor` prints the coverage
+line beside the failure count, and its numbers match `/api/v1/stats` (`links.total`, `links.unchecked`,
+`links.failing`); `/` 200. No checker run against the live host as part of this gate — that is a
+separate bounded operation.
+
 ## M6 — evaluation before any new ranking rule
 
 Commit a golden set over entities, run `orbital eval`, and refuse a ranking change below the sample

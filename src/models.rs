@@ -324,3 +324,29 @@ impl std::fmt::Display for ClaimConversion {
         }
     }
 }
+
+/// The denominator behind the failing-link count. Coverage is printed, not judged: a directory can
+/// be mostly unchecked without being wrongly green or spuriously red.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkCoverage {
+    pub total: i64,
+    pub checked: i64,
+    pub unchecked: i64,
+    pub failing: i64,
+    pub clicked: i64,
+}
+
+impl std::fmt::Display for LinkCoverage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pct = if self.total > 0 {
+            self.unchecked as f64 / self.total as f64 * 100.0
+        } else {
+            0.0
+        };
+        write!(
+            f,
+            "{} total, {} unchecked ({:.2}%), {} failing, {} clicked",
+            self.total, self.unchecked, pct, self.failing, self.clicked
+        )
+    }
+}
