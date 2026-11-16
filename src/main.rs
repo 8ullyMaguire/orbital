@@ -77,6 +77,12 @@ enum Cmd {
         #[arg(long)]
         limit: Option<i64>,
     },
+    /// Print the 30-day claim conversion snapshot that gates new imports (M3b).
+    Claims {
+        /// Window in days. Defaults to 30.
+        #[arg(long, default_value_t = 30)]
+        days: i64,
+    },
     /// Remove one imported shell and everything that names it, in one transaction.
     Erase {
         /// The shell's handle, without the @.
@@ -223,6 +229,10 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Catalogue { dry_run, limit } => {
             let pool = db::connect(&cfg).await?;
             orbital::ops::backfill_catalogue(&pool, limit, dry_run).await?;
+        }
+        Cmd::Claims { days } => {
+            let pool = db::connect(&cfg).await?;
+            println!("{}", orbital::ops::claim_conversion(&pool, days).await?);
         }
         Cmd::Erase { handle, apply } => {
             let pool = db::connect(&cfg).await?;

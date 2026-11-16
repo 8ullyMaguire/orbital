@@ -875,3 +875,45 @@ pub async fn erase_shell(pool: &PgPool, handle: &str, apply: bool) -> Result<cra
     tx.commit().await?;
     Ok(report)
 }
+
+/// A bounded snapshot of claim conversion over a fixed window. No writes: this is the number M3b
+/// fixed before M4 may import more rows, so it has to be reproducible by an operator command.
+pub async fn claim_conversion(
+    pool: &PgPool,
+    days: i64,
+) -> Result<crate::models::ClaimConversion> {
+    let receipts: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM import_runs
+          WHERE source = 'claim-proof' AND started_at > now() - make_interval(days => $1::int)",
+    )
+    .bind(days)
+    .fetch_one(pool)
+    .await?;
+    let claims: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM users
+          WHERE claimed_at IS NOT NULL AND claimed_at > now() - make_interval(days => $1::int)",
+    )
+    .bind(days)
+    .fetch_one(pool)
+    .await?;
+    let shells: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM users
+          WHERE claimed_at IS NULL AND password_hash IS NULL",
+    )
+    .fetch_one(pool)
+    .await?;
+    let erasures: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM import_runs
+          WHERE source = 'erasure' AND started_at > now() - make_interval(days => $1::int)",
+    )
+    .bind(days)
+    .fetch_one(pool)
+    .await?;
+    Ok(crate::models::ClaimConversion {
+        days,
+        receipts,
+        claims,
+        shells,
+        erasures,
+    })
+}

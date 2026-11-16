@@ -279,3 +279,48 @@ impl std::fmt::Display for EraseReport {
         )
     }
 }
+
+/// The claim conversion snapshot M3b fixed before M4 could import more rows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimConversion {
+    pub days: i64,
+    pub receipts: i64,
+    pub claims: i64,
+    pub shells: i64,
+    pub erasures: i64,
+}
+
+impl ClaimConversion {
+    /// People who claimed are no longer shells, so add them back to count the population that had
+    /// the chance to convert. `None` is the same NO VERDICT rule M6 applies to thin samples.
+    pub fn ratio(&self) -> Option<f64> {
+        let denominator = self.shells + self.claims;
+        if denominator <= 0 {
+            None
+        } else {
+            Some(self.claims as f64 / denominator as f64)
+        }
+    }
+}
+
+impl std::fmt::Display for ClaimConversion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.ratio() {
+            Some(r) => write!(
+                f,
+                "claims {} day(s): receipts {}, claims {}, shells {}, erasures {}, conversion {:.2}%",
+                self.days,
+                self.receipts,
+                self.claims,
+                self.shells,
+                self.erasures,
+                r * 100.0
+            ),
+            None => write!(
+                f,
+                "claims {} day(s): receipts {}, claims {}, shells {}, erasures {}, NO VERDICT (empty population)",
+                self.days, self.receipts, self.claims, self.shells, self.erasures
+            ),
+        }
+    }
+}

@@ -940,6 +940,40 @@ printed `user 0, entities 0, links 0, tags 0, visits 0`; `doctor` PASS catalogue
 erase paths were exercised against the mock PDS and a transaction fixture, not against a live person.
 M3's 30-day conversion count and rollback rule remain open; M4–M6 and M5's pushdown remain open.
 
+### M3b — conversion count and rollback rule
+
+**Reproduced:** the ledger's M3 gate asks for a 30-day conversion count before more imports, but no
+command prints one. Live has 0 `claim-proof` receipts and 0 claimed shells, so the baseline is 0 / 48,151
+and no import has been gated by it yet.
+
+**Decision.** Add `orbital claims [--days 30]`, printing the window, successful claim receipts, claims
+in the window, current shells, erasures in the window and the conversion ratio. The denominator is
+`shells_now + claims_in_window`: people who already claimed are no longer shells, so adding them back
+is the only way to count the population that had the chance to convert. A ratio with a zero denominator
+prints `NO VERDICT`, not `0%` — the same rule M6 uses for thin samples. A receipt count that differs
+from the claim count is a data-integrity signal and is printed, not hidden.
+
+Rollback rule, fixed here before M4 (record in D58 in the same commit): no new import stage may run
+while 30-day conversion is below 1% **and** fewer than 5 people have claimed in that window. If an
+import runs, every row it creates must carry that run's `import_runs` id in its note; the rollback is
+to stop the runner, delete exactly the rows with that run id, and use `orbital erase --handle` for any
+person who asks to leave. M4's gate must show the second run inserting 0 rows before the stage is
+called idempotent. With 0 claims live today, M4 is parked until either the floor is met or an explicit
+D58 override records why the import is seed data rather than a live directory.
+
+1. `src/models.rs` — add `ClaimConversion { days, receipts, claims, shells, erasures }` with a
+   `ratio()` returning `Option<f64>` and a `Display` that prints the window and `NO VERDICT` when the
+   denominator is zero.
+2. `src/ops.rs` — `claim_conversion(pool, days) -> Result<ClaimConversion>` using four small SQL
+   counts over `import_runs` (`source = 'claim-proof'` and `'erasure'`), `users.claimed_at` and the
+   shell definition (`claimed_at IS NULL AND password_hash IS NULL`).
+3. `src/main.rs` — `Cmd::Claims { days: i64 = 30 }`, print the report; no writes.
+4. `tests/claim_conversion.rs` — seed three shells, commit one claim receipt and one claimed user,
+   assert counts, assert `ratio()` is 0.25, assert a zero-denominator case prints `NO VERDICT`.
+
+Verify: `cargo test --test claim_conversion` → green; live `orbital claims --days 30` prints the
+window and counts, matches the live psql counts, and M4 remains parked until the floor is met.
+
 ## M4 — receipted ingestion
 
 Fold `sweep.py`/`build.py`/`enrich.py`/`merge.py`/`crawl.py` into declared source rows and one runner
