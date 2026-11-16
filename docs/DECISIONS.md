@@ -1887,3 +1887,15 @@ linked all 48,151 shells as subjects (3,570 sharing a canonical surface are one 
 four receipts; the fourth apply affected zero rows. `doctor` now fails the moment the subject count
 falls below the shell count. The entity rows remain substrate: no public page reads them until M2.
 
+**M2a decision (2026-11-16).** The first entity read on the home page is a bounded `LIMIT 6` query
+over `entities`, rendered as a "Recently catalogued" section. "A shell is `noindex`" applies to the
+entity page M3/M2c will create; until that page exists there is nothing to index, so the current
+surface links to the subject's existing profile with `rel=nofollow` and a claim CTA and does not
+enter any shelf or ranking. The three member shelves are untouched by M2a.
+
+**M2a landed (2026-11-16).** Live `/` 4.61 s against a 7.98 s baseline measured in the same session;
+`data-shelf="catalogue"` present once, seven claim CTAs, `/v/nsfw` and `/@thekayluxx` still 200.
+`doctor` still reports `PASS catalogue`. The host release build was blocked by another project's
+build lock, so the release binary was built from the host's freshly built bundle on the workstation
+and installed with `install -m 755`; the service was restarted and healthz answered 200.
+

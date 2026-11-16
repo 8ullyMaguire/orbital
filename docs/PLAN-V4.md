@@ -549,6 +549,8 @@ Verify: `cargo test --test entity_read` → green; `cargo test --test http home`
 `curl https://orbital.polarisocial.xyz/ | grep -o 'data-shelf="catalogue"'` → the string appears;
 `curl -s -o /dev/null -w '%{http_code} %{time_total}s'` before and after on the same host.
 
+M2a gate passed on the live host: `cargo test --test entity_read` → `2 passed; 0 failed`; `cargo test --test http home` → `4 passed; 0 failed`. Live `/` returned 200 in 4.61 s against a 7.98 s baseline measured earlier in the same session (host load varied 20–30); the body contains `data-shelf="catalogue"` once and seven claim CTAs; `/v/nsfw` and `/@thekayluxx` returned 200. `doctor` still prints `PASS catalogue`. The first compile failed because `store.rs` returns `AppError` (`map_err(AppError::from)` added) and `urlencoding` is not a dependency (the fallback link uses the already-safe slug). The host release build was blocked by a concurrent project's lock, so the release binary was built locally from the host's freshly built `web/dist` and installed with `install -m 755`; healthz answered 200 after restart.
+
 ### M2b / M2c — details written when M2a closes
 
 ## M3 — claim proof and erasure
