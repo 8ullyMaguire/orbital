@@ -150,11 +150,10 @@ they describe a two-member site and must not be picked up by momentum.
 | M3b | **[BE] Conversion count and rollback rule**: 30-day claim conversion over `claim-proof` receipts, and a documented rollback before more imports | a count command prints the 30-day window; the rollback rule is written in D58 before M4 runs |
 | M4 | **[OPS] Receipted ingestion — PARKED**: declared source rows, cursors, retry/backoff, `import_runs` per stage | two consecutive runs; the second `INSERT 0 0` on every statement. Unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override (M3b rule) |
 | M5a | **[OPS] Two-phase vertical candidates**: select bounded ids first, decorate only those; closes the M2b pushdown | candidate ids equal decorated ids; same-session latency comparison |
-| M5b | **[OPS] Link-health coverage**: budget ordered failing → new → clicked, with unchecked coverage printed in `doctor` | `doctor` prints unchecked coverage beside failures |
+| M5b | **[OPS] Link-health coverage — Done (`9f3281e`)**: budget failing → new → clicked, with unchecked coverage printed in `doctor` | `doctor` prints unchecked coverage beside failures |
 | M6 | **[BE] Evaluation before ranking**: committed golden set over entities, `orbital eval`, `NO VERDICT` blocks a change | `NO VERDICT` below the floor; only `VERDICT: better` unlocks a ranking change |
 
-Status: M0/M1/M2/M3a/M3b Done; **M5a two-phase candidates Done (`39e20df`); M4 PARKED (0 claims / 0%);
-M5b link-health coverage and M6 open.**
+Status: M0/M1/M2/M3a/M3b/M5a/M5b Done; **M4 PARKED (0 claims / 0%); M6 evaluation gate open.**
 
 ### Phase A — how it was judged (shipped, historical)
 

@@ -1060,6 +1060,13 @@ line beside the failure count, and its numbers match `/api/v1/stats` (`links.tot
 `links.failing`); `/` 200. No checker run against the live host as part of this gate — that is a
 separate bounded operation.
 
+M5b passed: `link_health_coverage` 1 passed (including a `fail_count = 1` fixture that must not count
+as failing), `http` 69 passed. Live `doctor` printed
+`PASS link coverage 267461 total, 266942 unchecked (99.81%), 1 failing, 21 clicked`, matching stats
+`total 267461, unchecked 266942, failing 1`; `/` 2.02 s, `/v/nsfw` 0.78 s, `/feed.json` 0.44 s, all
+200. The first deploy printed 2 failing because coverage counted every transient failure; the fix uses
+`health::FAIL_THRESHOLD`. M5b is Done. M6 remains open.
+
 ## M6 — evaluation before any new ranking rule
 
 Commit a golden set over entities, run `orbital eval`, and refuse a ranking change below the sample

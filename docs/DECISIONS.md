@@ -1973,3 +1973,15 @@ Gate: `vertical_bounds` 1 passed (candidate ids equal the decorated ids, leader 
 100 rows unchanged; `doctor` PASS catalogue. This closes the unblock D58 recorded for M2b. **M5b link
 health coverage remains open.**
 
+**M5b link coverage and check order (2026-11-16).** `doctor` printed checker freshness but not the
+denominator behind "1 failing", and `links_to_check` ordered never-checked links first, so a known
+break could sit behind 266k unchecked rows. `doctor` now prints total / unchecked (with percentage) /
+failing / clicked; `links_to_check` budgets failing (any `fail_count > 0`) → never-checked → clicked →
+rest. First deploy exposed a definition mismatch: coverage counted `fail_count > 0` (2) while
+`/api/v1/stats` counts the 3-failure badge (1); `link_health_coverage` now uses
+`health::FAIL_THRESHOLD`, with a `fail_count = 1` fixture pinning the distinction. Gate:
+`link_health_coverage` 1 passed, `http` 69 passed. Live `doctor` prints
+`PASS link coverage 267461 total, 266942 unchecked (99.81%), 1 failing, 21 clicked`, matching stats
+`total 267461, unchecked 266942, failing 1`; `/`, `/v/nsfw`, `/feed.json` 200. No checker run against
+the live host: ordering is proven by the fixture, not by walking 267k links. M5b is Done; M6 is next.
+
