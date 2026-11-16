@@ -220,7 +220,7 @@ pub fn avatar(name: &str, url: Option<&str>, accent: &str, size: u32) -> String 
     }
     let accent2 = accent_shift(accent, 40);
     format!(
-        r#"<span class="av av-gen" style="--accent:{a};--accent2:{b};width:{s}px;height:{s}px;font-size:{fs}px">{ini}</span>"#,
+        r#"<span class="av av-gen" aria-hidden="true" style="--accent:{a};--accent2:{b};width:{s}px;height:{s}px;font-size:{fs}px">{ini}</span>"#,
         a = esc(accent),
         b = esc(&accent2),
         s = size,

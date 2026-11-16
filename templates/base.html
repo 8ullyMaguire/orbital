@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#06070d">
   <title>{% block title %}{{ layout.site_name }}{% endblock %}</title>
   <meta name="description" content="{% block description %}{{ layout.tagline }}{% endblock %}">
   <link rel="canonical" href="{% block canonical %}{{ layout.base }}/{% endblock %}">
@@ -17,7 +18,8 @@
   <meta name="twitter:card" content="summary_large_image">
   {% block head %}{% endblock %}
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="manifest" href="/assets/manifest.webmanifest?v=2026.11.16.2">
+  <link rel="stylesheet" href="/assets/site.css?v=2026.11.16.2">
   <link rel="alternate" type="application/feed+json" title="{{ layout.site_name }}" href="{{ layout.base }}/feed.json">
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
@@ -40,6 +42,16 @@
       <a class="nav-a" href="/search">{{ layout.t("nav.search") }}</a>
     </nav>
     <div class="top-r">
+      <details class="mnav">
+        <summary class="nav-a mnav-summary" aria-label="Menu" title="Menu"><span aria-hidden="true">☰</span></summary>
+        <div class="drop-panel mnav-panel">
+          <a class="drop-i" href="/">{{ layout.t("nav.directory") }}</a>
+          {% for n in layout.nav %}
+          <a class="drop-i" href="/v/{{ n.slug }}">{{ n.icon|safe }}<span>{{ n.label }}</span></a>
+          {% endfor %}
+          <a class="drop-i" href="/search">{{ layout.t("nav.search") }}</a>
+        </div>
+      </details>
       <a class="nav-a sm" href="{{ layout.lang_switch_href() }}" hreflang="{% if layout.lang.code() == "es" %}en{% else %}es{% endif %}" rel="alternate">{{ layout.lang_switch_label() }}</a>
       {% match layout.me %}
       {% when Some with (u) %}
@@ -66,20 +78,20 @@
     </div>
     <div class="foot-cols">
       <div>
-        <h4>{{ layout.t("foot.browse") }}</h4>
+        <p class="foot-h">{{ layout.t("foot.browse") }}</p>
         <a href="/">{{ layout.t("foot.everything") }}</a>
         <a href="/search">{{ layout.t("foot.search") }}</a>
         <a href="{{ layout.base }}/feed.json">{{ layout.t("foot.feed_json") }}</a>
         <a href="{{ layout.base }}/feed.xml">{{ layout.t("foot.rss") }}</a>
       </div>
       <div>
-        <h4>{{ layout.t("foot.join") }}</h4>
+        <p class="foot-h">{{ layout.t("foot.join") }}</p>
         <a href="/app/#/join">{{ layout.t("foot.create") }}</a>
         <a href="/app/#/login">{{ layout.t("foot.signin") }}</a>
         <a href="/about">{{ layout.t("foot.how") }}</a>
       </div>
       <div>
-        <h4>{{ layout.t("nav.verticals") }}</h4>
+        <p class="foot-h">{{ layout.t("nav.verticals") }}</p>
         {% for n in layout.nav %}{% if loop.index < 6 %}<a href="/v/{{ n.slug }}">{{ n.label }}</a>{% endif %}{% endfor %}
       </div>
     </div>

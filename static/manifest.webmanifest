@@ -1,0 +1,17 @@
+{
+  "name": "Orbital — A directory of people",
+  "short_name": "Orbital",
+  "description": "A directory of humans and their links, sorted into verticals.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06070d",
+  "theme_color": "#06070d",
+  "icons": [
+    {
+      "src": "/assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -76,6 +76,7 @@ pub async fn build_router(state: AppState) -> Router {
         .merge(routes::prefs::router())
         .merge(routes::assets::router())
         .route("/healthz", axum::routing::get(healthz))
+        .fallback(api_fallback)
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             visitor_middleware,
@@ -84,6 +85,17 @@ pub async fn build_router(state: AppState) -> Router {
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// An unmatched `/api/*` path is still an API answer: the estate envelope, not an empty 404.
+async fn api_fallback(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+
+    if uri.path().starts_with("/api/") {
+        error::ApiError(error::AppError::NotFound).into_response()
+    } else {
+        (axum::http::StatusCode::NOT_FOUND, "not found").into_response()
+    }
 }
 
 /// The estate health answer: `{status, version, checks}`, with the status code chosen by the same call that builds it.

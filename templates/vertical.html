@@ -48,10 +48,10 @@
   {% if rows.len() == 0 %}
   <div class="empty">
     {% if tab == "trending" %}
-    <h3>No traffic measured yet</h3>
+    <h2>No traffic measured yet</h2>
     <p class="muted">Trending needs visitors in the last seven days and there are none yet, so the tab is hidden rather than padded with whoever joined last.</p>
     {% else %}
-    <h3>This vertical is empty</h3>
+    <h2>This vertical is empty</h2>
     <p class="muted">Nobody has claimed {{ v.label }} yet. <a href="/app/#/join">Be the first</a> and the leaderboard starts with you.</p>
     {% endif %}
   </div>

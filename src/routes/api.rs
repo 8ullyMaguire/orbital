@@ -56,6 +56,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/proposals/{id}/decide", post(decide_proposal))
         .route("/api/tags/{tag}/endorse", post(endorse_tag))
         .merge(super::tokens::router())
+        .layer(axum::middleware::map_response(crate::error::api_envelope))
 }
 
 fn json_with_cookie(value: Value, cookie: HeaderValue) -> Response {

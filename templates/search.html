@@ -6,7 +6,7 @@
 <section class="wrap section">
   <h1 class="h-sm">Search the directory</h1>
   <form class="searchrow" action="/search" method="get" role="search">
-    <input type="search" name="q" value="{{ q }}" placeholder="A name, a handle, a tag, a site…" aria-label="Search" autofocus>
+    <input type="search" name="q" value="{{ q }}" placeholder="Name, handle, tag, or site" aria-label="Search" autofocus>
     <button class="btn" type="submit">Search</button>
   </form>
 
@@ -18,7 +18,7 @@
 
     {% if members.len() == 0 %}
     <div class="empty">
-      <h3>Nobody matches that</h3>
+      <h2>Nobody matches that</h2>
       <p class="muted">Try a broader word, or <a href="/">browse the verticals</a>.</p>
     </div>
     {% else %}
@@ -33,11 +33,14 @@
       <p class="muted sm">Catalogue matches are not member rankings. Unclaimed entries carry a claim CTA and do not rank.</p>
       <div class="vgrid">
         {% for e in entities %}
-        <a class="vcard" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>
-          <div class="vcard-h"><span class="vname">{{ e.title }}</span><span class="pill">{{ e.category_label }}</span></div>
+        <article class="vcard">
+          <div class="vcard-h">
+            <a class="vname" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>{{ e.title }}</a>
+            <span class="pill">{{ e.category_label }}</span>
+          </div>
           <p class="muted sm vdesc">{{ e.description }}</p>
-          {% if !e.claimed %}<p class="muted sm">Unclaimed — <a href="/app/#/join">claim this</a></p>{% endif %}
-        </a>
+          {% if !e.claimed %}<p class="muted sm">Unclaimed — <a class="btn btn-ghost btn-sm" href="/app/#/join">Claim this</a></p>{% endif %}
+        </article>
         {% endfor %}
       </div>
     </section>

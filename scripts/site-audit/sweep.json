@@ -1,0 +1,6 @@
+{
+  "base": "https://orbital.polarisocial.xyz",
+  "widths": [1280, 390],
+  "routes": ["/", "/v/nsfw", "/search?q=patreon", "/about", "/does-not-exist"],
+  "note": "Run probe.js in a real browser for each route and width; store the result under <width><route>. The canary and the injected zero-gutter rule are required once per pass before a clean sweep is believed."
+}

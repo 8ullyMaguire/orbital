@@ -14,7 +14,7 @@
   <h1>Find people by<br><em>what they make</em>.</h1>
   <p class="lede">{{ layout.site_name }} is a directory of humans and their links, sorted into verticals. No feed, no algorithm, no growth team — a page per person, a leaderboard per craft, and the numbers are measured rather than claimed.</p>
   <form class="searchrow" action="/search" method="get" role="search">
-    <input type="search" name="q" placeholder="A name, a handle, a tag, a site…" aria-label="Search people" value="{{ q }}">
+    <input type="search" name="q" placeholder="Name, handle, tag, or site" aria-label="Search people" value="{{ q }}">
     <button class="btn" type="submit">Search</button>
   </form>
   <p class="hint muted sm">Or start in
@@ -58,11 +58,14 @@ Each person appears once on this page, and the busiest faces make room for the q
 </div>
 <div class="vgrid">
   {% for e in catalogue %}
-  <a class="vcard" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>
-    <div class="vcard-h"><span class="vname">{{ e.title }}</span><span class="pill">{{ e.category_label }}</span></div>
+  <article class="vcard">
+    <div class="vcard-h">
+      <a class="vname" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>{{ e.title }}</a>
+      <span class="pill">{{ e.category_label }}</span>
+    </div>
     <p class="muted sm vdesc">{{ e.description }}</p>
-    {% if !e.claimed %}<p class="muted sm">Unclaimed — <a href="/app/#/join">claim this</a></p>{% endif %}
-  </a>
+    {% if !e.claimed %}<p class="muted sm">Unclaimed — <a class="btn btn-ghost btn-sm" href="/app/#/join">Claim this</a></p>{% endif %}
+  </article>
   {% endfor %}
 </div>
 </section>

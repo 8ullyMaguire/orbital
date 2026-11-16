@@ -39,6 +39,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/ring/{slug}", get(ring))
         .route("/api/v1/taste", get(lens))
         .merge(super::tokens::v1_router())
+        .layer(axum::middleware::map_response(crate::error::api_envelope))
 }
 
 /// Serialise once, then answer with a validator the client can use.
