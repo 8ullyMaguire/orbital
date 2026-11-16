@@ -801,6 +801,74 @@ the `feed` filter, so the single test file was run whole). Live `/feed.json` 1.2
 elements in RSS, `/v/nsfw` present in the sitemap, `doctor` PASS catalogue. Search remains the last
 M2c surface; its detail is written when feeds close.
 
+### M2c — search reads the catalogue too
+
+**Reproduced:** `src/store.rs::search` queries only `users` (60-row LIMIT, so already bounded), while
+live has 399 entities whose title/description match `patreon` and 714 entity tags matching it. A
+search for that word returns none of them. M2c's promise is an entity read path, so search must read
+`entities`, not just the roster it grew up on.
+
+**Decision.** Add a bounded entity search over title, description and `entity_tags` with the existing
+12-row chip limit. Render the results in a small "In the catalogue" section using the existing
+`EntityCardView`, so no new page or route is created. Unclaimed shells are `rel=nofollow` with a claim
+CTA, exactly as on the home shelf (D58 M2a). Member results keep their current 60-row limit, order and
+SFW filter — this adds a source, it does not change an existing one.
+
+1. `src/store.rs` — append:
+
+```rust
+/// Catalogue matches for a search term. Twelve rows, whatever the size of `entities`; the LIKE
+/// escapes the two characters that would otherwise turn a query into a wildcard.
+pub async fn search_entities(
+    pool: &PgPool,
+    q: &str,
+    include_nsfw: bool,
+    limit: i64,
+) -> Result<Vec<EntitySummary>, AppError> {
+    let like = format!("%{}%", q.replace('%', "").replace('_', ""));
+    sqlx::query_as::<_, EntitySummary>(
+        "SELECT e.id, e.slug, e.title, e.description,
+                COALESCE(c.label, 'Catalogue') AS category_label,
+                e.nsfw,
+                EXISTS (SELECT 1 FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                        WHERE ep.entity_id = e.id
+                          AND (u.claimed_at IS NOT NULL OR u.password_hash IS NOT NULL)) AS claimed,
+                COALESCE((SELECT u.handle FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                          WHERE ep.entity_id = e.id AND ep.role = 'subject'
+                          ORDER BY u.handle LIMIT 1), '') AS handle
+         FROM entities e LEFT JOIN categories c ON c.slug = e.category_slug
+         WHERE e.hidden = false AND e.merged_into IS NULL AND ($2 OR e.nsfw = false)
+           AND (e.title ILIKE $1 OR e.description ILIKE $1
+                OR EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_id = e.id AND et.tag_slug ILIKE $1))
+         ORDER BY e.title
+         LIMIT $3",
+    )
+    .bind(like)
+    .bind(include_nsfw)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+```
+
+2. `src/render.rs` — add `pub entities: Vec<EntityCardView>` to `SearchTemplate`.
+3. `src/routes/public.rs` in `search`: after building `cards`, map
+   `store::search_entities(&st.pool, &query, true, 12).await?` into `EntityCardView` exactly as the home
+   handler does, and pass it as `entities`.
+4. `templates/search.html` — add a section after the member results, guarded by
+   `{% if entities.len() > 0 %}`, using the same card markup as the home catalogue shelf with
+   `data-shelf="catalogue-search"`.
+
+5. `tests/search_entities.rs`: seed a claimed entity and an unclaimed shell entity whose title/tag
+   match `patreon`, plus a hidden one and an nsfw one; assert the store query excludes hidden, honours
+   the SFW flag and the LIMIT; assert `/search?q=patreon` contains both the member result and the
+   entity titles while `/search?q=nothing-matches` contains neither.
+
+Verify: `cargo test --test search_entities` → green; full `http` suite green; live
+`/search?q=patreon` 200 with `data-shelf="catalogue-search"` and a real entity title in the body, plus
+same-session timing.
+
 ## M3 — claim proof and erasure
 
 One claim path (page proof or Bluesky token), one `orbital erase <handle>` command with the same

@@ -1832,3 +1832,37 @@ pub async fn all_members_limited(
         .fetch_all(pool)
         .await?)
 }
+
+/// Catalogue matches for a search term. Twelve rows, whatever the size of `entities`; the LIKE
+/// escapes the two characters that would otherwise turn a query into a wildcard.
+pub async fn search_entities(
+    pool: &PgPool,
+    q: &str,
+    include_nsfw: bool,
+    limit: i64,
+) -> Result<Vec<EntitySummary>, AppError> {
+    let like = format!("%{}%", q.replace('%', "").replace('_', ""));
+    sqlx::query_as::<_, EntitySummary>(
+        "SELECT e.id, e.slug, e.title, e.description,
+                COALESCE(c.label, 'Catalogue') AS category_label,
+                e.nsfw,
+                EXISTS (SELECT 1 FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                        WHERE ep.entity_id = e.id
+                          AND (u.claimed_at IS NOT NULL OR u.password_hash IS NOT NULL)) AS claimed,
+                COALESCE((SELECT u.handle FROM entity_people ep JOIN users u ON u.id = ep.user_id
+                          WHERE ep.entity_id = e.id AND ep.role = 'subject'
+                          ORDER BY u.handle LIMIT 1), '') AS handle
+         FROM entities e LEFT JOIN categories c ON c.slug = e.category_slug
+         WHERE e.hidden = false AND e.merged_into IS NULL AND ($2 OR e.nsfw = false)
+           AND (e.title ILIKE $1 OR e.description ILIKE $1
+                OR EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_id = e.id AND et.tag_slug ILIKE $1))
+         ORDER BY e.title
+         LIMIT $3",
+    )
+    .bind(like)
+    .bind(include_nsfw)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}

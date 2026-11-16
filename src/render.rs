@@ -436,6 +436,8 @@ pub struct SearchTemplate {
     pub layout: Layout,
     pub q: String,
     pub members: Vec<MemberCard>,
+    /// M2c: bounded catalogue matches, rendered beside the member results.
+    pub entities: Vec<EntityCardView>,
     pub tags: Vec<TagCount>,
     pub quick: Vec<(String, String)>,
 }

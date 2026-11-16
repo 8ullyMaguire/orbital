@@ -863,6 +863,22 @@ pub async fn search(
         .enumerate()
         .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Top, now))
         .collect();
+    // M2c: the catalogue is a second, bounded source for the same query.
+    let entities: Vec<crate::render::EntityCardView> = store::search_entities(&st.pool, &query, true, 12)
+        .await?
+        .into_iter()
+        .map(|e| crate::render::EntityCardView {
+            url: if e.handle.is_empty() {
+                format!("/search?q={}", e.slug)
+            } else {
+                format!("/@{}", e.handle)
+            },
+            title: e.title,
+            description: e.description,
+            category_label: e.category_label,
+            claimed: e.claimed,
+        })
+        .collect();
     let tag_rows = tags
         .drain(..)
         .map(|(slug, count)| TagCount {
@@ -882,6 +898,7 @@ pub async fn search(
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         q: query,
         members: cards,
+        entities,
         tags: tag_rows,
         quick,
     })

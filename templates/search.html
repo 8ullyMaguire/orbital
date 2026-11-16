@@ -26,6 +26,22 @@
       {% for m in members %}{% include "member_card.html" %}{% endfor %}
     </div>
     {% endif %}
+
+    {% if entities.len() > 0 %}
+    <section data-shelf="catalogue-search" style="margin-top:26px">
+      <h2 class="h-sm">In the catalogue</h2>
+      <p class="muted sm">Catalogue matches are not member rankings. Unclaimed entries carry a claim CTA and do not rank.</p>
+      <div class="vgrid">
+        {% for e in entities %}
+        <a class="vcard" href="{{ e.url }}" {% if !e.claimed %}rel="nofollow"{% endif %}>
+          <div class="vcard-h"><span class="vname">{{ e.title }}</span><span class="pill">{{ e.category_label }}</span></div>
+          <p class="muted sm vdesc">{{ e.description }}</p>
+          {% if !e.claimed %}<p class="muted sm">Unclaimed — <a href="/app/#/join">claim this</a></p>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
   {% else %}
     <p class="muted">Search by name, handle, tag or the sites someone links to.</p>
     <div class="chips">{% for v in quick %}<a class="chip" href="/v/{{ v.0 }}">{{ v.1 }}</a>{% endfor %}</div>
