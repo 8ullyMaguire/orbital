@@ -90,4 +90,16 @@ async fn backfill_merges_two_shells_that_share_one_surface(pool: PgPool) {
     assert_eq!(c.seen, 2);
     assert_eq!(c.inserted, 1);
     assert_eq!(c.conflicts, 1, "a shared own surface is one canonical entity");
+
+    // The shell that lost the conflict must still be linked, or the doctor gate can never pass.
+    let composition = orbital::store::catalogue_composition(&pool)
+        .await
+        .expect("composition");
+    assert_eq!(composition.shells, 2);
+    assert_eq!(composition.subjects, 2, "both shells are subjects of the one entity");
+
+    let again = orbital::store::backfill_catalogue(&pool, None)
+        .await
+        .expect("third run");
+    assert_eq!(again.seen, 0, "a linked shell is not a pending shell any more");
 }

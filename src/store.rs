@@ -1645,7 +1645,7 @@ pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> anyhow::Re
              ON CONFLICT (canonical_key) DO NOTHING RETURNING id",
         )
         .bind(entity_slug(&handle))
-        .bind(key)
+        .bind(&key)
         .bind(title)
         .bind(bio)
         .bind(&primary_vertical)
@@ -1656,6 +1656,24 @@ pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> anyhow::Re
 
         let Some(id) = id else {
             counts.conflicts += 1; // two shells sharing a first URL are one entity, not two
+            // The shell still deserves a catalogue row and must not be picked up forever. Link it
+            // to the entity that already owns this canonical key, without creating a second entity.
+            if let Some(existing) = sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM entities WHERE canonical_key = canonical_key($1)",
+            )
+            .bind(&key)
+            .fetch_optional(pool)
+            .await?
+            {
+                sqlx::query(
+                    "INSERT INTO entity_people (entity_id, user_id, role, claimed_at)
+                     VALUES ($1, $2, 'subject', NULL) ON CONFLICT DO NOTHING",
+                )
+                .bind(existing)
+                .bind(user_id)
+                .execute(pool)
+                .await?;
+            }
             continue;
         };
         counts.tags += sqlx::query(

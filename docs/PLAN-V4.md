@@ -403,6 +403,24 @@ Host-tree precondition: `Cargo.lock` is modified and `scripts/creator-sources/en
 untracked on thinkcentre; both abort the deploy's `git checkout -B main origin/main`. Commit the
 lockfile locally, push to both remotes, then restore/remove those host files before deploying.
 
+### M1 gate result so far (2026-11-16, real output)
+
+- `cargo test --test catalogue` → `test result: ok. 2 passed; 0 failed; 0 ignored; ...`. Run on the
+  workstation against the host's test DB (port 55433 via `ssh -L`) because the host's debug build sat
+  in D state under I/O wait for 12 minutes with load >30. The verification checkout used
+  `~/code-local/rust/commons` and `~/code/polaris-*` for the path deps: `~/code-local/polaris-eval` is
+  stale and has no `paired` module, which is an environment mismatch, not a repo defect.
+- The first real run exposed four defects that a passing test written against unfixed code would have
+  hidden: `store.rs` has no `Result` alias (uses `anyhow::Result`), `own_url` decodes as
+  `Option<String>` not `bool`, the `dev` vertical is seeded by migration 0001, and the seeded
+  verticals produce 10 categories. All four were fixed and the rerun was green.
+- SQL contract on a scratch DB with migrations 0001–0009 applied: first backfill inserted 1 entity
+  (the shell, not the password-holding account), second inserted 0, composition read
+  `shells=1, claimed=1, entities=1, subjects=1, receipts=0`, 1 tag survived the `entity_tags` CHECK,
+  and categories were filled from verticals.
+- Live deploy and the two `orbital catalogue` applies are **still running** when this is written.
+  Do not mark M1 Done in `docs/ROADMAP.md` until their output is in the handoff.
+
 ---
 
 ## M2 — the entity read path (next; details written when M1 closes)
