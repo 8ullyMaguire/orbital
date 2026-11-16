@@ -1115,7 +1115,7 @@ gradient stops measure 9.54:1, 4.63:1 and 12.19:1 against `#06070d`). Button whi
 `#7657ec → #5a36e0` (4.83:1 at the light end, 6.58:1 at the dark end) before this pass. Search with
 `color-contrast` disabled: **0 violations, 23 passes, 0 incomplete**; vertical: **0, 20, 0**.
 
-Latency after the final deploy, same session, n=3: home 2.02/2.02/2.19 s; `/v/nsfw`
-1.09/0.67/0.83 s; search 0.59 s. No claim of a speedup: these are absolute probes, and no
-before/after interval was fixed for a UI-only change.
+Latency after the final deploy, same session, n=3: home 2.67/2.84/2.98 s; `/v/nsfw`
+0.73/0.99/1.48 s; search 0.60 s. No claim of a speedup: these are absolute probes, and no
+before/after interval was fixed for a UI-only change; one earlier sample was 3.45 s under load.
 
