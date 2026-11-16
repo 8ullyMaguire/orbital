@@ -113,18 +113,27 @@ pub async fn home(
     let mut cards: Vec<VerticalCard> = Vec::new();
 
     for v in &verticals {
-        let members = store::vertical_members(&st.pool, &v.slug).await?;
-        let members: Vec<MemberStat> = members
-            .into_iter()
-            .filter(|m| visible(m))
-            .collect();
+        // M2b: a bounded candidate pool and a count query replace a full roster decode per card.
+        let members = store::vertical_members_limited(
+            &st.pool,
+            &v.slug,
+            crate::shelf::CANDIDATE_CAP as i64,
+        )
+        .await?;
+        let members: Vec<MemberStat> = members.into_iter().filter(visible).collect();
+        let count = store::vertical_member_count(&st.pool, &v.slug).await?;
         // A vertical nobody is in is a real page with an honest empty state, and it is not a card on the front
         // page: "still growing" was the site advertising six rooms with nobody in them.
-        if members.is_empty() {
+        if members.is_empty() || count == 0 {
             continue;
         }
-        let ranked =
-            ranking::rank_top(members, &weights, lens.relevance, attn.clone(), ranking::Window::Recent);
+        let ranked = ranking::rank_top(
+            members,
+            &weights,
+            lens.relevance,
+            attn.clone(),
+            ranking::Window::Recent,
+        );
         let top = ranked
             .iter()
             .take(3)
@@ -136,7 +145,7 @@ pub async fn home(
             label: v.label.clone(),
             description: v.description.clone(),
             icon: icon_svg(&v.icon),
-            members: ranked.len() as i64,
+            members: count,
             accent: crate::text::accent_for(&v.slug),
             top,
         });

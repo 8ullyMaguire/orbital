@@ -542,6 +542,41 @@ pub async fn vertical_members(pool: &PgPool, slug: &str) -> Result<Vec<MemberSta
         .await?)
 }
 
+/// The head of one vertical's leaderboard, bounded before decode. The ORDER BY is a candidate
+/// selector for `rank_top`, not a replacement for it: the ranker still owns the final order.
+pub async fn vertical_members_limited(
+    pool: &PgPool,
+    slug: &str,
+    limit: i64,
+) -> Result<Vec<MemberStat>, AppError> {
+    let sql = format!(
+        "SELECT {MEMBER_STAT_COLS}, uv.role
+           {from}
+           JOIN user_verticals uv ON uv.user_id = u.id AND uv.vertical_slug = $1
+          WHERE u.hidden = false
+          ORDER BY coalesce(st.visitors, 0) DESC, coalesce(st.clicks, 0) DESC, u.created_at
+          LIMIT $2",
+        from = member_stats_from("$1")
+    );
+    Ok(sqlx::query_as::<_, MemberStat>(&sql)
+        .bind(slug)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?)
+}
+
+/// The pill count needs a number, not a roster. One indexed count instead of 48k decoded rows.
+pub async fn vertical_member_count(pool: &PgPool, slug: &str) -> Result<i64, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM user_verticals uv
+           JOIN users u ON u.id = uv.user_id
+          WHERE uv.vertical_slug = $1 AND u.hidden = false",
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await?)
+}
+
 /// What a surface has shown in the last `hours`, per member (D45). One query, one shape: the ceiling needs
 /// both halves of the ratio, so they are read together or not at all.
 pub async fn impressions_window(

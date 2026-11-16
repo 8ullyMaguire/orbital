@@ -551,7 +551,106 @@ Verify: `cargo test --test entity_read` → green; `cargo test --test http home`
 
 M2a gate passed on the live host: `cargo test --test entity_read` → `2 passed; 0 failed`; `cargo test --test http home` → `4 passed; 0 failed`. Live `/` returned 200 in 4.61 s against a 7.98 s baseline measured earlier in the same session (host load varied 20–30); the body contains `data-shelf="catalogue"` once and seven claim CTAs; `/v/nsfw` and `/@thekayluxx` returned 200. `doctor` still prints `PASS catalogue`. The first compile failed because `store.rs` returns `AppError` (`map_err(AppError::from)` added) and `urlencoding` is not a dependency (the fallback link uses the already-safe slug). The host release build was blocked by a concurrent project's lock, so the release binary was built locally from the host's freshly built `web/dist` and installed with `install -m 755`; healthz answered 200 after restart.
 
-### M2b / M2c — details written when M2a closes
+### M2b — vertical cards without ten full-roster decodes
+
+**Reproduced:** `grep -n 'vertical_members\|all_members' src/routes/public.rs` shows `vertical_members`
+in the home loop at line 116; live `users 48153 · nsfw_rows 48150 · verticals 10`, so the front page
+reads the whole roster once per populated vertical. Home measured 3.77 s and 2.96 s this session.
+
+**Decision.** Keep vertical-context statistics (D1) and the existing `rank_top` arithmetic. Add a
+bounded candidate query per vertical — top 24 by the same primary signals rank_top uses (visitors,
+clicks, older account), with the caller's `ctx` still bound — and a cheap `count(*)` for the pill.
+Ranking runs over at most 24 decoded rows, so the top three are chosen from the same head of the list
+the old code decoded in full. This is a bounded candidate pool, not a new ranker: the arithmetic stays
+in `src/ranking.rs`. The remaining full decode on home is `all_members` for the three member shelves;
+M2c moves those to entities.
+
+1. `src/store.rs` — append after `vertical_members`:
+
+```rust
+/// The head of one vertical's leaderboard, bounded before decode. The ORDER BY is a candidate
+/// selector for `rank_top`, not a replacement for it: the ranker still owns the final order.
+pub async fn vertical_members_limited(
+    pool: &PgPool,
+    slug: &str,
+    limit: i64,
+) -> Result<Vec<MemberStat>, AppError> {
+    let sql = format!(
+        "SELECT {MEMBER_STAT_COLS}, uv.role
+           {from}
+           JOIN user_verticals uv ON uv.user_id = u.id AND uv.vertical_slug = $1
+          WHERE u.hidden = false
+          ORDER BY coalesce(st.visitors, 0) DESC, coalesce(st.clicks, 0) DESC, u.created_at
+          LIMIT $2",
+        from = member_stats_from("$1")
+    );
+    Ok(sqlx::query_as::<_, MemberStat>(&sql)
+        .bind(slug)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?)
+}
+
+/// The pill count needs a number, not a roster. One indexed count instead of 48k decoded rows.
+pub async fn vertical_member_count(pool: &PgPool, slug: &str) -> Result<i64, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM user_verticals uv
+           JOIN users u ON u.id = uv.user_id
+          WHERE uv.vertical_slug = $1 AND u.hidden = false",
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await?)
+}
+```
+
+2. `src/routes/public.rs` in `home`, replace the body of the `for v in &verticals` loop:
+
+```rust
+        // M2b: a bounded candidate pool and a count query replace a full roster decode per card.
+        let members = store::vertical_members_limited(
+            &st.pool,
+            &v.slug,
+            crate::shelf::CANDIDATE_CAP as i64,
+        )
+        .await?;
+        let members: Vec<MemberStat> = members.into_iter().filter(visible).collect();
+        let count = store::vertical_member_count(&st.pool, &v.slug).await?;
+        if members.is_empty() || count == 0 {
+            continue;
+        }
+        let ranked = ranking::rank_top(
+            members,
+            &weights,
+            lens.relevance,
+            attn.clone(),
+            ranking::Window::Recent,
+        );
+        let top = ranked
+            .iter()
+            .take(3)
+            .enumerate()
+            .map(|(i, m)| card(m, &ctx.base, i + 1, StatMode::Top, now))
+            .collect();
+        cards.push(VerticalCard {
+            slug: v.slug.clone(),
+            label: v.label.clone(),
+            description: v.description.clone(),
+            icon: icon_svg(&v.icon),
+            members: count,
+            accent: crate::text::accent_for(&v.slug),
+            top,
+        });
+```
+
+3. `tests/vertical_bounds.rs` — the gate: 30 members in `dev` with distinct visitor counts, a
+   `limited(..., 24)` call decoding at most 24 rows while retaining the 30-visitor leader, a
+   `vertical_member_count` of 30, and a home HTTP assertion that the card pill says 30.
+
+Verify: `cargo test --test vertical_bounds` → green; `cargo test --test http home` → green; live
+`/` 200 with the vertical card pill and the catalogue section; same-session before/after latency.
+
+### M2c — details written when M2b closes
 
 ## M3 — claim proof and erasure
 
