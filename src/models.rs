@@ -217,3 +217,23 @@ pub struct Standing {
     pub clicks_7d: i64,
     pub visitors_7d: i64,
 }
+
+/// What the catalogue looks like right now. `shells` counts imported rows with no way to log in;
+/// `subjects` counts shells that already have a catalogue row. The doctor gate is `shells <= subjects`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct CatalogueComposition {
+    pub shells: i64,
+    pub claimed: i64,
+    pub entities: i64,
+    pub subjects: i64,
+    pub receipts: i64,
+}
+
+/// The four numbers one backfill run is accountable for.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BackfillCounts {
+    pub seen: i64,
+    pub inserted: i64,
+    pub conflicts: i64,
+    pub tags: i64,
+}

@@ -966,3 +966,70 @@ runs two ActivityPub implementations in two languages, so the first rule is: **d
 - **What a user gets.** A review written here appears on their followers' timelines elsewhere; a
   review written on another instance appears on the entity page here, attributed, with a link home;
   following a reviewer brings their reviews like any other feed.
+
+## 7. The entity-first refactor (2026-11-16, D58)
+
+### The problem this section exists to solve
+
+The roster arrived and the data model did not move with it. Live on 2026-11-16:
+
+    users                48,153   of which 48,151 are unclaimed shells (password_hash IS NULL)
+    import_runs          0        four bulk imports left no receipt
+    entities             0        the substrate from migration 0009 has never been filled
+    categories           0        ditto
+    home                 3.1–3.8 s
+    /v/nsfw              4.8 s
+
+Every discovery surface still asks "which members?" and decodes the whole roster twice per request.
+The site therefore describes 48,151 people who never asked to be in it as ranking members, while the
+one table designed to hold a catalogue of things (`entities`) sits empty. This is not a content
+problem: it is the shape of the data model.
+
+### Target architecture
+
+1. **The catalogue is `entities`, not `users`.** Every imported surface becomes an entity with a
+   canonical key enforced by the database trigger. `users` holds accounts and claimable shells; a
+   shell does not rank, is `noindex`, and is promoted only by a claim with proof.
+2. **Claim is a boundary, not a later phase.** An entity/row imported from a registry is a subject
+   waiting for a claimant. Erasure is a one-command path with the same reach as the import, and is
+   exercised before further bulk imports.
+3. **Ingestion is receipted.** Each run writes one `import_runs` row: source, seen, inserted, updated,
+   failed. A second run must prove idempotency with its own `INSERT 0`, not with the first run's
+   totals. Source declarations live in one place; adding a source is one row, not a new script shape.
+4. **The read path has a scale contract.** No unbounded roster decode on a public page, no O(n²)
+   candidate selection, one explicit place where the per-request budget is declared. A page is
+   measured before and after a change on the same host, in the same session.
+5. **Ranking changes need evidence.** A committed golden set and `polaris-eval` decide; `NO VERDICT`
+   blocks the change. D27 (silent prior) and D28 (open contribution) are unchanged boundaries.
+
+### Non-goals
+
+- No new verticals, no new hostname, no reader-facing display of the instance's taste prior.
+- No account required to add an entity, write a review or cast a ballot (D28).
+- No second search index, comment tree, notification table or identity provider.
+- No deletion of the imported roster: the first refactor step fills the substrate beside it, and
+  the read path moves over one surface at a time.
+- No federation work until the entity read path exists; D26's object model is unchanged.
+
+### Interim representation and why
+
+The first backfill creates one `person` entity per imported shell, keyed by that person's first own
+surface and linked to the shell through `entity_people(role='subject')`. Calling those rows `site`
+would pretend a person's OnlyFans URL is a site the catalogue independently knows. A later step
+promotes each own surface to a `site` entity with `entity_edges(relation='runs')`; that promotion is
+a separate decision because it multiplies 48k rows into roughly 267k and needs its own gate. `kind`
+is data in `entities`, not a new table.
+
+### Success criteria (each a command, not an adjective)
+
+| # | claim | command | expected |
+|---|---|---|---|
+| S1 | every shell has a catalogue row and no shell is skipped | `orbital catalogue --dry-run` then `orbital catalogue` | dry-run reports the count, apply reports `inserted = shells`, second run `seen 0` |
+| S2 | the receipt exists | `psql -c 'select source,rows_seen,rows_inserted from import_runs order by id desc limit 2'` | two `catalogue-backfill` rows, second `0,0` |
+| S3 | categories are filled from verticals | `psql -c 'select count(*) from categories'` | `10` |
+| S4 | the instrument is in `doctor` | `orbital doctor \| grep catalogue` | `PASS catalogue … shell(s) … entit(y\|ies) …` |
+| S5 | the invariants are tested | `cargo test --test catalogue` | all tests pass, including the second-run idempotency test |
+| S6 | a new test actually runs | `cargo test --test catalogue -- --list \| grep backfill` | the test names appear in the list |
+| S7 | public pages still answer | `curl -s -o /dev/null -w '%{http_code}' https://orbital.polarisocial.xyz/ /v/nsfw /@thekayluxx` | `200` each |
+| S8 | the ledger is honest | `head -8 docs/ROADMAP.md` | live counts, not the two-member snapshot |
+

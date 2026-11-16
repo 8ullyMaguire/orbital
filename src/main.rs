@@ -69,6 +69,14 @@ enum Cmd {
         #[arg(long)]
         days: Option<i64>,
     },
+    /// Fill the entity substrate from imported shells and write a receipt (idempotent).
+    Catalogue {
+        #[arg(long)]
+        dry_run: bool,
+        /// Stage a partial backfill; omit for all shells.
+        #[arg(long)]
+        limit: Option<i64>,
+    },
     /// Remove rows a smoke test left on a real database. Reports first; deletes only with `--apply`.
     Cleanup {
         /// Delete what the report found. Without it, this is a dry run.
@@ -202,6 +210,10 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(report.exit_code());
                 }
             }
+        }
+        Cmd::Catalogue { dry_run, limit } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::backfill_catalogue(&pool, limit, dry_run).await?;
         }
         Cmd::Cleanup { apply } => {
             let pool = db::connect(&cfg).await?;

@@ -67,6 +67,20 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         Err(e) => say(false, "fixtures", format!("{e}")),
     }
 
+    // 1c. The entity substrate must not lag the roster. A backfill that never ran leaves a
+    // catalogue-shaped site with no catalogue, which is invisible from the public pages.
+    match crate::store::catalogue_composition(pool).await {
+        Ok(c) => say(
+            c.shells <= c.subjects,
+            "catalogue",
+            format!(
+                "{} shell(s), {} subject(s), {} entities, {} receipts",
+                c.shells, c.subjects, c.entities, c.receipts
+            ),
+        ),
+        Err(e) => say(false, "catalogue", format!("{e}")),
+    }
+
     // 2. The site answers on its own bind address, not just through nginx.
     let addr = &cfg.bind_addr;
     let health = reqwest::Client::new()
@@ -735,5 +749,37 @@ pub async fn impressions(
         }
     }
 
+    Ok(())
+}
+
+/// Fill the catalogue and leave the receipt the four earlier imports never wrote.
+pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>, dry_run: bool) -> Result<()> {
+    if dry_run {
+        let c = crate::store::catalogue_composition(pool).await?;
+        println!(
+            "dry run: {} shell(s) without a catalogue row, {} entities, {} categories today",
+            c.shells.saturating_sub(c.subjects),
+            c.entities,
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM categories")
+                .fetch_one(pool)
+                .await?
+        );
+        return Ok(());
+    }
+    let c = crate::store::backfill_catalogue(pool, limit).await?;
+    println!(
+        "catalogue: seen {} inserted {} conflicts {} tags {}",
+        c.seen, c.inserted, c.conflicts, c.tags
+    );
+    sqlx::query(
+        "INSERT INTO import_runs (source, rows_seen, rows_inserted, rows_failed, note, finished_at)
+         VALUES ('catalogue-backfill', $1, $2, $3, $4, now())",
+    )
+    .bind(c.seen)
+    .bind(c.inserted)
+    .bind(c.conflicts)
+    .bind(format!("entity-first refactor M1; limit={limit:?}"))
+    .execute(pool)
+    .await?;
     Ok(())
 }

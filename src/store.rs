@@ -1565,3 +1565,120 @@ pub async fn prune_visitors(pool: &PgPool, days: i64) -> Result<(u64, u64), AppE
     tx.commit().await?;
     Ok((visitors, weights))
 }
+
+/// One read for the doctor and the operator. Every count is cast: `count(*)` is int4.
+pub async fn catalogue_composition(pool: &PgPool) -> Result<CatalogueComposition> {
+    let row = sqlx::query_as::<_, CatalogueComposition>(
+        "SELECT
+           (SELECT count(*)::bigint FROM users
+             WHERE claimed_at IS NULL AND password_hash IS NULL AND hidden = false) AS shells,
+           (SELECT count(*)::bigint FROM users
+             WHERE claimed_at IS NOT NULL OR password_hash IS NOT NULL) AS claimed,
+           (SELECT count(*)::bigint FROM entities WHERE hidden = false) AS entities,
+           (SELECT count(*)::bigint FROM entity_people WHERE role = 'subject') AS subjects,
+           (SELECT count(*)::bigint FROM import_runs) AS receipts",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Slugs are human-readable but uniqueness is not left to chance: an eight-hex suffix makes two
+/// handles that normalise to the same slug different rows. A claim can give the entity a clean slug.
+fn entity_slug(handle: &str) -> String {
+    let raw: String = handle
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let trimmed = raw.trim_matches('-');
+    let base = if trimmed.len() < 2 {
+        format!("m-{trimmed}")
+    } else {
+        trimmed.to_string()
+    };
+    let base: String = base.chars().take(51).collect();
+    format!("{}-{}", base.trim_matches('-'), &Uuid::new_v4().simple().to_string()[..8])
+}
+
+/// Fill the substrate from shells that do not have a catalogue row yet. A shell is a user with no
+/// password and no claim; an account is never backfilled as somebody else's subject. Tags that do not
+/// satisfy `entity_tags`' own CHECK are counted out here instead of aborting the whole run.
+pub async fn backfill_catalogue(pool: &PgPool, limit: Option<i64>) -> Result<BackfillCounts> {
+    sqlx::query(
+        "INSERT INTO categories (slug, label, description, sort, nsfw)
+         SELECT slug, label, description, sort, nsfw FROM verticals
+         ON CONFLICT (slug) DO NOTHING",
+    )
+    .execute(pool)
+    .await?;
+
+    let rows: Vec<(Uuid, String, String, Option<String>, bool, String)> = sqlx::query_as(
+        "SELECT u.id, u.handle, u.display_name, u.bio,
+                (SELECT l.url FROM links l WHERE l.user_id = u.id AND l.hidden = false
+                  ORDER BY l.position, l.created_at LIMIT 1) AS own_url,
+                COALESCE((SELECT uv.vertical_slug FROM user_verticals uv
+                  WHERE uv.user_id = u.id AND uv.role = 'primary' LIMIT 1), '') AS primary_vertical
+         FROM users u
+         WHERE u.hidden = false AND u.claimed_at IS NULL AND u.password_hash IS NULL
+           AND NOT EXISTS (SELECT 1 FROM entity_people ep
+                           WHERE ep.user_id = u.id AND ep.role = 'subject')
+         ORDER BY u.created_at
+         LIMIT $1",
+    )
+    .bind(limit.unwrap_or(i64::MAX))
+    .fetch_all(pool)
+    .await?;
+
+    let mut counts = BackfillCounts {
+        seen: rows.len() as i64,
+        ..Default::default()
+    };
+    for (user_id, handle, title, bio, own_url, primary_vertical) in rows {
+        let key = own_url.unwrap_or_else(|| format!("handle:{handle}"));
+        let nsfw = primary_vertical == "nsfw";
+        let id: Option<Uuid> = sqlx::query_scalar(
+            "INSERT INTO entities
+               (slug, kind, canonical_key, title, description, category_slug, nsfw,
+                origin, source, source_id, imported_at)
+             VALUES ($1, 'person', $2, $3, $4, NULLIF($5, ''), $6,
+                     'import', 'registry', $7, now())
+             ON CONFLICT (canonical_key) DO NOTHING RETURNING id",
+        )
+        .bind(entity_slug(&handle))
+        .bind(key)
+        .bind(title)
+        .bind(bio)
+        .bind(&primary_vertical)
+        .bind(nsfw)
+        .bind(&handle)
+        .fetch_optional(pool)
+        .await?;
+
+        let Some(id) = id else {
+            counts.conflicts += 1; // two shells sharing a first URL are one entity, not two
+            continue;
+        };
+        counts.tags += sqlx::query(
+            "INSERT INTO entity_tags (entity_id, tag_slug)
+             SELECT $1, t.tag_slug FROM tags t
+             WHERE t.user_id = $2
+               AND t.tag_slug ~ '^[a-z0-9][a-z0-9 .-]{0,39}$'
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(id)
+        .bind(user_id)
+        .execute(pool)
+        .await?
+        .rows_affected() as i64;
+        sqlx::query(
+            "INSERT INTO entity_people (entity_id, user_id, role, claimed_at)
+             VALUES ($1, $2, 'subject', NULL) ON CONFLICT DO NOTHING",
+        )
+        .bind(id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+        counts.inserted += 1;
+    }
+    Ok(counts)
+}
