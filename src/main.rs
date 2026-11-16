@@ -45,6 +45,9 @@ enum Cmd {
     /// Replay the committed golden set and print the verdict. `--emit` writes a new seed list from the
     /// rows this database holds (a power-user command: the output names rankings, so it cannot be a route).
     Eval {
+        /// Evaluate entities instead of member cards, against the committed entity golden set.
+        #[arg(long)]
+        entities: bool,
         /// Emit this many seeds from the newest sessions that clicked, instead of replaying the file.
         #[arg(long)]
         emit: Option<i64>,
@@ -201,11 +204,21 @@ async fn main() -> anyhow::Result<()> {
                 BotCmd::Maintain => bot::maintenance(&state.pool).await?,
             }
         }
-        Cmd::Eval { emit, file } => {
+        Cmd::Eval { entities, emit, file } => {
             let pool = db::connect(&cfg).await?;
+            // `--entities` keeps the same CLI shape but never silently reuses the member golden set.
+            let file = if entities && file.to_string_lossy() == "eval/golden.json" {
+                std::path::PathBuf::from("eval/golden-entities.json")
+            } else {
+                file
+            };
             match emit {
                 Some(limit) => {
-                    let golden = orbital::eval::emit_seeds(&pool, limit).await?;
+                    let golden = if entities {
+                        orbital::eval::emit_entity_seeds(&pool, limit).await?
+                    } else {
+                        orbital::eval::emit_seeds(&pool, limit).await?
+                    };
                     if let Some(parent) = file.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
@@ -220,7 +233,11 @@ async fn main() -> anyhow::Result<()> {
                         )
                     })?;
                     let golden = orbital::eval::Golden::from_json(&raw)?;
-                    let report = orbital::eval::run(&pool, &golden).await?;
+                    let report = if entities {
+                        orbital::eval::run_entities(&pool, &golden).await?
+                    } else {
+                        orbital::eval::run(&pool, &golden).await?
+                    };
                     println!("{}", report.sentence());
                     std::process::exit(report.exit_code());
                 }

@@ -1070,7 +1070,38 @@ as failing), `http` 69 passed. Live `doctor` printed
 ## M6 — evaluation before any new ranking rule
 
 Commit a golden set over entities, run `orbital eval`, and refuse a ranking change below the sample
-floor. Gate: `NO VERDICT` where the floor is not met; only `VERDICT: better` unlocks a change.
+floor. Gate: `NO VERDICT` where the floor is not met; only `VERDICT: better` unlocks a ranking change.
+
+### M6a — entity-backed evaluation and committed golden set
+
+**Reproduced:** `orbital eval` works and live prints
+`VERDICT: better — 125 cases ... A 0.3169 / B 0.9466`, but every case is a member card: `collect` reads
+`source_hits.user_id`, pools come from `vertical_members` / `all_members`, and judgements grade user ids.
+The site now serves entities; an evaluator that cannot see them cannot gate an entity ranking change.
+
+**Decision.** Add an entity arm alongside the existing member arm, not a replacement: `orbital eval
+--entities` replays `eval/golden-entities.json`, whose seeds are real session hashes but whose cases
+and judgements are entities reached through `entity_people(role='subject')`. Arm A is recency by
+`entities.created_at`; arm B is visits/clicks plus the viewer's tag lens; the paired bootstrap and the
+30-case floor are unchanged. Missing entity links are counted, never replaced. The member evaluator
+stays intact so the 125-case historical result is not silently rewritten.
+
+1. `src/eval.rs` — `EntityEvalRow { id, slug, created_at, tags, visits, clicks }`,
+   `EntityCase`, `collect_entities`, `score_entities`, `emit_entity_seeds`, `run_entities`, and
+   `Rule::fixed_entity()` with its own caveat. No new arithmetic: `ndcg_at` and `paired::compare` are
+   the same shared crate calls the member arm uses (D31).
+2. `src/main.rs` — `Cmd::Eval { entities: bool }`; when set, default the file to
+   `eval/golden-entities.json` and call the entity emit/run paths.
+3. `eval/golden-entities.json` — commit a seed list emitted from live with `--emit 200`, recording the
+   rule beside it. The file is the baseline; a later ranking change must beat it or print `NO VERDICT`.
+4. `tests/eval_entities.rs` — seed sessions whose clicks reach entities through subject links, assert
+   emitted seeds, assert a below-floor run prints `NO VERDICT` with exit code 1, assert the metric sees
+   an old lens-favoured entity outrank a newer disfavoured one, and assert a stale seed is counted as
+   missing.
+
+Verify: `cargo test --test eval_entities` → green; existing `tests/eval.rs` still green; live
+`orbital eval --entities` prints a sentence with the case count and verdict, and the exit code is 0
+only for `VERDICT: better`. M4 remains parked; this gate does not import rows.
 
 ## Definition of done for this refactor
 

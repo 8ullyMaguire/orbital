@@ -296,3 +296,206 @@ fn lens_of(rows: &[(String, f64)]) -> Vec<(String, f64)> {
     }
     map.into_iter().collect()
 }
+
+// ------------------------------------------------------------------------ entities (M6a)
+
+/// One entity in an entity-evaluation pool. The ids are `entities.id`, not `users.id`: this arm
+/// measures the catalogue the site now serves rather than the member roster it grew from.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct EntityEvalRow {
+    pub id: Uuid,
+    pub slug: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub tags: Vec<String>,
+    pub visits: i64,
+    pub clicks: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityCase {
+    pub session: String,
+    pub entities: Vec<EntityEvalRow>,
+    pub weights: Vec<(String, f64)>,
+    pub clicked: Vec<Uuid>,
+}
+
+impl Rule {
+    pub fn fixed_entity() -> Self {
+        Self {
+            metric: format!("nDCG@{K}, graded relevance (a clicked entity = 2)"),
+            arm_a: "recency — entities.created_at, newest first".into(),
+            arm_b: "visits and clicks multiplied by the viewer's entity-tag lens".into(),
+            min_cases: MIN_CASES,
+            interval: "95% paired bootstrap, deterministic resampling (polaris-eval::paired)".into(),
+            caveat: "entity clicks were collected while the site already ranked entities; a positive verdict bounds how much worse the candidate is, not how much better"
+                .into(),
+        }
+    }
+}
+
+async fn entity_pool(pool: &PgPool, context: Option<&str>) -> Result<Vec<EntityEvalRow>> {
+    Ok(sqlx::query_as::<_, EntityEvalRow>(
+        "SELECT e.id, e.slug, e.created_at,
+                COALESCE((SELECT array_agg(et.tag_slug) FROM entity_tags et
+                           WHERE et.entity_id = e.id), ARRAY[]::text[]) AS tags,
+                (SELECT count(DISTINCT sh.session_hash)::bigint FROM source_hits sh
+                   JOIN entity_people ep ON ep.user_id = sh.user_id
+                  WHERE ep.entity_id = e.id) AS visits,
+                (SELECT count(*)::bigint FROM source_hits sh
+                   JOIN entity_people ep ON ep.user_id = sh.user_id
+                  WHERE ep.entity_id = e.id) AS clicks
+           FROM entities e
+          WHERE e.hidden = false AND e.merged_into IS NULL
+            AND ($1::text IS NULL OR EXISTS (
+                    SELECT 1 FROM categories c WHERE c.slug = e.category_slug AND c.slug = $1))",
+    )
+    .bind(context)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Load entity cases for the seed list. A session whose clicks do not reach any entity is counted as
+/// missing: the golden set must not quietly shrink into a better-looking number.
+pub async fn collect_entities(pool: &PgPool, seeds: &[String]) -> Result<(Vec<EntityCase>, usize)> {
+    let mut cases = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut missing = 0usize;
+    for session in seeds {
+        if !seen.insert(session.clone()) {
+            continue;
+        }
+        let hits: Vec<(Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT vertical_context, viewer_hash FROM source_hits WHERE session_hash = $1",
+        )
+        .bind(session)
+        .fetch_all(pool)
+        .await?;
+        let clicked: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT DISTINCT ep.entity_id FROM entity_people ep
+               JOIN source_hits sh ON sh.user_id = ep.user_id
+              WHERE sh.session_hash = $1 AND ep.role = 'subject' AND ep.entity_id IS NOT NULL",
+        )
+        .bind(session)
+        .fetch_all(pool)
+        .await?;
+        if hits.is_empty() || clicked.is_empty() {
+            missing += 1;
+            continue;
+        }
+        let context = hits.iter().find_map(|(ctx, _)| ctx.clone());
+        let entities = entity_pool(pool, context.as_deref()).await?;
+        if entities.is_empty() {
+            missing += 1;
+            continue;
+        }
+        let mut lens_rows: Vec<(String, f64)> = Vec::new();
+        for viewer in hits.iter().filter_map(|(_, viewer)| viewer.clone()) {
+            let rows: Vec<(String, f64)> = sqlx::query_as(
+                "SELECT tag_slug, weight::float8 FROM preference_weights
+                  WHERE owner_kind = 'visitor' AND owner_id = $1",
+            )
+            .bind(&viewer)
+            .fetch_all(pool)
+            .await?;
+            lens_rows.extend(rows);
+        }
+        cases.push(EntityCase {
+            session: session.clone(),
+            entities,
+            weights: lens_of(&lens_rows),
+            clicked,
+        });
+    }
+    Ok((cases, missing))
+}
+
+
+/// Arm A is the simplest honest order for a catalogue: newest first. Arm B rewards the evidence the
+/// site has (visits and clicks) scaled by the viewer's tag lens — a lens matching two tags doubles the
+/// evidence rather than adding a fixed bonus that would dominate a quiet catalogue.
+fn rank_entities(case: &EntityCase) -> (Vec<String>, Vec<String>) {
+    let mut recency: Vec<&EntityEvalRow> = case.entities.iter().collect();
+    recency.sort_by(|a, b| b.created_at.cmp(&a.created_at).then_with(|| a.id.cmp(&b.id)));
+    let lens: BTreeMap<&str, f64> = case
+        .weights
+        .iter()
+        .map(|(tag, weight)| (tag.as_str(), *weight))
+        .collect();
+    let mut candidate: Vec<(f64, &EntityEvalRow)> = case
+        .entities
+        .iter()
+        .map(|e| {
+            let matched: f64 = e.tags.iter().filter_map(|t| lens.get(t.as_str()).copied()).sum();
+            let evidence = e.visits as f64 + e.clicks as f64;
+            (evidence * (1.0 + matched.max(0.0)), e)
+        })
+        .collect();
+    candidate.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.created_at.cmp(&a.1.created_at))
+            .then_with(|| a.1.id.cmp(&b.1.id))
+    });
+    (
+        recency.into_iter().map(|e| e.id.to_string()).collect(),
+        candidate.into_iter().map(|(_, e)| e.id.to_string()).collect(),
+    )
+}
+
+pub fn score_entities(cases: &[EntityCase]) -> (Arm, Arm) {
+    let mut arm_a = Arm::new();
+    let mut arm_b = Arm::new();
+    for (index, case) in cases.iter().enumerate() {
+        let judged: Vec<Judgement> = case
+            .clicked
+            .iter()
+            .map(|id| Judgement {
+                work_id: id.to_string(),
+                grade: 2,
+            })
+            .collect();
+        if judged.is_empty() || case.entities.is_empty() {
+            continue;
+        }
+        let (a_ids, b_ids) = rank_entities(case);
+        if let (Some(a), Some(b)) = (ndcg_at(&a_ids, &judged, K), ndcg_at(&b_ids, &judged, K)) {
+            arm_a.insert(index as i64, a);
+            arm_b.insert(index as i64, b);
+        }
+    }
+    (arm_a, arm_b)
+}
+
+pub async fn run_entities(pool: &PgPool, golden: &Golden) -> Result<Report> {
+    let (cases, missing) = collect_entities(pool, &golden.seeds).await?;
+    let (arm_a, arm_b) = score_entities(&cases);
+    let compared = paired::compare(&arm_a, &arm_b, golden.rule.min_cases.max(MIN_CASES));
+    Ok(Report {
+        cases: cases.len(),
+        missing,
+        paired: compared,
+    })
+}
+
+/// Seeds for the entity arm: sessions whose clicks actually reached an entity through a subject link.
+pub async fn emit_entity_seeds(pool: &PgPool, limit: i64) -> Result<Golden> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT sh.session_hash FROM source_hits sh
+           JOIN entity_people ep ON ep.user_id = sh.user_id AND ep.role = 'subject'
+          WHERE ep.entity_id IS NOT NULL
+          GROUP BY sh.session_hash
+          ORDER BY max(sh.created_at) DESC
+          LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(Golden {
+        seeds: rows.into_iter().map(|(session,)| session).collect(),
+        ..Golden {
+            generated: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+            rule: Rule::fixed_entity(),
+            seeds: Vec::new(),
+        }
+    })
+}
