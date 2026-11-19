@@ -114,7 +114,7 @@ async fn anonymous_profile_intake_is_logged_and_idempotent_on_the_canonical_url(
     let logged: i64 = sqlx::query_scalar(
         "SELECT count(*)::bigint FROM contribution_log WHERE action = 'profile.create' AND decision = 'applied'",
     ).fetch_one(&pool).await.unwrap();
-    assert_eq!(logged, 2, "both decisions are in the log");
+    assert_eq!(logged, 1, "a no-change repeat is a lookup, not a logged decision");
 }
 
 #[sqlx::test]

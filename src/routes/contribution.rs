@@ -168,10 +168,15 @@ pub async fn contribute_profile(
                 "sign in to correct an existing profile".into(),
             )));
         }
-        if new_name != old_name {
-            sqlx::query("UPDATE users SET display_name = $2 WHERE id = $1")
-                .bind(shell_id).bind(&new_name).execute(&st.pool).await.map_err(AppError::from)?;
+        if new_name == old_name {
+            // Nothing changed: a repeat POST is a lookup, not a decision. Logging it would bury
+            // real actions under identical rows (observed: 8 retries of one URL).
+            return Ok((StatusCode::OK, Json(json!({
+                "already_existing": true, "handle": handle, "display_name": old_name, "url": url,
+            }))).into_response());
         }
+        sqlx::query("UPDATE users SET display_name = $2 WHERE id = $1")
+            .bind(shell_id).bind(&new_name).execute(&st.pool).await.map_err(AppError::from)?;
         contribution::record(&st.pool, contribution::Entry {
             action: ACTION_PROFILE, decision: "applied", actor: user.as_ref(),
             actor_handle: user.as_ref().map(|u| u.handle.as_str()),
