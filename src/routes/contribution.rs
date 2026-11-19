@@ -118,7 +118,8 @@ pub async fn contribute_profile(
         let _ = contribution::record(&st.pool, contribution::Entry {
             action: ACTION_PROFILE, decision: "refused", actor: user.as_ref(),
             actor_handle: user.as_ref().map(|u| u.handle.as_str()),
-            visitor_hash: None, subject_type: Some("link"), subject_id: Some(&input.url),
+            visitor_hash: user.is_none().then(|| client.as_str()),
+            subject_type: Some("link"), subject_id: Some(&input.url),
             before: None, after: None, reason: "gate refused", gate: contribution::gate_mode(&st, ACTION_PROFILE),
             client_hash: Some(&client), request_id: None,
         }).await;
@@ -128,7 +129,8 @@ pub async fn contribute_profile(
         let _ = contribution::record(&st.pool, contribution::Entry {
             action: ACTION_PROFILE, decision: "refused", actor: user.as_ref(),
             actor_handle: user.as_ref().map(|u| u.handle.as_str()),
-            visitor_hash: None, subject_type: Some("link"), subject_id: Some(&input.url),
+            visitor_hash: user.is_none().then(|| client.as_str()),
+            subject_type: Some("link"), subject_id: Some(&input.url),
             before: None, after: None, reason: "rate limited", gate: contribution::gate_mode(&st, ACTION_PROFILE),
             client_hash: Some(&client), request_id: None,
         }).await;
@@ -147,16 +149,34 @@ pub async fn contribute_profile(
         return Err(ApiError(AppError::Validation("no such vertical".into())));
     }
 
-    if let Some((_id, handle, old_name)) = shell_for_url(&st.pool, &url).await? {
+    if let Some((shell_id, handle, old_name)) = shell_for_url(&st.pool, &url).await? {
         let new_name = if input.display_name.trim().is_empty() { old_name.clone() } else { input.display_name.trim().to_string() };
+        if new_name != old_name && user.is_none() {
+            // Finding a URL is not authority to rename someone. A logged-in contributor may correct
+            // it and carries the blame in the log; an anonymous visitor is told to sign in.
+            contribution::record(&st.pool, contribution::Entry {
+                action: ACTION_PROFILE, decision: "refused", actor: None, actor_handle: None,
+                visitor_hash: Some(client.as_str()),
+                subject_type: Some("profile"), subject_id: Some(&handle),
+                before: Some(json!({"display_name": old_name})),
+                after: Some(json!({"display_name": new_name})),
+                reason: "anonymous rename of an existing profile",
+                gate: contribution::gate_mode(&st, ACTION_PROFILE),
+                client_hash: Some(&client), request_id: None,
+            }).await?;
+            return Err(ApiError(AppError::ForbiddenWithReason(
+                "sign in to correct an existing profile".into(),
+            )));
+        }
         if new_name != old_name {
             sqlx::query("UPDATE users SET display_name = $2 WHERE id = $1")
-                .bind(_id).bind(&new_name).execute(&st.pool).await.map_err(AppError::from)?;
+                .bind(shell_id).bind(&new_name).execute(&st.pool).await.map_err(AppError::from)?;
         }
         contribution::record(&st.pool, contribution::Entry {
             action: ACTION_PROFILE, decision: "applied", actor: user.as_ref(),
             actor_handle: user.as_ref().map(|u| u.handle.as_str()),
-            visitor_hash: None, subject_type: Some("profile"), subject_id: Some(&handle),
+            visitor_hash: user.is_none().then(|| client.as_str()),
+            subject_type: Some("profile"), subject_id: Some(&handle),
             before: Some(json!({"display_name": old_name, "url": url})),
             after: Some(json!({"display_name": new_name, "url": url})),
             reason: "existing canonical URL; updated in place",
@@ -193,13 +213,14 @@ pub async fn contribute_profile(
     )
     .bind(id).bind(&vertical).execute(&mut *tx).await.map_err(AppError::from)?;
     sqlx::query(
-        "INSERT INTO contribution_log (action, decision, actor_id, actor_handle, subject_type,
-            subject_id, after_state, reason, gate_mode, client_hash)
-         VALUES ($1,'applied',$2,$3,'profile',$4,$5,$6,$7,$8)",
+        "INSERT INTO contribution_log (action, decision, actor_id, actor_handle, visitor_hash,
+            subject_type, subject_id, after_state, reason, gate_mode, client_hash)
+         VALUES ($1,'applied',$2,$3,$4,'profile',$5,$6,$7,$8,$9)",
     )
     .bind(ACTION_PROFILE)
     .bind(user.as_ref().map(|u| u.id))
     .bind(user.as_ref().map(|u| u.handle.as_str()))
+    .bind(user.is_none().then(|| client.as_str()))
     .bind(&handle)
     .bind(json!({"display_name": display, "url": url, "vertical": vertical}))
     .bind("profile created from a link")

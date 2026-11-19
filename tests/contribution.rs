@@ -297,3 +297,39 @@ async fn a_daily_cap_stops_dozen_a_day_anonymous_profiles_even_when_the_burst_is
     let (s, b, _) = post(&app, "/api/contribute/profile", body(4), "198.51.100.51", None).await;
     assert_eq!(s, StatusCode::CREATED, "{b}");
 }
+
+#[sqlx::test]
+async fn finding_a_url_is_not_authority_to_rename_the_profile(pool: PgPool) {
+    let app = app_with(pool.clone(), cfg()).await;
+    let (s, b, _) = post(
+        &app, "/api/contribute/profile",
+        json!({"url": "https://example.com/rename-me", "display_name": "Old Name", "vertical": "nsfw"}),
+        "198.51.100.60", None,
+    ).await;
+    assert_eq!(s, StatusCode::CREATED, "{b}");
+
+    // The same canonical URL, a different name, no session: refused and logged.
+    let (s, b, _) = post(
+        &app, "/api/contribute/profile",
+        json!({"url": "https://example.com/rename-me", "display_name": "Squatted Name", "vertical": "nsfw"}),
+        "198.51.100.60", None,
+    ).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{b}");
+    let name: String = sqlx::query_scalar(
+        "SELECT display_name FROM users WHERE handle = (SELECT subject_id FROM contribution_log WHERE reason = 'anonymous rename of an existing profile' LIMIT 1)",
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(name, "Old Name", "the refused write did not land");
+
+    // A session may correct it, and the correction names its author.
+    let reviewer = member(&pool, "corrector", 1).await;
+    let (s, b, _) = post(
+        &app, "/api/contribute/profile",
+        json!({"url": "https://example.com/rename-me", "display_name": "Corrected Name", "vertical": "nsfw"}),
+        "198.51.100.61", Some(&reviewer),
+    ).await;
+    assert_eq!(s, StatusCode::OK, "{b}");
+    let actor: Option<String> = sqlx::query_scalar(
+        "SELECT actor_handle FROM contribution_log WHERE actor_handle = 'corrector' AND decision = 'applied' LIMIT 1",
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(actor.as_deref(), Some("corrector"));
+}
