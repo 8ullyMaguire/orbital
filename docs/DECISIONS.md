@@ -2052,8 +2052,14 @@ already lists orbital as an adopter of authz and ledger); a global "contribution
 number); a time-based automatic tightening (a quiet month is not an abuse signal); raw IPs in the
 log (the salted hash is enough and the log has a wider audience than the bucket).
 
-Gate: `cargo test` green — 85 lib, 69 http, 8 named `contribution` tests; mutation of the gate, the
-burst limiter and the daily limiter each turns its own test red (401 instead of 201, 201 instead of
-429) with the call kept so the mutation compiles. New routes: `POST /api/contribute/profile`, `GET /api/modlog`,
-`GET /api/modlog/summary`, `POST /api/moderation/{id}` and `orbital modlog`. No gravity or ranking
-explanation is written to the log (D27 remains a boundary).
+Gate: `cargo test` green — 85 lib, 69 http, 8 named `contribution` tests. Mutation proofs, each
+turning its own test red with the call kept so the mutation compiles: gate removed (201 where 401 was
+due), burst limiter ignored (201 where 429 was due), daily limiter ignored (201 where 429 was due),
+anonymous rename allowed (200 where 403 was due), redaction reverted (null where the handle was due),
+no-op logging restored (2 rows where 1 was due). Live on thinkcentre: 8 anonymous writes accepted and
+the 9th `429` with `Retry-After: 10783`; `steeltitan` (TL2) logs in and reads
+`/api/modlog?actor=steeltitan`, which returns the rename `Mommy Daph -> Mommy Daphomet` attributed to
+`steeltitan`; `/@daphomet2` answers 200 and contains `Mommy Daphomet`; migration version 10. New
+routes: `POST /api/contribute/profile`, `GET /api/modlog`, `GET /api/modlog/summary`,
+`POST /api/moderation/{id}` and `orbital modlog`. No gravity or ranking explanation is written to the
+log (D27 remains a boundary).
