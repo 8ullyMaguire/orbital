@@ -272,3 +272,28 @@ async fn modlog_public_projection_never_carries_account_ids_or_client_hashes(poo
         "the owner sees the private fields: {own_body}"
     );
 }
+
+#[sqlx::test]
+async fn a_daily_cap_stops_dozen_a_day_anonymous_profiles_even_when_the_burst_is_wide(pool: PgPool) {
+    let mut c = cfg();
+    c.contribution.enabled = true;
+    c.contribution.limiter = Arc::new(Limiter::new(
+        Limits::new(Quota::per_minute(240))
+            .class(orbital::contribution::CLASS_ANON_WRITE, Quota::per_minute(240))
+            .class(orbital::contribution::CLASS_ANON_DAY, Quota {
+                permits: 2, per: std::time::Duration::from_secs(86_400),
+            }),
+    ));
+    let app = app_with(pool.clone(), c).await;
+    let body = |n: u32| json!({"url": format!("https://example.com/daily-{n}"), "vertical": "nsfw"});
+    for n in 1..=2 {
+        let (s, b, _) = post(&app, "/api/contribute/profile", body(n), "198.51.100.50", None).await;
+        assert_eq!(s, StatusCode::CREATED, "{b}");
+    }
+    let (s, b, retry) = post(&app, "/api/contribute/profile", body(3), "198.51.100.50", None).await;
+    assert_eq!(s, StatusCode::TOO_MANY_REQUESTS, "{b}");
+    assert!(retry.unwrap_or_default().parse::<u64>().unwrap_or(0) > 0, "honest retry-after");
+    // A fresh client still has its own daily allowance.
+    let (s, b, _) = post(&app, "/api/contribute/profile", body(4), "198.51.100.51", None).await;
+    assert_eq!(s, StatusCode::CREATED, "{b}");
+}

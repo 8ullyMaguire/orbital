@@ -2052,8 +2052,8 @@ already lists orbital as an adopter of authz and ledger); a global "contribution
 number); a time-based automatic tightening (a quiet month is not an abuse signal); raw IPs in the
 log (the salted hash is enough and the log has a wider audience than the bucket).
 
-Gate: `cargo test` green — 85 lib, 69 http, 6 named `contribution` tests; mutation of the gate and of
-the limiter each turns its own test red (401 instead of 201, 201 instead of 429) with the call kept
-so the mutation compiles. New routes: `POST /api/contribute/profile`, `GET /api/modlog`,
+Gate: `cargo test` green — 85 lib, 69 http, 7 named `contribution` tests; mutation of the gate, the
+burst limiter and the daily limiter each turns its own test red (401 instead of 201, 201 instead of
+429) with the call kept so the mutation compiles. New routes: `POST /api/contribute/profile`, `GET /api/modlog`,
 `GET /api/modlog/summary`, `POST /api/moderation/{id}` and `orbital modlog`. No gravity or ranking
 explanation is written to the log (D27 remains a boundary).

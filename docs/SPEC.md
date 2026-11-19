@@ -1137,12 +1137,17 @@ for overrides, with the owner granted everything.
 - `GET /api/modlog` is TL2+ and filters on action, actor, subject, decision, time, cursor and free
   text. Its rows are `polaris-ledger` projections: account ids and client hashes are only present
   for TL3/owner. `GET /api/modlog/summary` adds decision counts and the live gate declaration; that
-  count, not a calendar, is what justifies closing a capability.
+  count, not a calendar, is what justifies closing a capability. `population_signal` in the summary
+  counts distinct contributing actors (never `users` rows — imported shells inflate those), split by
+  session-authenticated and anonymous.
 - `POST /api/moderation/{id}` is TL2+, requires a reason, and appends a `reverted` decision. It never
   edits the row it reverses. A moderator cannot act on a peer or above, or on their own row.
-- Anonymous writes draw from `polaris-ratelimit`'s `anon-write` class (12/5 min by default), keyed on
-  `CF-Connecting-IP` → forwarded hop → socket peer, hashed with the session salt. A refusal is a 429
-  in the estate envelope with a true `Retry-After`, and is itself an audited decision.
+- Anonymous writes draw from **two** `polaris-ratelimit` classes: a burst bucket (12/5 min) and a
+  daily bucket (8/24 h by default, `ORBITAL_ANON_DAILY_BUDGET`), keyed on `CF-Connecting-IP` →
+  forwarded hop → socket peer, hashed with the session salt. A burst bucket alone allows 3,456
+  writes a day, which is exactly what the launch requirement rules out. Logged-in writes have a
+  wider pair (120/5 min, 200/24 h). A refusal is a 429 in the estate envelope with a true
+  `Retry-After`, and is itself an audited decision.
 - `orbital modlog [--action] [--decision] [--q] [--limit]` is the offline read of the same rows.
 
 The log stores facts and decisions only: no prior, no boost, no "why this ranked here" (D27).

@@ -33,6 +33,10 @@ use crate::models::User;
 
 pub const CLASS_ANON_WRITE: &str = "anon-write";
 pub const CLASS_USER_WRITE: &str = "user-write";
+/// A second, wider bucket. A burst allowance alone is not enough: 12/5 min is 3,456 writes a day,
+/// which is exactly the "dozens of anonymous profiles a day" the launch requirement rules out.
+pub const CLASS_ANON_DAY: &str = "anon-write-day";
+pub const CLASS_USER_DAY: &str = "user-write-day";
 pub const CLASS_READ: &str = "read";
 
 /// Every write action that has a declared capability. A capability here with no reader in a handler
@@ -157,10 +161,20 @@ impl Config {
             permits: env_u32("ORBITAL_USER_WRITE_BUDGET", 120)?,
             per: Duration::from_secs(300),
         };
+        let anon_day = Quota {
+            permits: env_u32("ORBITAL_ANON_DAILY_BUDGET", 8)?,
+            per: Duration::from_secs(86_400),
+        };
+        let user_day = Quota {
+            permits: env_u32("ORBITAL_USER_DAILY_BUDGET", 200)?,
+            per: Duration::from_secs(86_400),
+        };
         let limits = Limits::new(read)
             .class(CLASS_READ, read)
             .class(CLASS_ANON_WRITE, anon_write)
-            .class(CLASS_USER_WRITE, user_write);
+            .class(CLASS_USER_WRITE, user_write)
+            .class(CLASS_ANON_DAY, anon_day)
+            .class(CLASS_USER_DAY, user_day);
         limits.validate().map_err(|e| anyhow::anyhow!("{}", e))?;
         let limiter = Arc::new(Limiter::new(limits.clone()));
         Ok(Self {
@@ -200,7 +214,9 @@ impl Config {
         let limits = Limits::new(read)
             .class(CLASS_READ, read)
             .class(CLASS_ANON_WRITE, Quota { permits: 12, per: Duration::from_secs(300) })
-            .class(CLASS_USER_WRITE, Quota { permits: 120, per: Duration::from_secs(300) });
+            .class(CLASS_USER_WRITE, Quota { permits: 120, per: Duration::from_secs(300) })
+            .class(CLASS_ANON_DAY, Quota { permits: 8, per: Duration::from_secs(86_400) })
+            .class(CLASS_USER_DAY, Quota { permits: 200, per: Duration::from_secs(86_400) });
         let limiter = Arc::new(Limiter::new(limits.clone()));
         Self {
             policy,
@@ -325,9 +341,18 @@ pub fn gate_mode<'a>(st: &'a crate::AppState, action: &str) -> &'a str {
 /// Spend one permit from the right class. Called after the gate and strictly before the write.
 pub fn spend(st: &crate::AppState, client: &ClientKey, action: &str, user: Option<&User>) -> Result<(), ApiError> {
     let _ = action; // one write budget for all contribution actions, by client and login state
-    let class = if user.is_some() { CLASS_USER_WRITE } else { CLASS_ANON_WRITE };
+    let (day, burst) = if user.is_some() {
+        (CLASS_USER_DAY, CLASS_USER_WRITE)
+    } else {
+        (CLASS_ANON_DAY, CLASS_ANON_WRITE)
+    };
+    // The daily cap is checked first so a client at its daily limit does not lose a burst permit
+    // on a write that is going to be refused anyway.
     st.cfg.contribution
-        .check(&client.0, class, Instant::now())
+        .check(&client.0, day, Instant::now())
+        .map_err(|secs| ApiError(AppError::RateLimited(secs)))?;
+    st.cfg.contribution
+        .check(&client.0, burst, Instant::now())
         .map_err(|secs| ApiError(AppError::RateLimited(secs)))
 }
 
