@@ -37,6 +37,8 @@ pub struct Config {
     /// The instance's declared floors (D51). Loaded at boot so a weight above the cap stops the process instead
     /// of silently becoming 0.5 on the first page.
     pub floors: crate::floors::Floors,
+    /// Per-action contribution gates and the declared client budgets (D60).
+    pub contribution: crate::contribution::Config,
 }
 
 impl Config {
@@ -64,6 +66,7 @@ impl Config {
             exposure: ExposureConfig::from_env()?,
             ceiling: CeilingConfig::from_env()?,
             floors: crate::floors::Floors::from_env().map_err(|e| anyhow::anyhow!(e))?,
+            contribution: crate::contribution::Config::from_env()?,
         })
     }
 
@@ -89,6 +92,7 @@ impl Config {
             // asserting. The ceiling's own tests opt in, exactly as the exposure tests opt out.
             ceiling: CeilingConfig::off(),
             floors: crate::floors::Floors::none(),
+            contribution: crate::contribution::Config::for_test(),
         }
     }
 

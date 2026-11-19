@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod bot;
 pub mod config;
+pub mod contribution;
 pub mod db;
 pub mod error;
 pub mod health;
@@ -71,6 +72,7 @@ pub async fn build_router(state: AppState) -> Router {
         .merge(routes::public::router())
         .merge(routes::estate::router())
         .merge(routes::api::router())
+        .merge(routes::contribution::router())
         .merge(routes::apiv1::router())
         .merge(routes::track::router())
         .merge(routes::prefs::router())

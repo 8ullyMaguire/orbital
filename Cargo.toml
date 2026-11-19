@@ -25,6 +25,11 @@ polaris-core = { path = "../../polaris-core-rust" }
 polaris-eval = { path = "../../polaris-eval" }
 # M73-04: string-tag arithmetic lives in the estate kernel; Orbital supplies the tag weights.
 polaris-affinity = { path = "../../polaris-affinity" }
+# Contribution governance: the estate owns the authorization verdict, the per-client token bucket and
+# the audit-log rules. Orbital owns only the declaration, the tables and the routes (D31/D59).
+polaris-authz = { path = "../../polaris-authz" }
+polaris-ratelimit = { path = "../../polaris-ratelimit" }
+polaris-ledger = { path = "../../polaris-ledger" }
 axum = { version = "0.8", features = ["macros"] }
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }

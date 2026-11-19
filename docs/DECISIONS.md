@@ -2029,3 +2029,31 @@ nodes and found no contrast failure. Remaining: no service worker/offline mode, 
 `color-contrast` incomplete nodes need a manual or pixel-composited checker if a formal AA statement
 is required.
 
+
+**D60 — contribution starts open, the log is a user surface, and the estate owns the mechanisms
+(2026-11-19).** A profile add from a link failed because the only intake was account registration or
+a claim of an imported shell; there was no record of the attempt, no per-client budget, and friction
+was all-or-nothing. The owner asked for a detailed modlog with filters, friction that grows with the
+community, and a rate limit for logged-out contributions, then clarified that users with TL≥N must
+be able to review and act on the log: the admin has the first and last say but need not be involved.
+
+Chosen: adopt `polaris-authz` for the capability verdict, `polaris-ratelimit` for the per-client
+bucket and honest `Retry-After`, and `polaris-ledger` for the audit rules, private/public projection
+and strictly-ordered cursor. Orbital declares one word per action (`open`/`login`/`trust(n)`/`grant`),
+builds the subject from its own `users` row, owns the `contribution_log` table, and routes the
+verdicts. Contribution actions ship `open`; `modlog.review` and `moderation.act` ship `trust(2)`;
+`vertical.vote` and `moderation.override` ship `trust(3)`; the owner role is granted every capability
+(first and last say). A moderator may only reverse contributions by someone below their own trust,
+never their own, and a moderation act carries a reason (`polaris-ledger::Rules::PERMANENT`).
+
+Rejected: a fourth local gate/bucket/log implementation (the estate owns all three and the matrix
+already lists orbital as an adopter of authz and ledger); a global "contributions need login" switch
+(contradicts D27 and punishes the first users); a second trust ladder (the nightly TL job owns the
+number); a time-based automatic tightening (a quiet month is not an abuse signal); raw IPs in the
+log (the salted hash is enough and the log has a wider audience than the bucket).
+
+Gate: `cargo test` green — 85 lib, 69 http, 6 named `contribution` tests; mutation of the gate and of
+the limiter each turns its own test red (401 instead of 201, 201 instead of 429) with the call kept
+so the mutation compiles. New routes: `POST /api/contribute/profile`, `GET /api/modlog`,
+`GET /api/modlog/summary`, `POST /api/moderation/{id}` and `orbital modlog`. No gravity or ranking
+explanation is written to the log (D27 remains a boundary).

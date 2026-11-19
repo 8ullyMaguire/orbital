@@ -1119,3 +1119,30 @@ Latency after the final deploy, same session, n=3: home 2.67/2.84/2.98 s; `/v/ns
 0.73/0.99/1.48 s; search 0.60 s. No claim of a speedup: these are absolute probes, and no
 before/after interval was fixed for a UI-only change; one earlier sample was 3.45 s under load.
 
+
+---
+
+## 9. Contribution governance and audit (D60)
+
+Full spec: `~/secondbrain/10-Projects/orbital-contribution-governance.md`.
+
+Writing keeps one vocabulary — `open` / `login` / `trust(n)` / `grant` — declared per action in
+env (`ORBITAL_GATE_<ACTION>`), evaluated by `polaris-authz`, never by a branch in a handler. The
+shipped posture is open for contribution, `trust(2)` for reading and acting on the log, `trust(3)`
+for overrides, with the owner granted everything.
+
+- `POST /api/contribute/profile` adds a profile from a canonical URL with no account. A second POST
+  for the same canonical key returns the existing profile with `already_existing: true`; no duplicate
+  shell is created.
+- `GET /api/modlog` is TL2+ and filters on action, actor, subject, decision, time, cursor and free
+  text. Its rows are `polaris-ledger` projections: account ids and client hashes are only present
+  for TL3/owner. `GET /api/modlog/summary` adds decision counts and the live gate declaration; that
+  count, not a calendar, is what justifies closing a capability.
+- `POST /api/moderation/{id}` is TL2+, requires a reason, and appends a `reverted` decision. It never
+  edits the row it reverses. A moderator cannot act on a peer or above, or on their own row.
+- Anonymous writes draw from `polaris-ratelimit`'s `anon-write` class (12/5 min by default), keyed on
+  `CF-Connecting-IP` → forwarded hop → socket peer, hashed with the session salt. A refusal is a 429
+  in the estate envelope with a true `Retry-After`, and is itself an audited decision.
+- `orbital modlog [--action] [--decision] [--q] [--limit]` is the offline read of the same rows.
+
+The log stores facts and decisions only: no prior, no boost, no "why this ranked here" (D27).

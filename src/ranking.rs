@@ -613,7 +613,11 @@ mod tests {
     }
 
     #[test]
-    fn relevance_is_a_weighted_share_and_zero_without_weights() {
+    fn relevance_ignores_absent_tags_and_is_zero_without_evidence() {
+        // M73-04 moved tag_relevance onto polaris-affinity's weighted mean of EVIDENCE. A tag the
+        // member does not hold is absent evidence, not zero evidence: it drops out of both the
+        // numerator and the denominator. The old assertion here (0.5 for one held/one absent equal
+        // weight) described the previous arithmetic and was stale after that adoption.
         let tags = vec!["chiptune".to_string(), "godot".to_string()];
         assert_eq!(tag_relevance(&tags, &[]), 0.0, "no weights, no opinion");
         assert_eq!(
@@ -626,9 +630,21 @@ mod tests {
             0.0,
             "asked for something they do not have"
         );
-        // Half the weight is on a tag the member has.
-        let half = tag_relevance(&tags, &[("chiptune".into(), 0.5), ("jazz".into(), 0.5)]);
-        assert!((half - 0.5).abs() < 1e-9, "got {half}");
+        // The absent half contributes nothing, so the held half is the whole answer.
+        assert_eq!(
+            tag_relevance(&tags, &[("chiptune".into(), 0.5), ("jazz".into(), 0.5)]),
+            1.0,
+            "absent evidence is excluded, not scored as zero"
+        );
+        // Every present component carries value 1.0, so the weighted mean stays at 1.0 however the
+        // declared weights are split. The M73-04 adapter uses weight only to decide whether a tag
+        // counts as evidence; preserving magnitude would be a separate product decision.
+        let both = vec!["chiptune".to_string(), "jazz".to_string()];
+        assert_eq!(
+            tag_relevance(&both, &[("chiptune".into(), 0.25), ("jazz".into(), 0.75)]),
+            1.0,
+            "declared weights gate presence, not magnitude"
+        );
     }
 
     #[test]

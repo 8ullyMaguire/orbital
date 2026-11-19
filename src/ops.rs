@@ -924,3 +924,56 @@ pub async fn claim_conversion(
         erasures,
     })
 }
+
+/// Read the append-only decision log. Deliberately read-only: a CLI that could edit history would
+/// make the history a claim rather than a record. The HTTP surface applies the same filters with
+/// typed binds; this command is the operator's offline view of the same rows.
+pub async fn modlog(
+    pool: &PgPool,
+    action: Option<&str>,
+    decision: Option<&str>,
+    q: Option<&str>,
+    limit: i64,
+) -> Result<()> {
+    use sqlx::{QueryBuilder, Row};
+    let mut builder = QueryBuilder::new(
+        "SELECT created_at, action, decision, actor_handle, subject_type, subject_id, reason, gate_mode
+         FROM contribution_log WHERE true",
+    );
+    if let Some(v) = action {
+        builder.push(" AND action = ").push_bind(v.to_string());
+    }
+    if let Some(v) = decision {
+        builder.push(" AND decision = ").push_bind(v.to_string());
+    }
+    if let Some(v) = q {
+        let like = format!("%{}%", v.replace('%', "\\%").replace('_', "\\_"));
+        builder
+            .push(" AND (reason ILIKE ")
+            .push_bind(like.clone())
+            .push(" ESCAPE '\\' OR subject_id ILIKE ")
+            .push_bind(like)
+            .push(" ESCAPE '\\')");
+    }
+    builder
+        .push(" ORDER BY created_at DESC, id DESC LIMIT ")
+        .push_bind(limit.clamp(1, 200));
+    let rows = builder.build().fetch_all(pool).await?;
+    println!("ts | action | decision | actor | subject | gate | reason");
+    for row in &rows {
+        let at: chrono::DateTime<Utc> = row.try_get("created_at")?;
+        println!(
+            "{} | {} | {} | {} | {}/{} | {} | {}",
+            at.to_rfc3339(),
+            row.try_get::<String, _>("action")?,
+            row.try_get::<String, _>("decision")?,
+            row.try_get::<Option<String>, _>("actor_handle")?.unwrap_or_else(|| "-".into()),
+            row.try_get::<Option<String>, _>("subject_type")?.unwrap_or_else(|| "-".into()),
+            row.try_get::<Option<String>, _>("subject_id")?.unwrap_or_else(|| "-".into()),
+            row.try_get::<String, _>("gate_mode")?,
+            row.try_get::<Option<String>, _>("reason")?.unwrap_or_default(),
+        );
+    }
+    println!("{} row(s)", rows.len());
+    Ok(())
+}

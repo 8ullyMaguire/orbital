@@ -1387,11 +1387,14 @@ dependencies = [
  "hex",
  "http-body-util",
  "polaris-affinity",
+ "polaris-authz",
  "polaris-candidates",
  "polaris-core",
  "polaris-eval",
  "polaris-gravity",
  "polaris-healthz",
+ "polaris-ledger",
+ "polaris-ratelimit",
  "polaris-taste-source",
  "rand 0.8.8",
  "reqwest",
@@ -1509,6 +1512,14 @@ name = "polaris-affinity"
 version = "0.1.0"
 
 [[package]]
+name = "polaris-authz"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "polaris-candidates"
 version = "0.1.0"
 
@@ -1537,6 +1548,18 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "polaris-ledger"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "serde",
+]
+
+[[package]]
+name = "polaris-ratelimit"
+version = "0.1.0"
 
 [[package]]
 name = "polaris-taste-source"

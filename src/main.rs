@@ -86,6 +86,17 @@ enum Cmd {
         #[arg(long, default_value_t = 30)]
         days: i64,
     },
+    /// Review the append-only contribution/curation/moderation log (D60).
+    Modlog {
+        #[arg(long)]
+        action: Option<String>,
+        #[arg(long)]
+        decision: Option<String>,
+        #[arg(long)]
+        q: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+    },
     /// Remove one imported shell and everything that names it, in one transaction.
     Erase {
         /// The shell's handle, without the @.
@@ -251,6 +262,10 @@ async fn main() -> anyhow::Result<()> {
             let pool = db::connect(&cfg).await?;
             println!("{}", orbital::ops::claim_conversion(&pool, days).await?);
         }
+        Cmd::Modlog { action, decision, q, limit } => {
+            let pool = db::connect(&cfg).await?;
+            orbital::ops::modlog(&pool, action.as_deref(), decision.as_deref(), q.as_deref(), limit).await?;
+        }
         Cmd::Erase { handle, apply } => {
             let pool = db::connect(&cfg).await?;
             let report = orbital::ops::erase_shell(&pool, &handle, apply).await?;
@@ -317,10 +332,13 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
     let app = orbital::build_router(state).await;
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("orbital listening on {addr}");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await?;
     Ok(())
 }

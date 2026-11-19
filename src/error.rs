@@ -1,6 +1,6 @@
 use axum::body::to_bytes;
-use axum::http::header::CONTENT_TYPE;
-use axum::http::StatusCode;
+use axum::http::header::{CONTENT_TYPE, RETRY_AFTER};
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use polaris_core::{ApiError as EstateApiError, ErrorCode};
 
@@ -12,10 +12,14 @@ pub enum AppError {
     NotFound,
     #[error("sign in first")]
     Unauthorized,
+    #[error("not allowed: {0}")]
+    ForbiddenWithReason(String),
     #[error("not allowed")]
     Forbidden,
     #[error("{0}")]
     Conflict(String),
+    #[error("too many requests; retry in {0}s")]
+    RateLimited(u64),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
@@ -29,8 +33,9 @@ impl AppError {
             AppError::Validation(_) => ErrorCode::InvalidRequest,
             AppError::NotFound | AppError::Db(sqlx::Error::RowNotFound) => ErrorCode::NotFound,
             AppError::Unauthorized => ErrorCode::Unauthenticated,
-            AppError::Forbidden => ErrorCode::Forbidden,
+            AppError::Forbidden | AppError::ForbiddenWithReason(_) => ErrorCode::Forbidden,
             AppError::Conflict(_) => ErrorCode::Conflict,
+            AppError::RateLimited(_) => ErrorCode::RateLimited,
             AppError::Db(_) | AppError::Other(_) => ErrorCode::Internal,
         }
     }
@@ -69,6 +74,13 @@ impl IntoResponse for ApiError {
             tracing::error!(error = %self.0, "api error");
         }
         let message = self.0.to_string();
+        if let AppError::RateLimited(secs) = self.0 {
+            let mut res = EstateApiError::rate_limited(message, secs).into_response();
+            if let Ok(value) = HeaderValue::from_str(&secs.to_string()) {
+                res.headers_mut().insert(RETRY_AFTER, value);
+            }
+            return res;
+        }
         let body = match code {
             ErrorCode::InvalidRequest => EstateApiError::invalid_request(message),
             ErrorCode::NotFound => EstateApiError::not_found(message),

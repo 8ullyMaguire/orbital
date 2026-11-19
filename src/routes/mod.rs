@@ -1,6 +1,7 @@
 pub mod api;
 pub mod apiv1;
 pub mod assets;
+pub mod contribution;
 pub mod estate;
 pub mod prefs;
 pub mod public;

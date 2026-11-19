@@ -16,6 +16,7 @@ use crate::auth::{
     clear_session_cookie, hash_password, new_token, require_owner, session_cookie, verify_password,
     CurrentUser, MaybeUser,
 };
+use crate::contribution::{self, ClientKey};
 use crate::error::{ApiError, ApiResult, AppError};
 use crate::models::{
     ClaimProof, LinkInput, LinkPatch, LoginInput, ProfilePatch, RegisterInput, ReorderInput,
@@ -88,8 +89,12 @@ fn user_json(u: &crate::models::User) -> Value {
 pub async fn register(
     State(st): State<AppState>,
     crate::auth::VisitorId(vid): crate::auth::VisitorId,
+    MaybeUser(maybe): MaybeUser,
+    ClientKey(client): ClientKey,
     Json(input): Json<RegisterInput>,
 ) -> ApiResult<Response> {
+    contribution::gate(&st, maybe.as_ref(), "profile.create")?;
+    contribution::spend(&st, &ClientKey(client.clone()), "profile.create", maybe.as_ref())?;
     let handle = normalise_handle(&input.handle)?;
     let vertical_slug = normalise_slug(&input.vertical)?;
     let Some(vertical) = store::vertical_by_slug(&st.pool, &vertical_slug).await? else {
@@ -113,6 +118,14 @@ pub async fn register(
         },
     )
     .await?;
+    contribution::record(&st.pool, contribution::Entry {
+        action: "profile.create", decision: "applied", actor: Some(&user),
+        actor_handle: Some(&user.handle), visitor_hash: None,
+        subject_type: Some("profile"), subject_id: Some(&handle),
+        before: None, after: Some(json!({"display_name": display_name, "vertical": vertical_slug})),
+        reason: "registration", gate: contribution::gate_mode(&st, "profile.create"),
+        client_hash: Some(&client), request_id: None,
+    }).await?;
     store::set_verticals(&st.pool, user.id, &vertical_slug, &[]).await?;
     // The lens the visitor built anonymously is the most useful thing they have told us; throwing
     // it away at the exact moment they get an account would make the tuner a demo.
@@ -505,8 +518,11 @@ pub async fn list_links(
 pub async fn create_link(
     State(st): State<AppState>,
     CurrentUser(user): CurrentUser,
+    ClientKey(client): ClientKey,
     Json(input): Json<LinkInput>,
 ) -> ApiResult<(axum::http::StatusCode, Json<Value>)> {
+    contribution::gate(&st, Some(&user), "link.add")?;
+    contribution::spend(&st, &ClientKey(client.clone()), "link.add", Some(&user))?;
     let url = validate_link_url(&input.url)?;
     let count = store::count_links(&st.pool, user.id).await?;
     if count >= 40 {
@@ -542,6 +558,14 @@ pub async fn create_link(
         vertical.as_deref(),
     )
     .await?;
+    contribution::record(&st.pool, contribution::Entry {
+        action: "link.add", decision: "applied", actor: Some(&user),
+        actor_handle: Some(&user.handle), visitor_hash: None,
+        subject_type: Some("link"), subject_id: Some(&url),
+        before: None, after: Some(json!({"label": label, "vertical": vertical})),
+        reason: "member added a link", gate: contribution::gate_mode(&st, "link.add"),
+        client_hash: Some(&client), request_id: None,
+    }).await?;
     Ok((
         axum::http::StatusCode::CREATED,
         Json(json!({
@@ -683,21 +707,32 @@ pub struct FlagInput {
 pub async fn create_flag(
     State(st): State<AppState>,
     MaybeUser(user): MaybeUser,
+    ClientKey(client): ClientKey,
     Json(input): Json<FlagInput>,
 ) -> ApiResult<Json<Value>> {
+    contribution::gate(&st, user.as_ref(), "flag.file")?;
+    contribution::spend(&st, &ClientKey(client.clone()), "flag.file", user.as_ref())?;
     let handle = normalise_handle(&input.handle)?;
     let Some(target) = store::user_by_handle(&st.pool, &handle).await? else {
         return Err(ApiError(AppError::NotFound));
     };
     store::create_flag(
         &st.pool,
-        user.map(|u| u.id),
+        user.as_ref().map(|u| u.id),
         target.id,
         input.vertical.as_deref(),
         &crate::text::truncate(&input.reason, 60),
         &crate::text::truncate(&input.detail, 2000),
     )
     .await?;
+    contribution::record(&st.pool, contribution::Entry {
+        action: "flag.file", decision: "applied", actor: user.as_ref(),
+        actor_handle: user.as_ref().map(|u| u.handle.as_str()), visitor_hash: None,
+        subject_type: Some("profile"), subject_id: Some(&handle),
+        before: None, after: Some(json!({"reason": input.reason, "detail": input.detail})),
+        reason: "member reported a profile", gate: contribution::gate_mode(&st, "flag.file"),
+        client_hash: Some(&client), request_id: None,
+    }).await?;
     Ok(Json(json!({ "reported": true })))
 }
 
