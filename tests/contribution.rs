@@ -132,6 +132,8 @@ async fn modlog_is_a_user_surface_gated_by_trust(pool: PgPool) {
     assert_eq!(s3, StatusCode::OK, "{b3}");
     let summary: Value = serde_json::from_str(&b3).unwrap();
     assert_eq!(summary["declaration"]["modlog.review"], "trust(2)");
+    assert_eq!(summary["population_signal"]["logged_in_actors"], 0,
+        "imported shells are not a growth signal");
 }
 
 #[sqlx::test]

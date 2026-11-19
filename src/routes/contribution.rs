@@ -348,6 +348,7 @@ pub async fn modlog_summary(
     Ok(Json(json!({
         "days": q.days.clamp(1, 365),
         "decisions": contribution::summary(&st.pool, q.days.clamp(1, 365)).await?,
+        "population_signal": contribution::population_signal(&st.pool, q.days.clamp(1, 365)).await?,
         "declaration": st.cfg.contribution.declaration,
     })))
 }

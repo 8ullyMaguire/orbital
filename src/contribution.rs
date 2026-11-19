@@ -23,7 +23,7 @@ use polaris_authz::scope::Scope;
 use polaris_authz::subject::Subject as AuthzSubject;
 use polaris_ledger::{Actor, Redaction, Rules};
 use polaris_ratelimit::{client_key, Limits, Limiter, Quota};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -495,6 +495,30 @@ pub async fn summary(pool: &PgPool, days: i64) -> Result<Vec<Value>, AppError> {
             "count": r.get::<i64, _>("n"),
         }))
         .collect())
+}
+
+/// The only honest "how many users" signal for tightening a gate. `count(*) FROM users` is wrong:
+/// most rows here are imported shells that never signed in. Count distinct people who actually
+/// contributed in the window, and split them into session-authenticated and anonymous actors.
+pub async fn population_signal(pool: &PgPool, days: i64) -> Result<Value, AppError> {
+    let row = sqlx::query(
+        "SELECT
+           count(DISTINCT actor_id) FILTER (WHERE actor_id IS NOT NULL)::bigint AS logged_in,
+           count(DISTINCT actor_handle) FILTER (WHERE actor_handle IS NOT NULL)::bigint AS actors,
+           count(*) FILTER (WHERE visitor_hash IS NOT NULL)::bigint AS anonymous_decisions
+         FROM contribution_log
+         WHERE created_at > now() - ($1::text || ' days')::interval",
+    )
+    .bind(days.to_string())
+    .fetch_one(pool)
+    .await
+    .map_err(AppError::from)?;
+    Ok(json!({
+        "logged_in_actors": row.get::<i64, _>("logged_in"),
+        "distinct_actors": row.get::<i64, _>("actors"),
+        "anonymous_decisions": row.get::<i64, _>("anonymous_decisions"),
+        "rule": "count contributors who acted, never users rows (imported shells inflate those)",
+    }))
 }
 
 #[cfg(test)]
