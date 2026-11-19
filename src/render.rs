@@ -101,6 +101,9 @@ pub struct MemberCard {
     pub accent: String,
     pub tags: Vec<String>,
     pub rank: usize,
+    /// Search results can include adult profiles under an explicit opt-in; label them there and
+    /// on every card, so the layer is never shown unmarked.
+    pub is_adult: bool,
     pub is_new: bool,
     pub verified: bool,
     pub role: String,
@@ -192,6 +195,7 @@ pub fn member_card(
         accent: m.accent.clone(),
         tags: m.tags.iter().take(4).cloned().collect(),
         rank,
+        is_adult: m.nsfw_enabled,
         is_new: is_new(m.created_at, now),
         verified: false,
         role: m.role.clone(),
@@ -435,6 +439,9 @@ pub struct ProfileTemplate {
 pub struct SearchTemplate {
     pub layout: Layout,
     pub q: String,
+    /// Addressable opt-in state for the Adult chip; no cookie, no viewer-specific cache.
+    pub adult: bool,
+    pub q_encoded: String,
     pub members: Vec<MemberCard>,
     /// M2c: bounded catalogue matches, rendered beside the member results.
     pub entities: Vec<EntityCardView>,

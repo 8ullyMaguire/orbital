@@ -7,11 +7,19 @@
   <h1 class="h-sm">Search the directory</h1>
   <form class="searchrow" action="/search" method="get" role="search">
     <input type="search" name="q" value="{{ q }}" placeholder="Name, handle, tag, or site" aria-label="Search" autofocus>
+    {% if adult %}<input type="hidden" name="adult" value="1">{% endif %}
     <button class="btn" type="submit">Search</button>
   </form>
 
   {% if !q.is_empty() %}
     <p class="muted sm">{{ members.len() }} {% if members.len() == 1 %}person{% else %}people{% endif %} match “{{ q }}”.</p>
+    <div class="chips">
+      {% if adult %}
+      <a class="chip on" href="/search?q={{ q_encoded }}">Adult: on</a>
+      {% else %}
+      <a class="chip" href="/search?q={{ q_encoded }}&amp;adult=1">Include adult</a>
+      {% endif %}
+    </div>
     {% if tags.len() > 0 %}
     <div class="chips">{% for t in tags %}<a class="chip" href="/search?q={{ t.slug }}">#{{ t.slug }}<span class="chip-n">{{ t.count }}</span></a>{% endfor %}</div>
     {% endif %}

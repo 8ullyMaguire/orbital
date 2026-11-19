@@ -156,7 +156,9 @@ they describe a two-member site and must not be picked up by momentum.
 
 | M8 | **[BE] Contribution governance — Done (`cargo test`: 85 lib / 69 http / 8 contribution; live 8x200 then 429 with Retry-After, TL2 modlog attributed)**: open-by-default per-action gates through `polaris-authz`, anonymous budgets through `polaris-ratelimit`, filterable append-only `contribution_log` through `polaris-ledger`, TL2+ review/moderation and owner override, link-based profile intake + signed-out Add-a-profile form | `cargo test --test contribution` 8 passed; gate, burst and daily limiter mutations each red with the call kept; live 201/201/429 + retry-after and a TL2 `/api/modlog` reply |
 
-Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6/M7 Done; M8 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
+| M9 | **[BE] Link-key search with an adult opt-in — Done** (`cargo test`: 85 lib / 72 http): one search query matches links by substring and canonical key; adult results behind `?adult=1` on HTML and both JSON search paths, with an `adult` pill | `cargo test --test http link_search` 1 passed, HTML chip/label and SFW-link tests pass; three mutations red; live probe finds `daphomet2` only with `adult=1` |
+
+Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6/M7/M8/M9 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
 currently prints `NO VERDICT — 2 cases, floor 30`, which locks entity ranking changes until real clicks
 accumulate. M4 unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override.
 

@@ -179,12 +179,23 @@ async fn link_counts(st: &AppState) -> PageResult<Value> {
     Ok(json!({ "total": row.0, "failing": row.1, "unchecked": row.2 }))
 }
 
+/// The opt-in is addressable, so accept the forms people actually type in a URL: `1`, `true`,
+/// `on`. Serde's bool parser accepts only `true`/`false`, which turned a documented `adult=1`
+/// link into a 400. Unknown values are false, never an error on a public read route.
+pub(crate) fn adult_flag<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    let raw = String::deserialize(d)?;
+    Ok(matches!(raw.trim().to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"))
+}
+
 #[derive(Deserialize)]
 pub struct SearchQuery {
     #[serde(default)]
     pub q: String,
     #[serde(default)]
     pub limit: Option<i64>,
+    /// Adult profiles are opt-in. The filter belongs to the one query, not to a post-query retain.
+    #[serde(default, deserialize_with = "adult_flag")]
+    pub adult: bool,
 }
 
 /// `GET /api/v1/search?q=&limit=` — the same query the HTML page runs, in a shape a client can use.
@@ -194,8 +205,8 @@ pub struct SearchQuery {
 /// the estate's capabilities contract declares a search route, and a declaration with nothing behind
 /// it is exactly what that contract was written to prevent.
 ///
-/// The adult layer is filtered here, unconditionally: the read API hands out no identity, so it
-/// cannot honour a per-viewer opt-in and must not leak the layer to a viewer who never opted in.
+/// The adult layer is passed into the one search query as `adult`; it defaults off and never
+/// depends on a cookie or viewer identity, so a result stays linkable and cacheable.
 async fn search(
     State(st): State<AppState>,
     Query(q): Query<SearchQuery>,
@@ -209,8 +220,7 @@ async fn search(
             json!({ "q": "", "total": 0, "members": [], "tags": [] }),
         ));
     }
-    let (mut members, tags) = store::search(&st.pool, &term, true).await?;
-    members.retain(|m| !m.nsfw_enabled);
+    let (members, tags) = store::search(&st.pool, &term, q.adult).await?;
     let total = members.len() as i64;
     let rows: Vec<Value> = members
         .iter()
@@ -250,6 +260,8 @@ pub struct MembersQuery {
     pub vertical: Option<String>,
     #[serde(default)]
     pub q: Option<String>,
+    #[serde(default, deserialize_with = "adult_flag")]
+    pub adult: bool,
     #[serde(default)]
     pub limit: Option<i64>,
     #[serde(default)]
@@ -269,7 +281,7 @@ async fn members(
         (None, Some(term)) if !term.trim().is_empty() => {
             // `search` also returns the tag counts the HTML page renders; the API needs the
             // members only.
-            store::search(&st.pool, term.trim(), true).await?.0
+            store::search(&st.pool, term.trim(), q.adult).await?.0
         }
         _ => store::all_members(&st.pool, true).await?,
     };

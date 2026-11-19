@@ -1032,7 +1032,11 @@ pub async fn search(
             AND ($2 OR {SFW_PRIMARY_ONLY})
             AND (u.handle ILIKE $1 OR u.display_name ILIKE $1 OR u.bio ILIKE $1
                  OR EXISTS (SELECT 1 FROM tags t WHERE t.user_id = u.id AND t.tag_slug ILIKE $1)
-                 OR EXISTS (SELECT 1 FROM links l WHERE l.user_id = u.id AND l.url ILIKE $1))
+                 OR EXISTS (SELECT 1 FROM links l
+                            WHERE l.user_id = u.id
+                              AND (l.url ILIKE $1
+                                   OR regexp_replace(canonical_key(l.url), '^url:http://', 'url:https://')
+                                      = (SELECT regexp_replace(canonical_key($3), '^url:http://', 'url:https://')))))
           ORDER BY u.handle
           LIMIT 60",
         member_stats("NULL::text")
@@ -1040,6 +1044,7 @@ pub async fn search(
     let members = sqlx::query_as::<_, MemberStat>(&sql)
         .bind(&like)
         .bind(include_nsfw)
+        .bind(q)
         .fetch_all(pool)
         .await?;
 

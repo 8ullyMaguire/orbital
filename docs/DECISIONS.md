@@ -2063,3 +2063,29 @@ the 9th `429` with `Retry-After: 10783`; `steeltitan` (TL2) logs in and reads
 routes: `POST /api/contribute/profile`, `GET /api/modlog`, `GET /api/modlog/summary`,
 `POST /api/moderation/{id}` and `orbital modlog`. No gravity or ranking explanation is written to the
 log (D27 remains a boundary).
+
+**D61 — a link is a search key, and adult results are one explicit chip away (2026-11-19).** A
+search for `https://allmylinks.com/daphomet` returned no members while `/api/v1/members?q=`
+returned `daphomet2`; the member existed. `store::search` already matched `links.url`, but both
+search handlers removed every `nsfw_enabled` member after the query (`members.retain`, the HTML one
+under `if true`), and all 3,383 allmylinks profiles are adult. A typed `www.`/trailing-slash variant
+also missed because the raw `ILIKE` never called `canonical_key()`.
+
+Chosen: pass an addressable `adult` boolean into the one search query, default false, honoured on
+`/search`, `/api/v1/search` and `/api/v1/members?q=`; no cookie and no viewer-specific state.
+Results opt in with a chip (`?adult=1`) and adult cards carry an `adult` pill. Link matching uses
+`ILIKE` for substrings plus the database's own `canonical_key()` for exact variants; search-only
+`http`→`https` equivalence is applied on both sides so stored identity is not rewritten. The
+owner explicitly chose "adult results in all search behind a chip, default off" over an exact-link
+exception, a cookie preference, and leaving search SFW-only.
+
+Rejected: exact-link bypass of the adult filter (two visibility rules leak the layer through the
+handle query anyway); a cookie or localStorage preference (cookies on read-only API responses break
+caching and cannot serve `/api/v1/search`); a new link-search table or FTS index (one indexed
+`EXISTS` already suffices); normalising URLs in Rust (`canonical_key()` is the identity function
+owned by the trigger — a second copy is a second identity).
+
+Gate: `cargo test` green — 31 suites, 85 lib, 72 http (three new named tests). Mutations: removing
+the canonical arm → `left: 0, right: 1` on the `www.` variant; ignoring `adult` in the API →
+`left: 1, right: 0` on the default-off assertion; removing the pill → the HTML label assertion
+fails. Each mutation kept the call so it compiled. Live gate and commit recorded in the handoff.

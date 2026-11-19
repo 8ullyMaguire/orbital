@@ -839,6 +839,8 @@ fn icon_for_slug(slug: &str) -> &'static str {
 pub struct SearchQuery {
     #[serde(default)]
     pub q: String,
+    #[serde(default, deserialize_with = "super::apiv1::adult_flag")]
+    pub adult: bool,
 }
 
 pub async fn search(
@@ -850,14 +852,12 @@ pub async fn search(
     let now = Utc::now();
     let verticals = store::populated_verticals(&st.pool, true).await?;
     let query = q.q.trim().to_string();
-    let (mut members, mut tags) = if query.is_empty() {
+    let q_encoded = crate::render::urlencode(&query);
+    let (members, mut tags) = if query.is_empty() {
         (Vec::new(), Vec::new())
     } else {
-        store::search(&st.pool, &query, true).await?
+        store::search(&st.pool, &query, q.adult).await?
     };
-    if true {
-        members.retain(|m| !m.nsfw_enabled);
-    }
     let cards: Vec<MemberCard> = members
         .iter()
         .enumerate()
@@ -897,6 +897,8 @@ pub async fn search(
     Ok(SearchTemplate {
         layout: layout_for(&ctx, &verticals, user.as_ref()),
         q: query,
+        q_encoded,
+        adult: q.adult,
         members: cards,
         entities,
         tags: tag_rows,

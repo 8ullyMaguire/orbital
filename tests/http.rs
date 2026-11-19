@@ -2885,3 +2885,80 @@ async fn a_ranked_away_tag_moves_a_member_down_and_never_off_the_page(pool: PgPo
         &vertical.body[..vertical.body.len().min(400)]
     );
 }
+
+#[sqlx::test]
+async fn link_search_finds_the_owner_and_honours_the_adult_opt_in(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let reg = register(&app, "linkmember", "nsfw").await;
+    assert_eq!(reg.status, StatusCode::OK, "{}", reg.body);
+    sqlx::query(
+        "INSERT INTO links (user_id, url, label, vertical_slug, position)
+         SELECT id, 'https://allmylinks.com/daphomet', 'All my links', 'nsfw', 0
+         FROM users WHERE handle = 'linkmember'",
+    )
+    .execute(&pool).await.unwrap();
+
+    let term = "https://allmylinks.com/daphomet";
+    let plain = call(&app, get(&format!("/api/v1/search?q={}", orbital::render::urlencode(term)))).await;
+    assert_eq!(plain.status, StatusCode::OK, "{}", plain.body);
+    let pb: serde_json::Value = serde_json::from_str(&plain.body).unwrap();
+    assert_eq!(pb["total"], 0, "adult is off by default: {}", plain.body);
+
+    let optin = call(&app, get(&format!(
+        "/api/v1/search?q={}&adult=1", orbital::render::urlencode(term)
+    ))).await;
+    let ob: serde_json::Value = serde_json::from_str(&optin.body).unwrap();
+    assert_eq!(ob["total"], 1, "{}", optin.body);
+    assert_eq!(ob["members"][0]["handle"], "linkmember");
+
+    for variant in [
+        "https://www.allmylinks.com/daphomet/",
+        "http://www.allmylinks.com/daphomet",
+    ] {
+        let v = call(&app, get(&format!(
+            "/api/v1/search?q={}&adult=1", orbital::render::urlencode(variant)
+        ))).await;
+        let vb: serde_json::Value = serde_json::from_str(&v.body).unwrap();
+        assert_eq!(vb["total"], 1, "variant {variant} must find the link: {}", v.body);
+    }
+}
+
+#[sqlx::test]
+async fn the_html_search_page_has_an_adult_chip_and_labels_opted_in_results(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "htmladult", "nsfw").await;
+    sqlx::query(
+        "INSERT INTO links (user_id, url, label, vertical_slug, position)
+         SELECT id, 'https://allmylinks.com/htmladult', 'All my links', 'nsfw', 0
+         FROM users WHERE handle = 'htmladult'",
+    )
+    .execute(&pool).await.unwrap();
+
+    let plain = call(&app, get("/search?q=htmladult")).await;
+    assert_eq!(plain.status, StatusCode::OK, "{}", plain.body);
+    assert!(plain.body.contains("Include adult"), "{}", plain.body);
+    assert!(!plain.body.contains("@htmladult"), "{}", plain.body);
+
+    let opted = call(&app, get("/search?q=htmladult&adult=1")).await;
+    assert_eq!(opted.status, StatusCode::OK, "{}", opted.body);
+    assert!(opted.body.contains("@htmladult"), "{}", opted.body);
+    assert!(opted.body.contains(">adult</span>"), "adult results must be labelled: {}", opted.body);
+    assert!(opted.body.contains("Adult: on"), "{}", opted.body);
+}
+
+#[sqlx::test]
+async fn a_sfw_link_is_still_findable_without_the_opt_in(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    register(&app, "sfwlink", "dev").await;
+    sqlx::query(
+        "INSERT INTO links (user_id, url, label, vertical_slug, position)
+         SELECT id, 'https://example.org/sfwlink', 'Site', 'dev', 0
+         FROM users WHERE handle = 'sfwlink'",
+    )
+    .execute(&pool).await.unwrap();
+
+    let res = call(&app, get("/api/v1/search?q=example.org%2Fsfwlink")).await;
+    let body: serde_json::Value = serde_json::from_str(&res.body).unwrap();
+    assert!(body["members"].as_array().unwrap().iter()
+        .any(|m| m["handle"] == "sfwlink"), "{}", res.body);
+}

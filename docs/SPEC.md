@@ -1156,3 +1156,18 @@ for overrides, with the owner granted everything.
 - `orbital modlog [--action] [--decision] [--q] [--limit]` is the offline read of the same rows.
 
 The log stores facts and decisions only: no prior, no boost, no "why this ranked here" (D27).
+
+---
+
+## 10. Link-key search and the adult opt-in (D61)
+
+`store::search` is the only member-search query. A member is found by handle, display name, bio,
+tag, **or any link they own**. Link matching is substring `ILIKE` plus the database's
+`canonical_key()` for exact variants (`www.`, trailing slash); search treats `http` and `https`
+equivalently without changing the stored key.
+
+Adult profiles are excluded by default. `/search`, `/api/v1/search` and `/api/v1/members?q=...`
+accept `adult=1` (also `true`, `on`, `yes`); the HTML results page shows an "Include adult" chip
+that becomes "Adult: on", and an opted-in adult result is labelled `adult` on its card. The choice
+is a query parameter, never a cookie or a viewer-specific cache entry. A listing without `q` is a
+catalogue, not a search, and is unchanged.
