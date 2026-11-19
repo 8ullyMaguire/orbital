@@ -91,22 +91,13 @@ impl Overlap {
         if a.is_empty() || b.is_empty() {
             return None;
         }
-        let mut dot = 0.0f64;
-        for t in a {
-            if b.contains(t) {
-                let w = self.w(t);
-                dot += w * w;
-            }
-        }
-        let na: f64 = a.iter().map(|t| self.w(t).powi(2)).sum();
-        let nb: f64 = b.iter().map(|t| self.w(t).powi(2)).sum();
-        if na <= 0.0 || nb <= 0.0 {
-            return None;
-        }
-        // Not clamped: the old formula was not, and a self-overlap of three tags is `1.0000000000000002` —
-        // one ulp above one, which no clamp should be allowed to hide while the claim is "the same arithmetic".
-        // The `[0,1]` bound belongs at the signal seam, where the estate's contract asks for it.
-        Some(dot / (na.sqrt() * nb.sqrt()))
+        // M73-04: the estate kernel owns count-vector cosine. Orbital owns only the tag weights and the
+        // meaning of an empty side; absence stays `None`, never `0.0`, at this seam.
+        let left: std::collections::BTreeMap<&str, f64> =
+            a.iter().map(|t| (t.as_str(), self.w(t))).collect();
+        let right: std::collections::BTreeMap<&str, f64> =
+            b.iter().map(|t| (t.as_str(), self.w(t))).collect();
+        polaris_affinity::similarity::cosine_counts(&left, &right)
     }
 
     /// The same, with the rankers' reading of absence: no opinion contributes nothing.
@@ -168,14 +159,19 @@ pub fn cosine(a: &[String], b: &[String]) -> f64 {
 /// No IDF here on purpose: the weights *are* the viewer's statement of importance, and scaling them by the
 /// pool's rarity would answer a different question than the one the viewer asked.
 pub fn tag_relevance(tags: &[String], weights: &[(String, f64)]) -> f64 {
-    let total: f64 = weights.iter().map(|(_, w)| w.max(0.0)).sum();
-    if total <= 0.0 || tags.is_empty() {
-        return 0.0;
-    }
-    let hit: f64 = weights
+    // M73-04: weighted presence over the viewer's declared tags. The kernel decides how absent evidence
+    // is handled; a zero-weight or unmatched tag contributes nothing to either side.
+    let components: Vec<polaris_affinity::evidence::Component> = weights
         .iter()
-        .filter(|(t, w)| *w > 0.0 && tags.iter().any(|tag| tag == t))
-        .map(|(_, w)| *w)
-        .sum();
-    (hit / total).clamp(0.0, 1.0)
+        .map(|(tag, weight)| {
+            let present = tags.iter().any(|value| value == tag);
+            polaris_affinity::evidence::Component::new(
+                *weight,
+                if present { Some(1.0) } else { None },
+            )
+        })
+        .collect();
+    polaris_affinity::evidence::weighted_mean(&components)
+        .map(|mean| mean.value)
+        .unwrap_or(0.0)
 }

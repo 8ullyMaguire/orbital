@@ -23,6 +23,8 @@ polaris-core = { path = "../../polaris-core-rust" }
 # The estate's ranking metrics and the paired bootstrap: nDCG@10, recall@50, and the decision
 # rule that refuses to call a difference a result below the sample floor (D31).
 polaris-eval = { path = "../../polaris-eval" }
+# M73-04: string-tag arithmetic lives in the estate kernel; Orbital supplies the tag weights.
+polaris-affinity = { path = "../../polaris-affinity" }
 axum = { version = "0.8", features = ["macros"] }
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }

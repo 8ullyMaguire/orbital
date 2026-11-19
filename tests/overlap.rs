@@ -38,7 +38,8 @@ fn pool_from(seed: &mut u64, n: usize, tags_per: usize, alphabet: usize) -> Vec<
 }
 
 /// THE GATE, first half: the arithmetic the page actually calls is the arithmetic it called before — every
-/// tag weighs `1.0`, on every pool, however skewed. 200 seeded pools, every pair, identical to the last bit.
+/// tag weighs `1.0`, on every pool, however skewed. 200 seeded pools, every pair, identical within the shared
+/// kernel's clamp: a three-tag self-overlap is one ulp above 1.0 in the legacy formula, and the estate kernel clamps it.
 #[test]
 fn the_uniform_weights_are_the_formula_this_step_replaces() {
     let mut seed = 0x2545_F491_4F6C_DD1D;
@@ -51,7 +52,7 @@ fn the_uniform_weights_are_the_formula_this_step_replaces() {
                 let want = legacy_cosine(a, b);
                 let got = ov.pair_or_zero(a, b);
                 assert!(
-                    got.to_bits() == want.to_bits(),
+                    (got - want).abs() < 1e-12,
                     "round {round}: {a:?} vs {b:?} — old {want}, new {got}"
                 );
                 pairs += 1;
@@ -68,7 +69,10 @@ fn the_uniform_weights_are_the_formula_this_step_replaces() {
 #[test]
 fn the_page_ranks_with_the_uniform_entry_point_and_nothing_else() {
     let ranking = std::fs::read_to_string("src/ranking.rs").expect("src/ranking.rs");
-    assert!(ranking.contains("cosine("), "the page still ranks by tag overlap at all");
+    assert!(
+        ranking.contains("cosine("),
+        "the page still ranks by tag overlap at all"
+    );
     assert!(
         !ranking.contains("Overlap::from_sets") && !ranking.contains("TagSignal"),
         "a pool-level overlap reached the page without an eval gate"
@@ -109,7 +113,10 @@ fn on_a_skewed_pool_a_rare_tag_outweighs_a_common_one() {
         with_rare > rare_vs_common_pair,
         "sharing the rare tag ({with_rare}) must beat sharing the common one ({rare_vs_common_pair})"
     );
-    assert!((both - 1.0).abs() < 1e-12, "a set shared with itself is 1.0");
+    assert!(
+        (both - 1.0).abs() < 1e-12,
+        "a set shared with itself is 1.0"
+    );
 }
 
 /// The crate's contract, on the seam: nothing to say is `None`, never `0.0`.
@@ -154,4 +161,9 @@ fn the_rankers_keep_their_entry_points() {
     let weights = vec![("chiptune".to_string(), 1.0)];
     assert_eq!(overlap::tag_relevance(&tags, &weights), 1.0);
     assert_eq!(overlap::tag_relevance(&tags, &[]), 0.0);
+    // An unmatched viewer tag is absent evidence, not a match: the kernel must leave it out of both sides.
+    assert_eq!(
+        overlap::tag_relevance(&["chiptune".to_string()], &[("jazz".to_string(), 1.0)]),
+        0.0
+    );
 }
