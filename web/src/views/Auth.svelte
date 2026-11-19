@@ -3,7 +3,8 @@
 
   let { verticals = [], onauthed } = $props();
 
-  let mode = $state('login');
+  // The public site links to /app/#/join; honour it instead of dropping the visitor on sign-in.
+  let mode = $state(location.hash === '#/join' ? 'contribute' : 'login');
   let form = $state({ handle: '', password: '', display_name: '', vertical: 'dev', bio: '', url: '' });
   let err = $state('');
   let busy = $state(false);
