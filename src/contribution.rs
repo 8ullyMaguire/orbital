@@ -413,12 +413,11 @@ pub fn rules_for(action: &str) -> Rules {
     }
 }
 
-pub fn redaction_for(action: &str) -> Redaction {
-    if action.starts_with("moderation.") {
-        Redaction::PublishHandle // moderation is attributable
-    } else {
-        Redaction::WithholdActor
-    }
+pub fn redaction_for(_action: &str) -> Redaction {
+    // The log exists so TL2 can see who is doing what. A handle is already the public name on the
+    // profile page; hiding it here made every contribution row anonymous and defeated review.
+    // What stays private is the account id and the client hash, added only for TL3/owner.
+    Redaction::PublishHandle
 }
 
 /// Build the ledger's private record from an orbital row. `project` is the only route to a public

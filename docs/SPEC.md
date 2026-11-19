@@ -1133,9 +1133,10 @@ for overrides, with the owner granted everything.
 
 - `POST /api/contribute/profile` adds a profile from a canonical URL with no account. A second POST
   for the same canonical key returns the existing profile with `already_existing: true`; no duplicate
-  shell is created. Finding a URL is not authority to rename it: an anonymous POST that would change
-  an existing display name is refused (403) and logged; a signed-in contributor may correct it, and
-  the log carries their handle. Anonymous rows carry the salted client hash in `visitor_hash`.
+  shell is created. A repeat that changes nothing is a lookup: no log row, no state write. Finding a
+  URL is not authority to rename it: an anonymous POST that would change an existing display name is
+  refused (403) and logged; a signed-in contributor may correct it, and the log carries their
+  handle. Anonymous refused rows carry the salted client hash in `visitor_hash`.
 - `GET /api/modlog` is TL2+ and filters on action, actor, subject, decision, time, cursor and free
   text. Its rows are `polaris-ledger` projections: account ids and client hashes are only present
   for TL3/owner. `GET /api/modlog/summary` adds decision counts and the live gate declaration; that

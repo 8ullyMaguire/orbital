@@ -263,7 +263,18 @@ async fn modlog_public_projection_never_carries_account_ids_or_client_hashes(poo
     let entry = &rev_json["entries"][0];
     assert!(entry.get("actor_id").is_none(), "no account id in a TL2 view: {entry}");
     assert!(entry.get("client_hash").is_none(), "no client hash in a TL2 view: {entry}");
-    assert!(entry.get("actor").is_some(), "the handle is the public actor");
+    assert_eq!(entry["actor"], json!(null), "an anonymous contribution has no handle");
+
+    // A signed-in contribution names its author to TL2; that is the whole point of review.
+    let (s2, b2, _) = post(
+        &app, "/api/contribute/profile",
+        json!({"url": "https://example.com/attributed", "display_name": "Attributed", "vertical": "nsfw"}),
+        "198.51.100.42", Some(&rev),
+    ).await;
+    assert_eq!(s2, StatusCode::CREATED, "a signed-in contributor creates a profile: {b2}");
+    let (_, rev_body2, _) = get(&app, "/api/modlog?actor=reviewer", &rev).await;
+    let rev_json2: Value = serde_json::from_str(&rev_body2).unwrap();
+    assert_eq!(rev_json2["entries"][0]["actor"], json!("reviewer"));
 
     let (_, own_body, _) = get(&app, "/api/modlog", &owner_cookie).await;
     let own_json: Value = serde_json::from_str(&own_body).unwrap();
