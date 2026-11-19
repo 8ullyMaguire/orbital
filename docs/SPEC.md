@@ -1131,6 +1131,8 @@ env (`ORBITAL_GATE_<ACTION>`), evaluated by `polaris-authz`, never by a branch i
 shipped posture is open for contribution, `trust(2)` for reading and acting on the log, `trust(3)`
 for overrides, with the owner granted everything.
 
+- The signed-out app offers **Add a profile** at `/app/#/join`: one URL, an optional name and a
+  vertical, no account. The public site's "Add profile" links there.
 - `POST /api/contribute/profile` adds a profile from a canonical URL with no account. A second POST
   for the same canonical key returns the existing profile with `already_existing: true`; no duplicate
   shell is created. A repeat that changes nothing is a lookup: no log row, no state write. Finding a
