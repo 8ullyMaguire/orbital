@@ -127,6 +127,15 @@ pub async fn doctor(pool: &PgPool, cfg: &Config) -> Result<usize> {
         Err(e) => say(false, "link coverage", format!("{e}")),
     }
 
+    // What people looked for and could not find. Counts, never the person or the raw query.
+    match crate::store::wanted_links(pool, 50).await {
+        Ok(rows) => say(true, "wanted links", match rows.first() {
+            Some((key, n, _, _)) => format!("{} URLs; top {} ({n} searches)", rows.len(), key),
+            None => "0 URLs from zero-result searches".into(),
+        }),
+        Err(e) => say(false, "wanted links", format!("{e}")),
+    }
+
     // 5. The uptime probe is still stamping, and what it stamped was a 200. The probe writes a
     // file; nothing else here would notice a host that stopped answering.
     let stamp = std::fs::read_to_string(backup_dir().join("uptime.txt")).unwrap_or_default();

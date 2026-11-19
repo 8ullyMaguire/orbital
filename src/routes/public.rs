@@ -858,6 +858,10 @@ pub async fn search(
     } else {
         store::search(&st.pool, &query, q.adult).await?
     };
+    if members.is_empty() && !query.is_empty() {
+        // A clue, not a person: a recording failure must never break a read.
+        let _ = store::record_search_gap(&st.pool, &query).await;
+    }
     let cards: Vec<MemberCard> = members
         .iter()
         .enumerate()

@@ -7,6 +7,7 @@
   import Embed from './views/Embed.svelte';
   import Admin from './views/Admin.svelte';
   import Auth from './views/Auth.svelte';
+  import Wanted from './views/Wanted.svelte';
 
   let me = $state(null);
   let standing = $state([]);
@@ -67,6 +68,7 @@
     ['links', 'Links'],
     ['profile', 'Profile'],
     ['standing', 'Standing'],
+    ['wanted', 'Wanted'],
     ['embed', 'Embed']
   ];
 </script>
@@ -107,6 +109,8 @@
       <ProfileForm {me} all={verticals} mine={me.verticals} reload={loadMe} />
     {:else if tab === 'standing'}
       <Standing {standing} {me} />
+    {:else if tab === 'wanted'}
+      <Wanted />
     {:else if tab === 'embed'}
       <Embed {me} verticals={verticals} />
     {:else if tab === 'admin'}

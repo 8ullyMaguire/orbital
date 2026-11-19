@@ -158,7 +158,9 @@ they describe a two-member site and must not be picked up by momentum.
 
 | M9 | **[BE] Link-key search with an adult opt-in — Done** (`cargo test`: 85 lib / 72 http): one search query matches links by substring and canonical key; adult results behind `?adult=1` on HTML and both JSON search paths, with an `adult` pill | `cargo test --test http link_search` 1 passed, HTML chip/label and SFW-link tests pass; three mutations red; live probe finds `daphomet2` only with `adult=1` |
 
-Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6/M7/M8/M9 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
+| M10 | **[BE] Wanted-links queue — Done** (`cargo test`: 85 lib / 77 http): zero-result URL searches aggregate by canonical key, no visitor identity; `telemetry.view` opens to TL0 and ramps to TL2 at 50 applied contributors in 30 days; API, `/app` tab and doctor line | `cargo test --test http` 77 passed; five new tests; three mutations red; live doctor line and prefilled intake verified |
+
+Status: **M0/M1/M2/M3a/M3b/M5a/M5b/M6/M7/M8/M9/M10 Done; only M4 remains, PARKED (0 claims / 0%).** Entity eval
 currently prints `NO VERDICT — 2 cases, floor 30`, which locks entity ranking changes until real clicks
 accumulate. M4 unblock: ≥1% 30-day conversion or ≥5 claims, or a D58 seed-data override.
 

@@ -2962,3 +2962,106 @@ async fn a_sfw_link_is_still_findable_without_the_opt_in(pool: PgPool) {
     assert!(body["members"].as_array().unwrap().iter()
         .any(|m| m["handle"] == "sfwlink"), "{}", res.body);
 }
+
+#[sqlx::test]
+async fn a_url_shaped_zero_result_search_becomes_one_counted_gap(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let term = "https://allmylinks.com/wanted-example";
+    for _ in 0..2 {
+        let res = call(&app, get(&format!("/api/v1/search?q={}", orbital::render::urlencode(term)))).await;
+        assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    }
+    let row: (String, i64) = sqlx::query_as(
+        "SELECT canonical_key, searches FROM wanted_links WHERE canonical_key = canonical_key($1)",
+    ).bind(term).fetch_one(&pool).await.unwrap();
+    assert_eq!(row.1, 2, "two URL-shaped zero-result searches must count twice");
+    assert!(!row.0.contains('?'), "{}", row.0);
+}
+
+#[sqlx::test]
+async fn an_existing_link_is_not_a_gap_and_a_claimed_gap_leaves_the_queue(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    // An adult profile is hidden from default search, so the URL returns zero members even though
+    // the link exists. That is exactly where the "already owned" guard has to fire.
+    let owner = register(&app, "ownerlink", "nsfw").await;
+    let gap_cookie = owner.cookie.clone().unwrap();
+    sqlx::query("INSERT INTO links (user_id, url, label, vertical_slug, position)
+                 SELECT id, 'https://example.org/owned', 'Owned', 'nsfw', 0 FROM users WHERE handle='ownerlink'")
+        .execute(&pool).await.unwrap();
+
+    call(&app, get(&format!("/api/v1/search?q={}", orbital::render::urlencode("https://example.org/owned")))).await;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM wanted_links").fetch_one(&pool).await.unwrap();
+    assert_eq!(count, 0, "an owned URL is not a gap");
+
+    sqlx::query("INSERT INTO wanted_links (canonical_key, searches) VALUES (canonical_key($1), 3)")
+        .bind("https://example.org/wanted").execute(&pool).await.unwrap();
+    let before = call(&app, cookie(get("/api/search-gaps?limit=10"), &gap_cookie)).await;
+    let before_json: serde_json::Value = serde_json::from_str(&before.body).unwrap();
+    assert_eq!(before_json["gaps"][0]["canonical_key"], "url:https://example.org/wanted", "{}", before.body);
+
+    sqlx::query("INSERT INTO links (user_id, url, label, vertical_slug, position)
+                 SELECT id, 'https://example.org/wanted', 'Now claimed', 'nsfw', 0 FROM users WHERE handle='ownerlink'")
+        .execute(&pool).await.unwrap();
+    let after = call(&app, cookie(get("/api/search-gaps?limit=10"), &gap_cookie)).await;
+    let after_json: serde_json::Value = serde_json::from_str(&after.body).unwrap();
+    assert_eq!(after_json["gaps"].as_array().unwrap().len(), 0, "claimed gaps leave the queue");
+}
+
+#[sqlx::test]
+async fn a_token_in_the_query_string_is_never_stored(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let term = "https://example.org/private?token=super-secret-value#frag";
+    call(&app, get(&format!("/api/v1/search?q={}", orbital::render::urlencode(term)))).await;
+    let keys: Vec<String> = sqlx::query_scalar("SELECT canonical_key FROM wanted_links")
+        .fetch_all(&pool).await.unwrap();
+    assert_eq!(keys.len(), 1, "{keys:?}");
+    assert!(!keys[0].contains("secret") && !keys[0].contains('#'), "{keys:?}");
+    assert!(keys[0].contains("example.org/private"), "{keys:?}");
+}
+
+#[sqlx::test]
+async fn the_wanted_gate_ramps_from_login_to_trust2_with_active_contributors(pool: PgPool) {
+    let app = app(pool.clone()).await;
+    let low = register(&app, "gapuser", "dev").await;
+    let low_cookie = low.cookie.clone().unwrap();
+    let res = call(&app, cookie(get("/api/search-gaps"), &low_cookie)).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let body: serde_json::Value = serde_json::from_str(&res.body).unwrap();
+    assert_eq!(body["gate"], "login", "{}", res.body);
+
+    let signed_out = call(&app, get("/api/search-gaps")).await;
+    assert_eq!(signed_out.status, StatusCode::UNAUTHORIZED, "{}", signed_out.body);
+
+    sqlx::query(
+        "INSERT INTO users (handle, display_name, password_hash, trust_level)
+         SELECT 'act' || g, 'Actor ' || g, 'x', 2 FROM generate_series(1, 50) g"
+    ).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO contribution_log (action, decision, actor_id, actor_handle)
+         SELECT 'profile.create', 'applied', id, handle FROM users WHERE handle LIKE 'act%'"
+    ).execute(&pool).await.unwrap();
+
+    let ramped = call(&app, cookie(get("/api/search-gaps"), &low_cookie)).await;
+    assert_eq!(ramped.status, StatusCode::FORBIDDEN, "TL0 must lose access at 50: {}", ramped.body);
+
+    let tl2 = register(&app, "tl2signin", "dev").await;
+    sqlx::query("UPDATE users SET trust_level = 2 WHERE handle = 'tl2signin'")
+        .execute(&pool).await.unwrap();
+    let ok = call(&app, cookie(get("/api/search-gaps"), &tl2.cookie.unwrap())).await;
+    assert_eq!(ok.status, StatusCode::OK, "{}", ok.body);
+    let ob: serde_json::Value = serde_json::from_str(&ok.body).unwrap();
+    assert_eq!(ob["gate"], "trust(2)");
+    assert!(ob["active_contributors_30d"].as_i64().unwrap() >= 50, "{}", ok.body);
+}
+
+#[sqlx::test]
+async fn an_owner_declaration_overrides_the_automatic_ramp(pool: PgPool) {
+    assert_eq!(
+        orbital::contribution::telemetry_gate_with(&pool, Some("trust(3)")).await.unwrap(),
+        orbital::contribution::GateMode::Trust(3)
+    );
+    assert_eq!(
+        orbital::contribution::telemetry_gate_with(&pool, None).await.unwrap(),
+        orbital::contribution::GateMode::Login
+    );
+}

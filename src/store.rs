@@ -1999,3 +1999,40 @@ pub async fn commit_claim(
     tx.commit().await?;
     Ok(())
 }
+
+/// A URL-shaped search that found nobody is a clue, not a person. Strip query/fragment BEFORE
+/// canonical_key() sees the term: people paste tokens into URLs and the queue must not keep them.
+pub async fn record_search_gap(pool: &PgPool, term: &str) -> Result<(), AppError> {
+    let Ok(mut url) = url::Url::parse(term) else { return Ok(()) };
+    if !matches!(url.scheme(), "http" | "https") || !url.host_str().is_some_and(|h| h.contains('.')) {
+        return Ok(());
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    sqlx::query(
+        "INSERT INTO wanted_links (canonical_key, searches, first_seen, last_seen)
+         SELECT canonical_key($1), 1, now(), now()
+         WHERE NOT EXISTS (SELECT 1 FROM links l WHERE canonical_key(l.url) = canonical_key($1))
+         ON CONFLICT (canonical_key) DO UPDATE
+           SET searches = wanted_links.searches + 1, last_seen = now()",
+    )
+    .bind(url.as_str())
+    .execute(pool).await.map_err(AppError::from)?;
+    Ok(())
+}
+
+/// A row that has since been claimed is filtered here, not deleted: the queue is a view of links
+/// that are still missing, and the old count stays available to doctor.
+pub async fn wanted_links(
+    pool: &PgPool,
+    limit: i64,
+) -> Result<Vec<(String, i64, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>, AppError> {
+    sqlx::query_as(
+        "SELECT w.canonical_key, w.searches, w.first_seen, w.last_seen
+         FROM wanted_links w
+         WHERE NOT EXISTS (SELECT 1 FROM links l WHERE canonical_key(l.url) = w.canonical_key)
+         ORDER BY w.searches DESC, w.last_seen DESC LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool).await.map_err(AppError::from)
+}

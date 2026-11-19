@@ -1171,3 +1171,19 @@ accept `adult=1` (also `true`, `on`, `yes`); the HTML results page shows an "Inc
 that becomes "Adult: on", and an opted-in adult result is labelled `adult` on its card. The choice
 is a query parameter, never a cookie or a viewer-specific cache entry. A listing without `q` is a
 catalogue, not a search, and is unchanged.
+
+---
+
+## 11. Wanted links (D62)
+
+A URL-shaped search that returns no people increments an aggregate row keyed by the database's
+`canonical_key()`. Query and fragment are removed first, so a token in the URL is never stored; no
+visitor id, IP, user agent or raw term is kept. A URL already owned by a profile cannot become a gap,
+and a gap that gets claimed drops out of the read queue.
+
+`GET /api/search-gaps` returns `{gaps, gate, active_contributors_30d, limit}` for signed-in users.
+The gate starts at `login` and becomes `trust(2)` when 50 distinct accounts have an `applied`
+contribution in 30 days; `ORBITAL_GATE_TELEMETRY_VIEW` overrides it. This is an estate
+`polaris-authz` capability, not a trust check in the handler. The `/app` "Wanted" tab shows the same
+queue and links each row to the contribute form prefilled with that URL; `orbital doctor` prints the
+count and the top URL.

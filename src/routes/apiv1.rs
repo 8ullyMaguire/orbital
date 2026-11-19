@@ -221,6 +221,9 @@ async fn search(
         ));
     }
     let (members, tags) = store::search(&st.pool, &term, q.adult).await?;
+    if members.is_empty() {
+        let _ = store::record_search_gap(&st.pool, &term).await;
+    }
     let total = members.len() as i64;
     let rows: Vec<Value> = members
         .iter()

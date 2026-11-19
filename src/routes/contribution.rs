@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::auth::{CurrentUser, MaybeUser};
 use crate::contribution::{self, ClientKey};
 use crate::error::{ApiError, ApiResult, AppError};
+use crate::store;
 use crate::text::{normalise_slug, validate_link_url};
 use crate::AppState;
 
@@ -32,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/modlog", axum::routing::get(modlog))
         .route("/api/modlog/summary", axum::routing::get(modlog_summary))
         .route("/api/moderation/{id}", axum::routing::post(moderation_action))
+        .route("/api/search-gaps", axum::routing::get(search_gaps))
 }
 
 #[derive(Debug, Deserialize)]
@@ -359,6 +361,38 @@ pub async fn modlog(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct GapQuery {
+    #[serde(default = "default_gap_limit")]
+    pub limit: i64,
+}
+fn default_gap_limit() -> i64 { 50 }
+
+/// The gap queue is a user surface: its gate ramps with real contribution activity, so the same
+/// URL answers 200 for any signed-in user early and 403 below TL2 once 50 people have built the
+/// site. No visitor identity is stored anywhere behind this route.
+pub async fn search_gaps(
+    State(st): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Query(q): Query<GapQuery>,
+) -> ApiResult<Json<Value>> {
+    let gate = contribution::authorize_telemetry(&st, &user).await?;
+    let limit = q.limit.clamp(1, 200);
+    let rows = store::wanted_links(&st.pool, limit).await?;
+    let gaps = rows.into_iter().map(|(key, searches, first, last)| json!({
+        "canonical_key": key,
+        "searches": searches,
+        "first_seen": first,
+        "last_seen": last,
+    })).collect::<Vec<_>>();
+    Ok(Json(json!({
+        "gaps": gaps,
+        "limit": limit,
+        "gate": gate.as_str(),
+        "active_contributors_30d": contribution::active_contributors(&st.pool, 30).await?,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SummaryQuery {
     #[serde(default = "default_days")]
     pub days: i64,
@@ -375,6 +409,7 @@ pub async fn modlog_summary(
         "days": q.days.clamp(1, 365),
         "decisions": contribution::summary(&st.pool, q.days.clamp(1, 365)).await?,
         "population_signal": contribution::population_signal(&st.pool, q.days.clamp(1, 365)).await?,
+        "effective_telemetry_gate": contribution::telemetry_gate(&st.pool).await?.as_str(),
         "declaration": st.cfg.contribution.declaration,
     })))
 }

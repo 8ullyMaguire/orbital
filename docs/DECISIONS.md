@@ -2089,3 +2089,31 @@ Gate: `cargo test` green — 31 suites, 85 lib, 72 http (three new named tests).
 the canonical arm → `left: 0, right: 1` on the `www.` variant; ignoring `adult` in the API →
 `left: 1, right: 0` on the default-off assertion; removing the pill → the HTML label assertion
 fails. Each mutation kept the call so it compiled. Live gate and commit recorded in the handoff.
+
+**D62 — zero-result URL searches become a user-visible queue, gated by real activity (2026-11-19).**
+The owner could not find `https://allmylinks.com/daphomet`, tried to add it, and found the profile
+already existed (D61). Nothing recorded that a link was wanted, and users — not the operator — will
+create most creator profiles. One small table, `wanted_links`, now aggregates URL-shaped searches
+that found nobody by the site's own canonical key, with a count and first/last seen. Query strings
+and fragments are stripped before `canonical_key()` sees the term; no visitor id, IP or raw term is
+stored. Links already owned by a profile are excluded by the upsert and by the read query, so
+claiming a wanted URL removes it from the queue without a delete job.
+
+The owner's trust ruling: **TL0 (any signed-in user) at the start, auto-tightening to TL2 when 50
+distinct contributors have an `applied` action in the last 30 days** — activity, not a calendar and
+not a manual switch. `ORBITAL_GATE_TELEMETRY_VIEW` remains the owner's override. The new
+`telemetry.view` capability is decided through a fresh `polaris-authz` policy on the same verdict
+path as every other action; handlers contain no trust-level branch. The queue lives at
+`GET /api/search-gaps`, a "Wanted" tab in `/app`, and a `doctor` line. Prefilling the contribute
+form from a wanted URL closes the loop from "not found" to "profile added".
+
+Rejected: doctor-only telemetry (users create the profiles); a fixed TL2 from day one (no active
+contributors at launch); a manual env switch as the mechanism (owner asked for automatic); raw
+search terms (tokens and spelling variants); a per-visitor search history (a clue turned into a
+dossier); a new shared estate component (the crates already own authz/audit and this needs one
+orbital-owned table).
+
+Gate: `cargo test` green — 31 suites, 85 lib, 77 http (five new tests), 8 contribution. Mutations:
+gate pinned to login → 200 vs 403 on the ramp; upsert guard removed → 1 vs 0 on an adult-owned URL;
+query-strip removed → `secret` appears in the canonical key. Each mutation compiled and failed by
+assertion. Live numbers and commit in the handoff.

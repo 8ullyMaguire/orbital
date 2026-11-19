@@ -38,6 +38,9 @@ pub const CLASS_USER_WRITE: &str = "user-write";
 pub const CLASS_ANON_DAY: &str = "anon-write-day";
 pub const CLASS_USER_DAY: &str = "user-write-day";
 pub const CLASS_READ: &str = "read";
+pub const ACTION_TELEMETRY: &str = "telemetry.view";
+/// Wanted links open to every signed-in user, then tighten as real contributors arrive.
+pub const TELEMETRY_TL2_AT: i64 = 50;
 
 /// Every write action that has a declared capability. A capability here with no reader in a handler
 /// is a label, not a control; `tests/contribution.rs` drives the production routes for each one.
@@ -55,6 +58,7 @@ pub const ACTIONS: &[&str] = &[
     "modlog.review",
     "moderation.act",
     "moderation.override",
+    ACTION_TELEMETRY,
 ];
 
 /// The declaration vocabulary, kept separate from `polaris-authz`'s role/requirement model so an
@@ -105,8 +109,32 @@ pub fn default_gate(action: &str) -> GateMode {
         "link.edit" | "entity.edit" => GateMode::Login,
         "vertical.vote" | "moderation.override" => GateMode::Trust(3),
         "tag.endorse" | "modlog.review" | "moderation.act" => GateMode::Trust(2),
+        ACTION_TELEMETRY => GateMode::Login,
         _ => GateMode::Open,
     }
+}
+
+/// The one place a declaration becomes an authz grant. `from_env`, `for_test` and the dynamic
+/// telemetry ramp all go through it, so a mode can never mean one thing at startup and another at
+/// request time.
+fn grant_for(policy: &mut Policy, cap: &Capability, gate: &GateMode) {
+    match gate {
+        GateMode::Open => {
+            policy.grant(Grant::role("everyone", cap.clone(), Scope::Site));
+        }
+        GateMode::Login => {
+            policy.grant(Grant::role("member", cap.clone(), Scope::Site));
+        }
+        GateMode::Trust(n) => {
+            policy.grant(
+                Grant::role("member", cap.clone(), Scope::Site)
+                    .requiring(Requirement::TrustAtLeast((*n).max(0) as u8)),
+            );
+        }
+        GateMode::Grant => {} // only an explicit admin override opens this
+    }
+    // The instance owner always has the first and last say.
+    policy.grant(Grant::role("admin", cap.clone(), Scope::Site));
 }
 
 #[derive(Clone, Debug)]
@@ -133,23 +161,7 @@ impl Config {
             let raw = std::env::var(&key).unwrap_or(default);
             let gate = GateMode::parse(&key, &raw)?;
             declaration.insert(action.to_string(), gate.as_str());
-            match gate {
-                GateMode::Open => {
-                    policy.grant(Grant::role("everyone", cap.clone(), Scope::Site));
-                }
-                GateMode::Login => {
-                    policy.grant(Grant::role("member", cap.clone(), Scope::Site));
-                }
-                GateMode::Trust(n) => {
-                    policy.grant(
-                        Grant::role("member", cap.clone(), Scope::Site)
-                            .requiring(Requirement::TrustAtLeast(n.max(0) as u8)),
-                    );
-                }
-                GateMode::Grant => {} // only an explicit admin override opens this
-            }
-            // The instance owner always has the first and last say.
-            policy.grant(Grant::role("admin", cap, Scope::Site));
+            grant_for(&mut policy, &cap, &gate);
         }
 
         let read = Quota::per_minute(env_u32("ORBITAL_READ_BUDGET", 240)?);
@@ -193,22 +205,7 @@ impl Config {
             let cap = Capability::parse(action).expect("declared capabilities are well formed");
             policy.declare(cap.clone());
             declaration.insert(action.to_string(), default_gate(action).as_str());
-            match default_gate(action) {
-                GateMode::Open => {
-                    policy.grant(Grant::role("everyone", cap.clone(), Scope::Site));
-                }
-                GateMode::Login => {
-                    policy.grant(Grant::role("member", cap.clone(), Scope::Site));
-                }
-                GateMode::Trust(n) => {
-                    policy.grant(
-                        Grant::role("member", cap.clone(), Scope::Site)
-                            .requiring(Requirement::TrustAtLeast(n.max(0) as u8)),
-                    );
-                }
-                GateMode::Grant => {}
-            }
-            policy.grant(Grant::role("admin", cap, Scope::Site));
+            grant_for(&mut policy, &cap, &default_gate(action));
         }
         let read = Quota::per_minute(240);
         let limits = Limits::new(read)
@@ -541,8 +538,66 @@ pub async fn population_signal(pool: &PgPool, days: i64) -> Result<Value, AppErr
         "logged_in_actors": row.get::<i64, _>("logged_in"),
         "distinct_actors": row.get::<i64, _>("actors"),
         "anonymous_decisions": row.get::<i64, _>("anonymous_decisions"),
+        "active_7d": active_contributors(pool, 7).await?,
+        "active_30d": active_contributors(pool, 30).await?,
         "rule": "count contributors who acted, never users rows (imported shells inflate those)",
     }))
+}
+
+/// Only applied actions by a named account count as contribution activity. Refusals and anonymous
+/// writes are real decisions but they are not evidence that someone is building the site.
+pub async fn active_contributors(pool: &PgPool, days: i64) -> Result<i64, AppError> {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(DISTINCT actor_id)::bigint FROM contribution_log
+         WHERE decision = 'applied' AND actor_id IS NOT NULL
+           AND created_at > now() - ($1::text || ' days')::interval",
+    )
+    .bind(days.to_string())
+    .fetch_one(pool).await.map_err(AppError::from)?;
+    Ok(n)
+}
+
+/// The gate follows activity, not a calendar: 50 contributors with an applied action in 30 days.
+/// An owner's explicit declaration always wins (first and last say).
+pub async fn telemetry_gate(pool: &PgPool) -> Result<GateMode, AppError> {
+    let key = "ORBITAL_GATE_TELEMETRY_VIEW";
+    telemetry_gate_with(pool, std::env::var(key).ok().as_deref()).await
+}
+
+/// The override is a parameter here so a test can prove it wins without mutating process-wide env
+/// beside other tests. The handler is the only caller that reads the environment.
+pub async fn telemetry_gate_with(pool: &PgPool, override_gate: Option<&str>) -> Result<GateMode, AppError> {
+    if let Some(raw) = override_gate {
+        return GateMode::parse("ORBITAL_GATE_TELEMETRY_VIEW", raw)
+            .map_err(|e| AppError::Validation(e.to_string()));
+    }
+    Ok(if active_contributors(pool, 30).await? >= TELEMETRY_TL2_AT {
+        GateMode::Trust(2)
+    } else {
+        GateMode::Login
+    })
+}
+
+/// Build a fresh estate policy for the current ramp state and use the same verdict path as every
+/// other capability. No `if trust_level >= 2` belongs in a handler.
+pub async fn authorize_telemetry(st: &crate::AppState, user: &User) -> Result<GateMode, AppError> {
+    let gate = telemetry_gate(&st.pool).await?;
+    let cap = Capability::parse(ACTION_TELEMETRY).map_err(|e| AppError::Validation(e.to_string()))?;
+    let mut policy = Policy::new();
+    policy.declare(cap.clone());
+    grant_for(&mut policy, &cap, &gate);
+    let verdict = polaris_authz::eval::authorize(
+        &policy,
+        &subject_for(Some(user)),
+        cap,
+        Scope::Site,
+        Utc::now().timestamp(),
+    );
+    if verdict.is_allowed() {
+        Ok(gate)
+    } else {
+        Err(AppError::ForbiddenWithReason(verdict.reason()))
+    }
 }
 
 #[cfg(test)]

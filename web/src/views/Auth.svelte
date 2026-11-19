@@ -3,9 +3,15 @@
 
   let { verticals = [], onauthed } = $props();
 
-  // The public site links to /app/#/join; honour it instead of dropping the visitor on sign-in.
-  let mode = $state(location.hash === '#/join' ? 'contribute' : 'login');
-  let form = $state({ handle: '', password: '', display_name: '', vertical: 'dev', bio: '', url: '' });
+  // The public site links to /app/#/join; the Wanted queue adds ?url=… to prefill the intake.
+  const hash = location.hash.startsWith('#/join')
+    ? new URLSearchParams(location.hash.split('?')[1] ?? '')
+    : null;
+  let mode = $state(hash ? 'contribute' : 'login');
+  let form = $state({
+    handle: '', password: '', display_name: '', vertical: 'dev', bio: '',
+    url: hash?.get('url') ?? ''
+  });
   let err = $state('');
   let busy = $state(false);
   let added = $state(null);
